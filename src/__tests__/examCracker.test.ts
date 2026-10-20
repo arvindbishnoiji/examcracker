@@ -230,4 +230,52 @@ describe('Exam Cracker Verification Suite', () => {
     ]);
     expect(progressUpdates).toEqual([2, 3]);
   });
+
+  it('fails clearly when the playlist proxy returns no videos', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        playlistId: 'PL_EMPTY',
+        title: 'Empty playlist response',
+        count: 0,
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+        youtubeDataApiKeyRequired: false,
+      }),
+    }));
+
+    await expect(
+      importFullYoutubePlaylist('https://www.youtube.com/playlist?list=PL_EMPTY')
+    ).rejects.toThrow(/returned no videos/i);
+  });
+
+  it('flags incomplete pagination when proxy says more videos but omits cursor', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        playlistId: 'PL_TRUNCATED',
+        title: 'Truncated playlist',
+        count: 1,
+        items: [{
+          videoId: 'vid_0000001',
+          title: 'Lecture 1',
+          description: '',
+          thumbnail: 'https://img.youtube.com/vi/vid_0000001/hqdefault.jpg',
+          duration: '45:00',
+          position: 0,
+          watchUrl: 'https://www.youtube.com/watch?v=vid_0000001',
+        }],
+        nextCursor: null,
+        hasMore: true,
+        youtubeDataApiKeyRequired: false,
+      }),
+    }));
+
+    const result = await importFullYoutubePlaylist(
+      'https://www.youtube.com/playlist?list=PL_TRUNCATED'
+    );
+    expect(result.items).toHaveLength(1);
+    expect(result.note).toMatch(/did not return a continuation cursor/i);
+  });
 });
