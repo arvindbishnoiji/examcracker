@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+const withOpacity = (variable) => `rgb(var(${variable}) / <alpha-value>)`;
+
 module.exports = {
   content: [
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,33 +11,54 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        // Live, admin-controlled palette. Defaults live in globals.css and are
+        // replaced at runtime by SiteConfigContext.
         brand: {
-          50: "#eff6ff",
-          100: "#dbeafe",
-          200: "#bfdbfe",
-          300: "#93c5fd",
-          400: "#60a5fa",
-          500: "#2563eb",
-          600: "#1d4ed8",
-          700: "#1e40af",
-          800: "#1e3a8a",
-          900: "#172554",
+          50: withOpacity('--ec-brand-50'),
+          100: withOpacity('--ec-brand-100'),
+          200: withOpacity('--ec-brand-200'),
+          300: withOpacity('--ec-brand-300'),
+          400: withOpacity('--ec-brand-400'),
+          500: withOpacity('--ec-brand-500'),
+          600: withOpacity('--ec-brand-600'),
+          700: withOpacity('--ec-brand-700'),
+          800: withOpacity('--ec-brand-800'),
+          900: withOpacity('--ec-brand-900'),
+          DEFAULT: withOpacity('--ec-brand-600'),
         },
         ink: {
-          50: "#f8fafc",
-          100: "#f1f5f9",
-          200: "#e2e8f0",
-          300: "#cbd5e1",
-          500: "#64748b",
-          700: "#334155",
-          900: "#0f172a",
+          50: withOpacity('--ec-ink-50'),
+          100: withOpacity('--ec-ink-100'),
+          200: withOpacity('--ec-ink-200'),
+          300: withOpacity('--ec-ink-300'),
+          400: withOpacity('--ec-ink-400'),
+          500: withOpacity('--ec-ink-500'),
+          600: withOpacity('--ec-ink-600'),
+          700: withOpacity('--ec-ink-700'),
+          800: withOpacity('--ec-ink-800'),
+          900: withOpacity('--ec-ink-900'),
         },
+        surface: 'var(--ec-surface)',
+        canvas: 'var(--ec-bg)',
       },
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ['var(--ec-font-body)'],
+        heading: ['var(--ec-font-heading)'],
+      },
+      borderRadius: {
+        theme: 'var(--ec-radius)',
+        'theme-sm': 'var(--ec-radius-sm)',
+        'theme-lg': 'var(--ec-radius-lg)',
+        button: 'var(--ec-button-radius)',
+      },
+      maxWidth: {
+        shell: 'var(--ec-max-width)',
       },
       boxShadow: {
-        card: "0 1px 3px rgba(15,23,42,0.06), 0 8px 24px rgba(15,23,42,0.06)",
+        card: 'var(--ec-card-shadow)',
+      },
+      gap: {
+        section: 'var(--ec-section-gap)',
       },
     },
   },

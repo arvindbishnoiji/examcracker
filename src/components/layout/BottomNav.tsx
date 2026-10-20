@@ -1,37 +1,60 @@
 'use client';
+
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { useSiteConfig } from '@/context/SiteConfigContext';
+import { isActivePath, isRouteEnabled } from '@/lib/navigation';
 
-const items = [
-  { href: '/home', label: 'Home', icon: '🏠' },
-  { href: '/lectures', label: 'Lectures', icon: '▶️' },
-  { href: '/tests', label: 'Tests', icon: '📝' },
-  { href: '/leaderboard', label: 'Board', icon: '🏆' },
-  { href: '/profile', label: 'Profile', icon: '👤' },
-];
-
-export function BottomNav(){
+export function BottomNav() {
   const pathname = usePathname();
   const { isAdmin } = useAuth();
-  // hide on admin and auth pages
-  if(pathname?.startsWith('/admin') || pathname === '/login' || pathname === '/onboarding' || pathname === '/') return null;
+  const { config } = useSiteConfig();
+
+  if (
+    pathname?.startsWith('/admin') ||
+    pathname === '/login' ||
+    pathname === '/onboarding' ||
+    pathname === '/'
+  ) {
+    return null;
+  }
+  if (!config.theme.showBottomNav || !config.features.bottomNav) return null;
+
+  const items = config.navigation.bottomLinks.filter(
+    (item) => item.visible && isRouteEnabled(item.href, config.features)
+  );
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-ink-100 md:hidden">
-      <div className="flex items-center justify-around px-2 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
-        {items.map(i=>{
-          const active = pathname === i.href || (i.href !== '/home' && pathname?.startsWith(i.href));
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-30 border-t border-ink-100 md:hidden ec-fade-in"
+      style={{ background: 'var(--ec-nav-bg)', backdropFilter: 'blur(18px)' }}
+    >
+      <div className="flex items-center justify-around px-1.5 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+        {items.map((item) => {
+          const active = isActivePath(pathname, item.href);
           return (
-            <Link key={i.href} href={i.href} className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl ${active?'text-brand-600 bg-brand-50':'text-ink-500'}`}>
-              <span className="text-[18px] leading-none">{i.icon}</span>
-              <span className="text-[11px] font-medium">{i.label}</span>
+            <Link
+              key={item.id}
+              href={item.href}
+              className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl min-w-[52px] ${
+                active ? 'text-brand-600 bg-brand-50' : 'text-ink-500'
+              }`}
+            >
+              <span className="text-[17px] leading-none">{item.icon}</span>
+              <span className="text-[10.5px] font-medium truncate max-w-[64px]">{item.label}</span>
             </Link>
           );
         })}
         {isAdmin && (
-          <Link href="/admin" className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl ${pathname?.startsWith('/admin')?'text-brand-600 bg-brand-50':'text-ink-500'}`}>
-            <span className="text-[18px] leading-none">⚙️</span>
-            <span className="text-[11px] font-medium">Admin</span>
+          <Link
+            href="/admin"
+            className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl min-w-[52px] ${
+              pathname?.startsWith('/admin') ? 'text-brand-600 bg-brand-50' : 'text-ink-500'
+            }`}
+          >
+            <span className="text-[17px] leading-none">⚙️</span>
+            <span className="text-[10.5px] font-medium">Admin</span>
           </Link>
         )}
       </div>

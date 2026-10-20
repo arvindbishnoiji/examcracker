@@ -37,11 +37,18 @@ export const APP_CONFIG = {
     url: envRequired('NEXT_PUBLIC_SUPABASE_URL', 'https://kncbvcozpcrfvxdbkbtf.supabase.co').replace(/\/+$/, ''),
     publishableKey: envRequired('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'sb_publishable_-4si2gp96FDx7ziHHMO7Kg_sasmLYB2'),
     functionUrl: envRequired('NEXT_PUBLIC_SUPABASE_FUNCTION_URL', 'https://kncbvcozpcrfvxdbkbtf.supabase.co/functions/v1/exam-cracker-api').replace(/\/+$/, ''),
+    siteFunctionUrl: env('NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL', 'https://kncbvcozpcrfvxdbkbtf.supabase.co/functions/v1/ec-site-api').replace(/\/+$/, ''),
   },
   cloudflare: {
     mediaProxyUrl: envRequired('NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL', 'https://ec-content-api.arvinddara0290.workers.dev').replace(/\/+$/, ''),
   },
   adminEmail: env('NEXT_PUBLIC_ADMIN_EMAIL', 'arvinddarabishnoi@gmail.com').trim().toLowerCase(),
+  auth: {
+    // The login designer can hide Google, but never enable a provider that the
+    // Firebase project does not support. Set NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=false
+    // if Google sign-in is disabled in the Firebase console.
+    googleEnabled: env('NEXT_PUBLIC_GOOGLE_AUTH_ENABLED', 'true').toLowerCase() !== 'false',
+  },
 } as const;
 
 export function isAdminEmail(email?: string | null): boolean {

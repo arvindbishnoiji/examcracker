@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { getStudentTests } from '@/lib/api';
 import { Card, Badge, EmptyState, Skeleton } from '@/components/ui/Card';
@@ -14,6 +14,8 @@ export default function TestsPage(){
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string|null>(null);
   const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<'soonest'|'title'>('soonest');
 
   const load = useCallback(async()=>{
     setLoading(true); setError(null);
@@ -27,13 +29,24 @@ export default function TestsPage(){
   useEffect(()=>{ load(); },[load]);
 
   const now = Date.now();
-  const filtered = tests.filter(t=>{
-    if(filter==='all') return true;
-    if(filter==='live') return t.isLive;
-    if(filter==='upcoming') return !t.isLive && t.scheduledAt && new Date(t.scheduledAt).getTime() > now;
-    if(filter==='completed') return t.endsAt && new Date(t.endsAt).getTime() < now;
-    return true;
-  });
+  const filtered = useMemo(()=>{
+    const q = query.trim().toLowerCase();
+    const list = tests.filter(t=>{
+      if(q && !`${t.title} ${t.description} ${t.subject || ''}`.toLowerCase().includes(q)) return false;
+      if(filter==='all') return true;
+      if(filter==='live') return t.isLive;
+      if(filter==='upcoming') return !t.isLive && t.scheduledAt && new Date(t.scheduledAt).getTime() > now;
+      if(filter==='completed') return t.endsAt && new Date(t.endsAt).getTime() < now;
+      return true;
+    });
+    return sort === 'title'
+      ? [...list].sort((a,b)=> a.title.localeCompare(b.title))
+      : [...list].sort((a,b)=> {
+          const aTime = a.scheduledAt ? new Date(a.scheduledAt).getTime() : Number.MAX_SAFE_INTEGER;
+          const bTime = b.scheduledAt ? new Date(b.scheduledAt).getTime() : Number.MAX_SAFE_INTEGER;
+          return aTime - bTime;
+        });
+  },[tests, filter, query, sort, now]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
@@ -42,7 +55,12 @@ export default function TestsPage(){
         <p className="text-sm text-ink-500">Live, upcoming, expired and completed. Filtered for {profile?.exam} • Class {profile?.class_level}. Official scores are server-calculated.</p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search tests…" className="ec-field !py-2 !text-xs !w-auto flex-1 min-w-[200px]" />
+        <select value={sort} onChange={(e)=>setSort(e.target.value as 'soonest'|'title')} className="ec-field !py-2 !text-xs !w-auto">
+          <option value="soonest">Soonest first</option>
+          <option value="title">A–Z</option>
+        </select>
         {(['all','live','upcoming','completed'] as Filter[]).map(f=>(
           <button key={f} onClick={()=>setFilter(f)} className={`px-4 py-2 rounded-full text-sm font-semibold border ${filter===f?'bg-ink-900 text-white border-ink-900':'bg-white text-ink-700 border-ink-200'}`}>{f.charAt(0).toUpperCase()+f.slice(1)}</button>
         ))}

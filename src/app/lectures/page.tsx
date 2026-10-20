@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { Suspense, useEffect, useMemo, useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { getCatalogContent, enrollInBatchOrSeries, ApiError } from '@/lib/api';
@@ -12,14 +13,17 @@ import { isSafeHttpUrl } from '@/lib/validation';
 
 type Tab = 'batches'|'series'|'lectures'|'resources';
 
-export default function LecturesHubPage(){
+function LecturesHubPageInner(){
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get('q') || '';
   const { profile, user } = useAuth();
   const { push } = useToast();
   const [tab, setTab] = useState<Tab>('batches');
   const [items, setItems] = useState<CourseCatalogItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string|null>(null);
-  const [filter, setFilter] = useState('');
+  const [filter, setFilter] = useState(initialQuery);
+  const [sort, setSort] = useState<'newest'|'title'>('newest');
   const [enrollCodes, setEnrollCodes] = useState<Record<string,string>>({});
   const [enrolling, setEnrolling] = useState<string|null>(null);
   const [myEnrollments, setMyEnrollments] = useState<Set<string>>(new Set());
@@ -37,6 +41,14 @@ export default function LecturesHubPage(){
   },[profile, tab]);
 
   useEffect(()=>{ load(); },[load]);
+  useEffect(()=>{ setFilter(initialQuery); },[initialQuery]);
+  useEffect(()=>{
+    const kindParam = searchParams.get('kind');
+    if(kindParam === 'batch') setTab('batches');
+    else if(kindParam === 'series') setTab('series');
+    else if(kindParam === 'resources') setTab('resources');
+    else if(kindParam === 'lectures') setTab('lectures');
+  },[searchParams]);
 
   async function handleEnroll(item: CourseCatalogItem){
     const code = enrollCodes[item.id] || '';
@@ -51,7 +63,11 @@ export default function LecturesHubPage(){
     } finally{ setEnrolling(null); }
   }
 
-  const filtered = items.filter(i=> !filter || i.title.toLowerCase().includes(filter.toLowerCase()) || i.description.toLowerCase().includes(filter.toLowerCase()));
+  const filtered = useMemo(()=>{
+    const q = filter.trim().toLowerCase();
+    const list = items.filter(i=> !q || `${i.title} ${i.description} ${(i.metadata as Record<string,unknown>)?.subject || ''} ${(i.metadata as Record<string,unknown>)?.topic || ''}`.toLowerCase().includes(q));
+    return sort === 'title' ? [...list].sort((a,b)=> a.title.localeCompare(b.title)) : [...list].sort((a,b)=> b.updated_at.localeCompare(a.updated_at));
+  }, [items, filter, sort]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
@@ -63,13 +79,22 @@ export default function LecturesHubPage(){
         <Link href="/lectures" className="px-3 py-2 bg-white border border-ink-200 rounded-xl text-sm">Refresh</Link>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2" role="tablist">
         {(['batches','series','lectures','resources'] as Tab[]).map(t=>(
           <button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 rounded-full text-sm font-semibold border ${tab===t ? 'bg-ink-900 text-white border-ink-900' : 'bg-white text-ink-700 border-ink-200'}`}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
         ))}
       </div>
 
-      <Input placeholder={`Search ${tab}...`} value={filter} onChange={e=>setFilter(e.target.value)} />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex-1 min-w-[220px]">
+          <Input placeholder={`Search ${tab}...`} value={filter} onChange={e=>setFilter(e.target.value)} />
+        </div>
+        <select className="ec-field !py-2 !text-xs !w-auto" value={sort} onChange={(e)=>setSort(e.target.value as 'newest'|'title')}>
+          <option value="newest">Newest first</option>
+          <option value="title">A–Z</option>
+        </select>
+        <span className="text-[11px] text-ink-500">{filtered.length} result{filtered.length===1?'':'s'}</span>
+      </div>
 
       {loading && <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{[1,2,3,4,5,6].map(i=> <Skeleton key={i} className="h-48" />)}</div>}
       {error && <div className="p-3 bg-red-50 border border-red-200 text-sm text-red-700 rounded-xl">{error} <Button size="sm" variant="outline" className="ml-2" onClick={load}>Retry</Button></div>}
@@ -136,5 +161,13 @@ export default function LecturesHubPage(){
         <p className="text-xs text-amber-800 mt-1">Lessons/resources with parentId pointing to a batch/series are restricted to active enrollees, except explicitly marked preview. Server enforces enrolment; UI never fakes security.</p>
       </Card>
     </div>
+  );
+}
+
+export default function LecturesHubPage(){
+  return (
+    <Suspense fallback={<div className="max-w-6xl mx-auto space-y-4"><div className="ec-skeleton h-10 w-64" /><div className="ec-skeleton h-48 w-full" /></div>}>
+      <LecturesHubPageInner />
+    </Suspense>
   );
 }

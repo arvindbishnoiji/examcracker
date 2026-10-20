@@ -11,6 +11,7 @@ import { getFirestore, collection,
   where,
   limit,
   getDocs,
+  writeBatch,
   type Unsubscribe,
   type Firestore,
 } from 'firebase/firestore';
@@ -276,4 +277,74 @@ export async function tryRegisterFCMToken(studentUid: string): Promise<string | 
   } catch {
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Admin notification delivery
+// ---------------------------------------------------------------------------
+
+export interface AdminNotificationInput {
+  title: string;
+  body: string;
+  deepLink?: string | null;
+  type?: AppNotification['type'];
+}
+
+/**
+ * Writes an in-app notification document for one student. Firestore rules allow
+ * this only for the verified admin account. The student notifications page
+ * subscribes to this exact subcollection, so delivery is immediately visible.
+ */
+export async function sendAdminNotification(
+  studentUid: string,
+  input: AdminNotificationInput
+): Promise<void> {
+  const db = getFirestoreDb();
+  await addDoc(collection(db, 'users', studentUid, 'notifications'), {
+    title: input.title.trim().slice(0, 160),
+    body: input.body.trim().slice(0, 2000),
+    deepLink: input.deepLink || null,
+    type: input.type || 'info',
+    isRead: false,
+    readAt: null,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Fan-out delivery using batched writes (max 400 per batch to stay under the
+ * 500-operation Firestore limit). Returns how many documents were written and
+ * which student UIDs failed, so the admin UI can report real results.
+ */
+export async function sendAdminNotificationBatch(
+  studentUids: string[],
+  input: AdminNotificationInput
+): Promise<{ sent: number; failed: string[] }> {
+  const db = getFirestoreDb();
+  let sent = 0;
+  const failed: string[] = [];
+  for (let index = 0; index < studentUids.length; index += 400) {
+    const chunk = studentUids.slice(index, index + 400);
+    const batch = writeBatch(db);
+    const createdAt = new Date().toISOString();
+    for (const uid of chunk) {
+      const ref = doc(collection(db, 'users', uid, 'notifications'));
+      batch.set(ref, {
+        title: input.title.trim().slice(0, 160),
+        body: input.body.trim().slice(0, 2000),
+        deepLink: input.deepLink || null,
+        type: input.type || 'info',
+        isRead: false,
+        readAt: null,
+        createdAt,
+      });
+    }
+    try {
+      await batch.commit();
+      sent += chunk.length;
+    } catch (err) {
+      failed.push(...chunk);
+    }
+  }
+  return { sent, failed };
 }
