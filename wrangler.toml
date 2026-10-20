@@ -1,9 +1,10 @@
 name = "exam-cracker-web"
 main = ".open-next/worker.js"
 compatibility_date = "2026-10-17"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = ["nodejs_compat", "enable_nodejs_process_v2"]
 account_id = "93f8cbbe79e248f8d1db9fccc586f0c3"
 workers_dev = true
+upload_source_maps = true
 
 # Next.js on Cloudflare via OpenNext
 # Build with: npx @opennextjs/cloudflare build
