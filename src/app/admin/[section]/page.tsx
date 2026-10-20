@@ -12,8 +12,8 @@ import {
   LeaderboardsSection,
   ReportsSection,
   SchedulingSection,
-  StudentsSection,
 } from '@/components/admin/sections/DataSections';
+import { EnrollmentConsole } from '@/components/admin/sections/EnrollmentConsole';
 import { HomepageBuilderSection } from '@/components/admin/sections/HomepageBuilderSection';
 import { LoginDesignerSection } from '@/components/admin/sections/LoginDesignerSection';
 import { NotificationsSection } from '@/components/admin/sections/NotificationsSection';
@@ -82,7 +82,7 @@ export default function AdminSectionPage() {
     case 'feature-toggles':
       return <FeaturesSection />;
     case 'students':
-      return <StudentsSection />;
+      return <EnrollmentConsole />;
     case 'analytics':
       return <AnalyticsSection />;
     case 'leaderboards':

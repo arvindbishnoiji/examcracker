@@ -16,8 +16,11 @@ import type {
   TestCardItem,
 } from '@/types';
 import { getStudentAnalysis, getStudentLibrary, getStudentTests, getTestLeaderboard, saveStudentLibraryItem } from '@/lib/api';
-import { formatISTDateTime, isScheduleActiveNow } from '@/lib/date';
+import { formatISTDateTime, formatWatchDuration, isScheduleActiveNow } from '@/lib/date';
 import { isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
+import { activeEnrollmentKeys } from '@/lib/enrollment';
+import { activityStreak } from '@/lib/progress';
+import { ArrowRight, BellRing, BookOpenCheck, Flame, GraduationCap, PlayCircle, Search, Sparkles, Trophy } from 'lucide-react';
 import {
   getHomeSectionsForStudent,
   selectBannersForPlacement,
@@ -297,6 +300,10 @@ export default function HomePage() {
   const greeting = config.homepage.greetingTemplate.replace('{name}', profile.display_name.split(' ')[0] || 'there');
   const heroBanners = selectBannersForPlacement(config.banners, audience, 'home_hero');
   const primaryTestId = (liveTests[0] || upcomingTests[0])?.id;
+  const nextTest = liveTests[0] || upcomingTests[0];
+  const todayGoal = goals[0];
+  const enrolledCount = activeEnrollmentKeys(bootstrap.enrollments).size;
+  const resumeLecture = continueLearning.find((lecture) => progressByLecture.has(lecture.id)) || continueLearning[0];
 
   function renderSection(section: HomeSectionConfig) {
     const limit = Math.max(1, Math.min(24, section.limit || 6));
@@ -596,44 +603,135 @@ export default function HomePage() {
       <PopupHost placement="home" student={audience} />
 
       {config.homepage.showGreeting && (
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">{greeting}</h1>
-            <p className="text-sm text-ink-500 mt-1">
-              {profile.exam} · Class {profile.class_level} · {formatISTDateTime(new Date().toISOString())}
-            </p>
-          </div>
-          <Link href="/profile" className="hidden sm:inline-flex px-4 py-2 rounded-[var(--ec-button-radius)] border border-[rgb(var(--ec-ink-200))] bg-[var(--ec-surface)] text-xs font-bold">
-            View profile
-          </Link>
-        </div>
-      )}
+        <section className="ec-hero-panel p-5 sm:p-6 lg:p-7">
+          <div className="ec-hero-lines pointer-events-none absolute inset-0" aria-hidden />
+          <div className="relative grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(280px,1fr)] lg:items-center">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="ec-eyebrow inline-flex items-center gap-1.5">
+                  <Sparkles size={12} /> {profile.exam} command deck
+                </span>
+                {todayGoal && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-800">
+                    <Flame size={11} /> Today&apos;s goal live
+                  </span>
+                )}
+              </div>
+              <h1 className="mt-2 max-w-2xl text-[26px] font-extrabold leading-[1.12] tracking-[-0.03em] sm:text-[34px]">
+                {greeting}<span className="text-[var(--ec-brand)]">.</span>
+              </h1>
+              <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-ink-500 sm:text-sm">
+                A focused plan for {profile.exam} · Class {profile.class_level}. Pick up where you left off, then put
+                your preparation to the test.
+              </p>
 
-      {config.homepage.showQuickStats && analysis && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          {[
-            { label: 'Streak', value: `${Math.min(analysis.testsTaken + analysis.completedLessons, 99)}d`, hint: 'Active momentum' },
-            { label: 'Average', value: `${analysis.averagePercentage.toFixed(0)}%`, hint: 'Across tests' },
-            { label: 'Watch time', value: `${Math.round(analysis.watchedSeconds / 60)}m`, hint: 'Total' },
-            { label: 'Level', value: analysis.level, hint: 'Learning tier' },
-          ].map((stat) => (
-            <div key={stat.label} className="rounded-[var(--ec-radius)] border border-[rgb(var(--ec-ink-200))] bg-[var(--ec-surface)] px-3 py-2.5">
-              <p className="text-[9px] uppercase tracking-[0.12em] text-ink-400 font-bold">{stat.label}</p>
-              <p className="text-sm font-extrabold mt-0.5">{stat.value}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <span className="ec-chip"><GraduationCap size={12} /> {profile.exam} · Class {profile.class_level}</span>
+                <span className="ec-chip"><BookOpenCheck size={12} /> {enrolledCount} course{enrolledCount === 1 ? '' : 's'} unlocked</span>
+                {analysis && <span className="ec-level-badge"><Trophy size={11} /> {analysis.level}</span>}
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <Link
+                  href={resumeLecture ? `/lectures/${resumeLecture.id}` : '/lectures'}
+                  className="ec-btn inline-flex items-center gap-2 bg-[var(--ec-brand)] px-4 py-2.5 text-xs font-bold text-[var(--ec-on-brand)] shadow-sm hover:opacity-95"
+                >
+                  <PlayCircle size={16} />
+                  {resumeLecture && progressByLecture.has(resumeLecture.id) ? 'Continue learning' : 'Start learning'}
+                </Link>
+                <Link
+                  href={nextTest ? `/tests/${nextTest.id}` : '/tests'}
+                  className="ec-btn inline-flex items-center gap-1.5 border border-[rgb(var(--ec-ink-200))] bg-[var(--ec-surface)] px-3.5 py-2.5 text-xs font-bold text-ink-800 hover:bg-ink-50"
+                >
+                  <BookOpenCheck size={15} />
+                  {nextTest ? (nextTest.isLive ? 'Live test now' : 'Next test') : 'Browse tests'}
+                  <ArrowRight size={13} className="opacity-60" />
+                </Link>
+                {todayGoal && isValidInternalDeepLink(String(metaOf(todayGoal).deepLink || '')) && (
+                  <Link
+                    href={String(metaOf(todayGoal).deepLink)}
+                    className="ec-btn inline-flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold text-amber-800 hover:bg-amber-50"
+                  >
+                    <Flame size={14} /> {(metaOf(todayGoal).ctaLabel as string) || 'Start today’s goal'}
+                  </Link>
+                )}
+              </div>
             </div>
-          ))}
-        </div>
+
+            {config.homepage.showQuickStats && (
+              <div className="rounded-[calc(var(--ec-radius)+4px)] border border-white/60 bg-white/55 p-3.5 backdrop-blur-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink-500">Your real progress</p>
+                  {analysis && <span className="ec-level-badge">{analysis.level}</span>}
+                </div>
+                <div className="mt-2.5 grid grid-cols-2 gap-2">
+                  {[
+                    { label: 'Tests taken', value: analysis ? String(analysis.testsTaken) : '—', icon: <BookOpenCheck size={13} /> },
+                    {
+                      label: 'Average score',
+                      value: analysis && analysis.testsTaken > 0 ? `${analysis.averagePercentage.toFixed(0)}%` : '—',
+                      icon: <Trophy size={13} />,
+                    },
+                    { label: 'Lessons done', value: analysis ? String(analysis.completedLessons) : '—', icon: <PlayCircle size={13} /> },
+                    {
+                      label: 'Day streak',
+                      value: analysis ? String(activityStreak([...analysis.attempts.map((a) => a.submitted_at), ...analysis.lessonProgress.map((p) => p.updated_at || '')])) : '—',
+                      icon: <Flame size={13} />,
+                    },
+                  ].map((stat) => (
+                    <div key={stat.label} className="ec-stat-tile">
+                      <p className="flex items-center gap-1 text-[8.5px] font-bold uppercase tracking-[0.1em] text-ink-400">
+                        {stat.icon} {stat.label}
+                      </p>
+                      <p className="mt-0.5 text-lg font-extrabold leading-none text-ink-900">{stat.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3">
+                  <div className="flex items-center justify-between text-[10px] font-semibold text-ink-500">
+                    <span>Average across attempts</span>
+                    <span>{analysis ? `${Math.round(analysis.averagePercentage)}%` : 'No attempts yet'}</span>
+                  </div>
+                  <div className="mt-1.5 ec-progress-lg">
+                    <span style={{ width: `${analysis ? Math.min(100, Math.max(0, analysis.averagePercentage)) : 0}%` }} />
+                  </div>
+                  <p className="mt-1.5 text-[9.5px] leading-relaxed text-ink-400">
+                    {analysis?.testsTaken
+                      ? `${formatWatchDuration(analysis.watchedSeconds)} watched · ${analysis.completedLessons} lessons completed.`
+                      : 'Take your first test to start a real progress history.'}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {config.homepage.showSearch && config.features.search && (
+            <form action="/search" className="relative mt-5 max-w-2xl">
+              <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
+              <input
+                name="q"
+                aria-label="Search lectures, tests and batches"
+                placeholder={config.seo.searchPlaceholder || 'Search lectures, tests, batches…'}
+                className="h-11 w-full rounded-[14px] border border-[rgb(var(--ec-ink-200))] bg-[var(--ec-surface)] pl-10 pr-24 text-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+              />
+              <button type="submit" className="absolute right-1.5 top-1/2 -translate-y-1/2 ec-btn bg-[var(--ec-brand)] px-3.5 py-1.5 text-[11px] font-bold text-[var(--ec-on-brand)]">
+                Search
+              </button>
+            </form>
+          )}
+        </section>
       )}
 
-      {config.homepage.showSearch && config.features.search && (
+      {!config.homepage.showGreeting && config.homepage.showSearch && config.features.search && (
         <form action="/search" className="relative">
+          <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
           <input
             name="q"
+            aria-label="Search lectures, tests and batches"
             placeholder={config.seo.searchPlaceholder || 'Search lectures, tests, batches…'}
-            className="w-full h-12 pl-11 pr-24 rounded-[var(--ec-radius)] border border-[rgb(var(--ec-ink-200))] bg-[var(--ec-surface)] text-sm outline-none focus:border-brand-400"
+            className="h-11 w-full rounded-[14px] border border-[rgb(var(--ec-ink-200))] bg-[var(--ec-surface)] pl-10 pr-24 text-sm outline-none focus:border-brand-400"
           />
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-400">⌕</span>
-          <button type="submit" className="absolute right-1.5 top-1/2 -translate-y-1/2 px-4 py-2 rounded-[var(--ec-button-radius)] bg-[var(--ec-brand)] text-[var(--ec-on-brand)] text-xs font-bold">
+          <button type="submit" className="absolute right-1.5 top-1/2 -translate-y-1/2 ec-btn bg-[var(--ec-brand)] px-3.5 py-1.5 text-[11px] font-bold text-[var(--ec-on-brand)]">
             Search
           </button>
         </form>
@@ -648,12 +746,6 @@ export default function HomePage() {
         sections.map((section) => renderSection(section))
       )}
 
-      {bootstrap.enrollments && bootstrap.enrollments.length > 0 && (
-        <div className="rounded-[var(--ec-radius)] border border-emerald-200 bg-emerald-50 p-4">
-          <p className="text-sm font-bold text-emerald-900">Your enrollments</p>
-          <p className="text-xs text-emerald-700 mt-1">{bootstrap.enrollments.length} active · content access is verified server-side.</p>
-        </div>
-      )}
     </div>
   );
 }

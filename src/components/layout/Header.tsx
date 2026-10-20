@@ -7,6 +7,8 @@ import { useSiteConfig } from '@/context/SiteConfigContext';
 import { Button } from '@/components/ui/Button';
 import { isActivePath, isRouteEnabled } from '@/lib/navigation';
 import { isSafeHttpUrl } from '@/lib/validation';
+import { NavIcon } from '@/components/ui/AppIcon';
+import { Bell, LogOut, Search, UserRound } from 'lucide-react';
 
 export function Header({ showNav = true }: { showNav?: boolean }) {
   const { user, profile, signOut, isAdmin } = useAuth();
@@ -71,10 +73,7 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
                 className="p-2 rounded-xl text-current opacity-80 hover:bg-black/5"
                 aria-label="Search"
               >
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="m20 20-3.2-3.2" />
-                </svg>
+                <Search size={19} />
               </Link>
             )}
             {user &&
@@ -86,12 +85,21 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
                     isActivePath(pathname, link.href) ? 'bg-black/5' : ''
                   }`}
                 >
-                  <span className="text-[13px] leading-none" aria-hidden>
-                    {link.icon}
-                  </span>
+                  <NavIcon href={link.href} fallback={link.icon} size={15} className="opacity-80" />
                   {link.label}
                 </Link>
               ))}
+            {user && features.notifications && (
+              <Link
+                href="/notifications"
+                className={`relative p-2 rounded-xl text-current opacity-75 hover:bg-black/5 ${
+                  isActivePath(pathname, '/notifications') ? 'bg-black/5' : ''
+                }`}
+                aria-label="Notifications"
+              >
+                <Bell size={19} />
+              </Link>
+            )}
             {user && (
               <Link
                 href="/profile"
@@ -100,10 +108,7 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
                 }`}
                 aria-label="Profile"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
+                <UserRound size={20} />
               </Link>
             )}
             {user && (
@@ -124,8 +129,8 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
                     Admin
                   </Link>
                 )}
-                <Button variant="ghost" size="sm" onClick={signOut} className="text-current">
-                  Sign out
+                <Button variant="ghost" size="sm" onClick={signOut} className="text-current" aria-label="Sign out">
+                  <LogOut size={14} className="mr-1.5" /> Sign out
                 </Button>
               </div>
             )}

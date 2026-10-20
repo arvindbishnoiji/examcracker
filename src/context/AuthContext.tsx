@@ -7,12 +7,17 @@ import { getBootstrapData, onSessionExpired } from '@/lib/api';
 import type { BootstrapResponse, StudentProfile } from '@/types';
 import type { User } from 'firebase/auth';
 
+export type BootstrapStatus = 'idle' | 'loading' | 'ready' | 'error';
+
 interface AuthState {
   user: User | null;
   profile: StudentProfile | null;
   bootstrap: BootstrapResponse | null;
   loading: boolean;
   initializing: boolean;
+  /** Explicit lifecycle of the profile/bootstrap request. */
+  bootstrapStatus: BootstrapStatus;
+  bootstrapError: string | null;
   needsOnboarding: boolean;
   isAdmin: boolean;
   error: string | null;
@@ -27,25 +32,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
   const [initializing, setInitializing] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [bootstrapStatus, setBootstrapStatus] = useState<BootstrapStatus>('idle');
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
 
+  const loading = bootstrapStatus === 'loading';
   const isAdmin = !!user?.email && isAdminEmail(user.email);
-  const needsOnboarding = !!user && !profile && !initializing;
+  const needsOnboarding = !!user && !profile && bootstrapStatus === 'ready';
 
   const refresh = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
-    setError(null);
+    setBootstrapStatus('loading');
+    setBootstrapError(null);
     try {
       const data = await getBootstrapData();
       setBootstrap(data);
       setProfile(data.profile);
+      setBootstrapStatus('ready');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load profile';
-      setError(msg);
-    } finally {
-      setLoading(false);
+      setBootstrapError(msg);
+      setBootstrapStatus('error');
     }
   }, [user]);
 
@@ -53,6 +59,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signOutUser();
     setProfile(null);
     setBootstrap(null);
+    setBootstrapStatus('idle');
+    setBootstrapError(null);
   }, []);
 
   useEffect(() => {
@@ -68,28 +76,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       if (!mounted) return;
       setUser(fbUser);
-      setError(null);
+      setBootstrapError(null);
       if (fbUser) {
-        setLoading(true);
+        setBootstrapStatus('loading');
         try {
           const data = await getBootstrapData();
           if (!mounted) return;
           setBootstrap(data);
           setProfile(data.profile);
+          setBootstrapStatus('ready');
         } catch (e) {
           if (!mounted) return;
           const msg = e instanceof Error ? e.message : 'Failed to load data';
-          setError(msg);
-          // If bootstrap fails but user is logged in, allow onboarding
+          setBootstrapError(msg);
+          setBootstrapStatus('error');
+          // Keep whatever profile we had; never treat a network error as
+          // "onboarding incomplete", which would overwrite the student's setup.
           setBootstrap(null);
-          setProfile(null);
-        } finally {
-          if (mounted) setLoading(false);
         }
       } else {
         setProfile(null);
         setBootstrap(null);
-        setLoading(false);
+        setBootstrapStatus('idle');
       }
       if (mounted) setInitializing(false);
     });
@@ -120,9 +128,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     bootstrap,
     loading,
     initializing,
+    bootstrapStatus,
+    bootstrapError,
     needsOnboarding: !!needsOnboarding,
     isAdmin,
-    error,
+    error: bootstrapError,
     refresh,
     signOut,
   };

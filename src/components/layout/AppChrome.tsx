@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { Header } from './Header';
 import { BottomNav } from './BottomNav';
 import { Footer } from './Footer';
+import { StudentGate } from '@/components/auth/StudentGate';
 
 /**
  * Keeps admin on its own full-screen canvas while public/student pages keep the
@@ -12,16 +13,18 @@ import { Footer } from './Footer';
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAdmin = Boolean(pathname?.startsWith('/admin'));
-  const isFocusedLogin = pathname === '/login';
+  const isFocusedAuth = pathname === '/login' || pathname === '/onboarding';
 
   if (isAdmin) return <>{children}</>;
 
   return (
     <>
-      {!isFocusedLogin && <Header />}
-      <main className={isFocusedLogin ? 'w-full' : 'ec-main'}>{children}</main>
-      {!isFocusedLogin && <Footer />}
-      {!isFocusedLogin && <BottomNav />}
+      {!isFocusedAuth && <Header />}
+      <main className={isFocusedAuth ? 'w-full' : 'ec-main'}>
+        <StudentGate>{children}</StudentGate>
+      </main>
+      {!isFocusedAuth && <Footer />}
+      {!isFocusedAuth && <BottomNav />}
     </>
   );
 }

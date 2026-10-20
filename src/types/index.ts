@@ -162,6 +162,9 @@ export interface Enrollment {
   item_type: 'batch' | 'series';
   item_id: string;
   active: boolean;
+  status?: 'active' | 'revoked' | 'expired';
+  source?: string;
+  expires_at?: string | null;
   created_at?: string;
 }
 

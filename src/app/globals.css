@@ -335,3 +335,197 @@ h1, h2, h3, h4, .ec-heading {
   padding-top: 0.3rem;
   padding-bottom: 0.3rem;
 }
+
+/* --------------------------------------------------------------------------
+   Premium student-app layer (2026 refresh)
+   Keeps the admin-controlled palette; adds hierarchy, texture and interaction
+   primitives used across the student experience.
+   -------------------------------------------------------------------------- */
+:root {
+  --ec-success: #059669;
+  --ec-warning: #d97706;
+  --ec-danger: #dc2626;
+  --ec-glow-brand: rgba(37, 99, 235, 0.28);
+  --ec-glow-accent: rgba(245, 158, 11, 0.22);
+  --ec-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --ec-shadow-lift: 0 18px 40px -18px rgba(15, 23, 42, 0.28), 0 4px 12px rgba(15, 23, 42, 0.05);
+}
+
+body {
+  line-height: 1.55;
+  letter-spacing: -0.006em;
+}
+
+::selection {
+  background: rgb(var(--ec-brand-200));
+  color: rgb(var(--ec-brand-900));
+}
+
+button, a, input, select, textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ec-eyebrow {
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgb(var(--ec-brand-600));
+}
+
+.ec-hero-panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(var(--ec-ink-100));
+  border-radius: calc(var(--ec-radius) + 6px);
+  background:
+    radial-gradient(720px 320px at 92% -20%, rgb(var(--ec-brand-200) / 0.75), transparent 62%),
+    radial-gradient(520px 260px at 6% 110%, rgb(var(--ec-accent) / 0.16), transparent 65%),
+    var(--ec-surface);
+  box-shadow: var(--ec-shadow-xs);
+}
+[data-ec-theme='dark'] .ec-hero-panel {
+  background:
+    radial-gradient(720px 320px at 92% -20%, rgb(var(--ec-brand-600) / 0.34), transparent 62%),
+    radial-gradient(520px 260px at 6% 110%, rgb(var(--ec-accent) / 0.12), transparent 65%),
+    var(--ec-surface);
+}
+
+.ec-hero-lines {
+  background-image: repeating-linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.5) 0,
+    rgba(255, 255, 255, 0.5) 1px,
+    transparent 1px,
+    transparent 16px
+  );
+  -webkit-mask-image: linear-gradient(120deg, transparent 18%, rgba(0, 0, 0, 0.85) 70%, transparent 100%);
+  mask-image: linear-gradient(120deg, transparent 18%, rgba(0, 0, 0, 0.85) 70%, transparent 100%);
+  opacity: 0.35;
+}
+
+.ec-grid-texture {
+  background-image:
+    linear-gradient(rgb(var(--ec-ink-100) / 0.55) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--ec-ink-100) / 0.55) 1px, transparent 1px);
+  background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(600px 280px at 80% 0%, #000, transparent 70%);
+  mask-image: radial-gradient(600px 280px at 80% 0%, #000, transparent 70%);
+}
+
+.ec-card-interactive {
+  transition:
+    transform calc(180ms * var(--ec-anim)) cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow calc(180ms * var(--ec-anim)) ease,
+    border-color calc(180ms * var(--ec-anim)) ease;
+}
+.ec-card-interactive:hover {
+  transform: translateY(-2px);
+  border-color: rgb(var(--ec-brand-200));
+  box-shadow: var(--ec-shadow-lift);
+}
+.ec-card-interactive:focus-visible {
+  outline: 2px solid rgb(var(--ec-brand-500));
+  outline-offset: 2px;
+}
+
+.ec-stat-tile {
+  border: 1px solid rgb(var(--ec-ink-100));
+  border-radius: var(--ec-radius-sm);
+  background: color-mix(in srgb, var(--ec-surface) 82%, transparent);
+  padding: 0.55rem 0.7rem;
+}
+
+.ec-level-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--ec-brand-200));
+  background: rgb(var(--ec-brand-50));
+  color: rgb(var(--ec-brand-800));
+  padding: 0.2rem 0.6rem;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.ec-avatar {
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgb(var(--ec-brand-500)), rgb(var(--ec-brand-800)));
+  color: var(--ec-on-brand);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.ec-progress-lg {
+  height: 9px;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(var(--ec-ink-100));
+}
+.ec-progress-lg > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgb(var(--ec-brand-500)), rgb(var(--ec-brand-700)), var(--ec-accent));
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ec-live-dot {
+  position: relative;
+  display: inline-flex;
+  height: 7px;
+  width: 7px;
+  border-radius: 999px;
+  background: #10b981;
+}
+.ec-live-dot::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.3);
+  animation: ecPulseDot 2.2s ease-out infinite;
+}
+@keyframes ecPulseDot {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  70% { transform: scale(1.6); opacity: 0; }
+  100% { opacity: 0; }
+}
+
+.ec-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  border-radius: 14px;
+  border: 1px solid rgb(var(--ec-ink-200));
+  background: var(--ec-surface);
+  color: var(--ec-text);
+  padding: 0.7rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 550;
+  box-shadow: var(--ec-shadow-lift);
+  animation: ecFadeUp calc(260ms * var(--ec-anim)) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ec-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ec-live-dot::after { animation: none; }
+  .ec-card-interactive:hover { transform: none; }
+}

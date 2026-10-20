@@ -86,7 +86,9 @@ Browser (NEXT_PUBLIC_*) ─Firebase Auth (ID token)─► Supabase Edge Function
 ```
 
 - **RLS stays strict:** tables deny anon/auth direct access; only Edge Function with service-role (server side) reads/writes.
-- **Writes:** `POST /enrollments` (access_code checked), `POST /progress`, `POST /tests/:id/submit`, admin CRUD `POST/PATCH/DELETE /admin/*`.
+- **Writes:** `POST /enrollments` (self-service, exam/class + access_code checked, paid → 402), `POST /progress`, `POST /tests/:id/submit`, admin CRUD under `/admin/*`.
+- **Admin enrollment API** (service-role only, Firebase token + admin-email check): paginated `/admin/enrollments`, `/admin/enrollments/bulk` (+`dryRun`, 409 `CONFIRMATION_REQUIRED` for wide audiences), `/admin/enrollments/bulk-revoke` (requires `confirm: "REVOKE"`), soft `DELETE`, `/:id/restore`, `/admin/enrollments/history`, `/admin/enrollment-rules`.
+- **Origin allowlist:** both Edge Functions reject unknown browser origins before reading data. Set the `ALLOWED_ORIGINS` secret (comma-separated) when adding a custom domain; requests without an `Origin` header (server jobs) are unaffected.
 - **Worker:** `workers/ec-content-api/src/index.js` + `workers/ec-content-api/wrangler.toml` **must stay** `ec-content-api`. Website is **separate** `wrangler.toml` → `exam-cracker-web`.
 
 ---
@@ -125,6 +127,16 @@ Deployment guide: <https://developers.cloudflare.com/workers/framework-guides/we
 
 ---
 
+## Enrollment system
+
+- `enrollments` keeps one row per `(firebase_uid, item_type, item_id)`; `supabase/migrations/20261021000000_ec_enrollment_system.sql` adds status/source/expiry/timestamps, dedupes existing rows, adds the unique index, an `enrollment_events` audit table and `enrollment_rules` for future students.
+- Apply the migration in the Supabase SQL editor **before** deploying the updated functions. It is idempotent and non-destructive: duplicates are archived as `deduplicated` events, never silently dropped.
+- Paid content is never self-granted: free items can be joined by eligible students, paid/restricted items need a server-side admin grant or a valid access code. `400/402/409` responses explain each refusal.
+- "Enroll all students" means every existing student matching the chosen exam/class filters (eligibility is checked row by row). "Include future eligible students" additionally writes a rule applied on first profile creation.
+- Revoking is a soft delete (`status=revoked`), every bulk write is chunked and reports created/reactivated/skipped/failed counts, and wide grants require the admin to confirm the resolved scope first.
+
+---
+
 ## Admin usage
 
 - Sign in as `arvinddarabishnoi@gmail.com` (email match is also checked server-side via token).
@@ -142,7 +154,10 @@ Deployment guide: <https://developers.cloudflare.com/workers/framework-guides/we
 - `src/lib/date.ts` — IST ↔ UTC, schedule active, countdown.
 - `src/lib/validation.ts` — `validateQuestionsJson`, safe URLs, deep links, exam/class filter.
 - `src/lib/mediaProxy.ts` — `extractYoutubeVideoId/PlaylistId`, `importFullYoutubePlaylist` (cursor + dedup).
-- `src/__tests__/examCracker.test.ts` — covers all above + admin email gate.
+- `src/__tests__/examCracker.test.ts` — covers validation, media parsing and admin email gate.
+- `src/__tests__/enrollment.test.ts` — eligibility, paid detection, bulk request validation, audience resolution, duplicate-safe summaries.
+- `src/__tests__/authGate.test.ts` — mandatory-onboarding routing, failed-bootstrap handling, no redirect loops.
+- `src/__tests__/progress.test.ts` — IST streak calculation and honest derived metrics.
 - `npm audit` — fix high/critical or document exception.
 - Accessibility: semantic forms, focus rings, keyboard nav, safe-area, no `dangerouslySetInnerHTML` for user URLs.
 
@@ -169,7 +184,8 @@ Tighten further if needed; never add public allow-all.
 | Next.js routes + responsive UI + skeletons/empty/error/toasts | ✅ |
 | Firebase Auth (email+Google, popup+redirect, reset, persistence) | ✅ (client-only, window guards) |
 | Supabase Edge Function wiring (all routes, token + apikey, error handling) | ✅ |
-| Onboarding `POST /profile` | ✅ |
+| Mandatory onboarding + route gate (no skip) | ✅ |
+| Admin bulk enrollment, future rules, audit history | ✅ (migration must be applied) |
 | Home (goals, events, tests, announcements) | ✅ |
 | Batches/Series/lectures/resources browse + enrolment | ✅ |
 | Lecture player (YouTube embed, prev/next, PDF, debounced progress) | ✅ |
@@ -196,4 +212,4 @@ Tighten further if needed; never add public allow-all.
 
 ---
 
-Built for `arvindbishnoiji/examcracker` branch `arena/0752c1a5-examcracker`. See `MASTER_PROMPT.md` for full spec.
+Built for `arvindbishnoiji/examcracker`. See `MASTER_PROMPT.md` for the full specification.

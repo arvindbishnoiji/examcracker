@@ -477,7 +477,120 @@ export interface AdminEnrollmentRow {
   item_id: string;
   item_title: string | null;
   active: boolean;
+  status: 'active' | 'revoked' | 'expired';
+  source: 'manual' | 'admin_bulk' | 'auto_rule' | 'access_code' | 'self_service' | 'import';
+  expires_at: string | null;
+  revoked_at: string | null;
+  updated_at: string;
   created_at: string;
+}
+
+export interface AdminEnrollmentCounts {
+  active: number;
+  revoked: number;
+  total: number;
+}
+
+export interface AdminEnrollmentListResponse {
+  items: AdminEnrollmentRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: AdminEnrollmentCounts;
+  degraded?: boolean;
+}
+
+export interface EnrollmentScope {
+  mode: 'selected' | 'all' | 'filter';
+  targeted: number;
+  eligible: number;
+  skipped: number;
+  crossTrack: boolean;
+  requiresConfirmation: boolean;
+  label: string;
+  filters: { exam: 'JEE' | 'NEET' | ''; classLevel: '11' | '12' | '' };
+  includeFuture: boolean;
+  respectEligibility: boolean;
+}
+
+export interface EnrollmentSkippedStudent {
+  uid: string;
+  name?: string | null;
+  reason: 'not_found' | 'ineligible_exam' | 'ineligible_class' | 'not_allowed';
+}
+
+export interface EnrollmentBulkSummary {
+  targeted: number;
+  eligible: number;
+  created: number;
+  reactivated: number;
+  alreadyActive: number;
+  skipped: number;
+  failed: number;
+  ruleSaved: boolean;
+}
+
+export interface EnrollmentBulkResult {
+  summary: EnrollmentBulkSummary;
+  scope?: EnrollmentScope;
+  skipped?: EnrollmentSkippedStudent[];
+  failures?: Array<{ uid: string; name?: string | null; reason: string }>;
+  rule?: EnrollmentRule | null;
+  ruleError?: string | null;
+  dryRun?: boolean;
+  preview?: number;
+}
+
+export interface EnrollmentRule {
+  id: string;
+  item_type: 'batch' | 'series';
+  item_id: string;
+  item_title?: string | null;
+  item_active?: boolean | null;
+  name: string;
+  include_future: boolean;
+  respect_eligibility: boolean;
+  filter_exam: '' | 'JEE' | 'NEET';
+  filter_class: '' | '11' | '12';
+  expires_at: string | null;
+  active: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  last_applied_at: string | null;
+  last_applied_count: number;
+}
+
+export interface EnrollmentHistoryEvent {
+  id: string;
+  enrollment_id: string | null;
+  firebase_uid: string;
+  student_name: string | null;
+  student_email: string | null;
+  item_type: 'batch' | 'series';
+  item_id: string;
+  item_title: string | null;
+  action: 'granted' | 'reactivated' | 'revoked' | 'auto_enrolled' | 'deduplicated' | 'expired';
+  source: string;
+  actor_email: string;
+  detail: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AdminStudentDirectoryResponse {
+  items: Array<{
+    firebase_uid: string;
+    display_name: string;
+    email: string | null;
+    exam: string;
+    class_level: string;
+    avatar_url: string | null;
+    created_at: string;
+    updated_at: string;
+  }>;
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export type LibraryItemType =
