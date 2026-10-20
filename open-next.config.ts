@@ -1,8 +1,9 @@
 import { defineCloudflareConfig } from "@opennextjs/cloudflare";
 
 export default defineCloudflareConfig({
-  // Uncomment to enable cache, KV, R2 bindings if needed
-  // cloudflare: {
-  //   useWorkerdCondition: true,
-  // },
+  // Prefer Workers-native package exports over Node.js fallbacks. This avoids
+  // bundling Node-only code paths that can fail inside the Workers runtime.
+  cloudflare: {
+    useWorkerdCondition: true,
+  },
 });
