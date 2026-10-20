@@ -156,13 +156,22 @@ export async function importFullYoutubePlaylist(
   let playlistId = extractYoutubePlaylistId(playlistUrl);
   let title = '';
   let note: string | undefined;
-  const maxPages = options?.maxPages ?? 25;
+  const maxPages = Math.max(1, options?.maxPages ?? 25);
+  const seenCursors = new Set<string>();
   let cancelled = false;
 
   while (pagesFetched < maxPages) {
     if (options?.signal?.aborted) {
       cancelled = true;
       break;
+    }
+
+    if (cursor) {
+      if (seenCursors.has(cursor)) {
+        note = 'Import stopped because YouTube repeated a pagination cursor. Review the imported list before saving.';
+        break;
+      }
+      seenCursors.add(cursor);
     }
 
     const page = await fetchPlaylistPage(playlistUrl, cursor, 200);
@@ -199,6 +208,10 @@ export async function importFullYoutubePlaylist(
       break;
     }
     cursor = page.nextCursor;
+  }
+
+  if (!cancelled && pagesFetched >= maxPages && cursor) {
+    note = `Playlist is larger than the current safety limit of ${maxPages} pages. Import the remaining videos separately or raise the page limit; this list may be incomplete.`;
   }
 
   return {
