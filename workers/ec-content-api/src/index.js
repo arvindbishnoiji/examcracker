@@ -50,17 +50,15 @@ export default {
         const items = [];
         const seen = new Set();
         let continuation = decodeCursor(cursor);
-        let more = true;
-        let currentData = initialData;
-        let pagesFetched = 0;
+
+        // Return one YouTube page per request. Slicing after scanning multiple
+        // continuation pages can skip videos because the cursor points past them.
         if (!continuation) {
           const firstScan = scanPlaylist(initialData, items, seen);
           continuation = firstScan.continuation || "";
-        }
-        while (continuation && items.length < limit && pagesFetched < 12) {
+        } else {
           if (!apiKey || !context) {
-            more = true;
-            break;
+            return respond({ error: "YouTube did not provide playlist continuation context. Retry the import; no videos were saved by this request." }, 502);
           }
           const browseUrl = "https://www.youtube.com/youtubei/v1/browse?key=" + encodeURIComponent(apiKey) + "&prettyPrint=false";
           const browse = await fetch(browseUrl, {
@@ -69,22 +67,21 @@ export default {
             body: JSON.stringify({ context: context, continuation: continuation })
           });
           if (!browse.ok) {
-            more = true;
-            break;
+            return respond({ error: "YouTube playlist pagination failed (HTTP " + browse.status + "). Retry the import; no videos were saved by this request." }, 502);
           }
-          currentData = await browse.json();
+          const currentData = await browse.json();
           const scan = scanPlaylist(currentData, items, seen);
           continuation = scan.continuation || "";
-          pagesFetched++;
         }
-        more = !!continuation;
+        const more = Boolean(continuation);
         return respond({
           playlistId: playlistId,
           title: playlistTitle,
           count: items.length,
-          items: items.slice(0, limit),
-          nextCursor: more && continuation ? encodeCursor(continuation) : null,
-          hasMore: !!(more && continuation),
+          // Do not slice a scanned page: its cursor is after the complete page.
+          items: items,
+          nextCursor: more ? encodeCursor(continuation) : null,
+          hasMore: more,
           youtubeDataApiKeyRequired: false,
           note: "Uses public YouTube page metadata, not the YouTube Data API. Private, restricted, removed, and region-blocked videos may be unavailable."
         });

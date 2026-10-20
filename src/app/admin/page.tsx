@@ -418,7 +418,9 @@ function AdminLecturesTab(){
       });
       setPlaylistItems(res.items);
       setPlaylistTitle(res.title);
-      push(`Imported ${res.items.length} videos in ${res.pagesFetched} pages (deduplicated)`, 'success');
+      const incomplete = Boolean(res.note && (res.note.includes('safety limit') || res.note.includes('repeated a pagination cursor')));
+      const summary = `Imported ${res.items.length} unique videos in ${res.pagesFetched} pages.`;
+      push(incomplete ? `${summary} ${res.note}` : summary, incomplete ? 'error' : 'success');
     }catch(e){ push(e instanceof Error? e.message:'Playlist import failed. Try manual add.','error'); }
     finally{ setPlaylistLoading(false); }
   }
@@ -428,32 +430,43 @@ function AdminLecturesTab(){
     if(!playlistTarget){ push('Select target batch/series','error'); return; }
     const selectedItems = playlistItems.filter((i:any)=> i.selected!==false);
     if(!selectedItems.length){ push('Select at least one video','error'); return; }
+    const existingVideoIds = new Set(items.map((item:any) => String((item.metadata as Record<string,any>)?.videoId || '')).filter(Boolean));
+    const alreadyExists = selectedItems.filter((it:any)=> existingVideoIds.has(String(it.videoId))).length;
+    const itemsToSave = selectedItems.filter((it:any)=> !existingVideoIds.has(String(it.videoId)));
+    if(!itemsToSave.length){
+      push(`All ${alreadyExists} selected videos already exist as lectures. Nothing was duplicated.`,'error');
+      return;
+    }
     setSaving(true);
     let ok=0, fail=0;
     const failureMessages: string[] = [];
-    for(const it of selectedItems){
-      try{
-        const metadata = {
-          youtubeUrl: it.watchUrl, videoId: it.videoId, thumbnailUrl: it.thumbnail, duration: it.duration, position: it.position, parentId: playlistTarget, lesson: playlistTopic || playlistTitle, topic: playlistTopic || playlistTitle, isPreview:false, playlistId: extractYoutubePlaylistId(playlistUrl)
-        };
-        await createAdminContent({ kind:'lecture', title: it.title, description: it.description || `Imported from playlist ${playlistTitle}`, exam: playlistExam as any, classes: playlistClasses as any, active:true, accessCode:null, metadata });
-        ok++;
-      }catch(err){
-        fail++;
-        if(failureMessages.length < 2) {
-          failureMessages.push(err instanceof Error ? err.message : 'Unknown save error');
+    try {
+      for(const it of itemsToSave){
+        try{
+          const order = playlistItems.findIndex((entry:any)=> entry.videoId === it.videoId) + 1;
+          const metadata = {
+            youtubeUrl: it.watchUrl, videoId: it.videoId, thumbnailUrl: it.thumbnail, duration: it.duration, position: order, parentId: playlistTarget, lesson: playlistTopic || playlistTitle, topic: playlistTopic || playlistTitle, isPreview:false, playlistId: extractYoutubePlaylistId(playlistUrl)
+          };
+          await createAdminContent({ kind:'lecture', title: it.title.trim() || `Lecture ${order}`, description: it.description || `Imported from playlist ${playlistTitle}`, exam: playlistExam as any, classes: playlistClasses as any, active:true, accessCode:null, metadata });
+          ok++;
+        }catch(err){
+          fail++;
+          if(failureMessages.length < 2) {
+            failureMessages.push(err instanceof Error ? err.message : 'Unknown save error');
+          }
         }
       }
+      if(fail === 0) {
+        push(`Saved ${ok} lectures${alreadyExists ? `; skipped ${alreadyExists} already-existing videos` : ''}.`, 'success');
+      } else if(ok === 0) {
+        push(`No new lectures were saved (${fail} failed)${alreadyExists ? `; ${alreadyExists} duplicates skipped` : ''}. ${failureMessages.join(' • ')}`, 'error');
+      } else {
+        push(`Saved ${ok}; ${fail} failed${alreadyExists ? `; ${alreadyExists} duplicates skipped` : ''}. ${failureMessages.join(' • ')}`, 'error');
+      }
+    } finally {
+      setSaving(false);
+      if(ok) load();
     }
-    if(fail === 0) {
-      push(`Successfully saved all ${ok} lectures.`, 'success');
-    } else if(ok === 0) {
-      push(`No lectures were saved (${fail} failed). ${failureMessages.join(' • ')}`, 'error');
-    } else {
-      push(`Saved ${ok} lectures; ${fail} failed. ${failureMessages.join(' • ')}`, 'error');
-    }
-    setSaving(false);
-    if(ok) load();
   }
 
   return (
@@ -495,8 +508,13 @@ function AdminLecturesTab(){
                   <input type="checkbox" checked={it.selected!==false} onChange={e=> setPlaylistItems(s=> s.map((x:any,i)=> i===idx? {...x, selected:e.target.checked}:x))} />
                   <img src={it.thumbnail} alt={it.title} className="h-14 w-20 rounded object-cover bg-ink-100" />
                   <div className="flex-1 min-w-0">
-                    <input value={it.title} onChange={e=> setPlaylistItems(s=> s.map((x,i)=> i===idx? {...x, title:e.target.value}:x))} className="w-full text-sm font-medium bg-transparent border-b border-transparent focus:border-brand-300 focus:outline-none" />
+                    <input aria-label={`Lecture ${idx+1} title`} value={it.title} onChange={e=> setPlaylistItems(s=> s.map((x,i)=> i===idx? {...x, title:e.target.value}:x))} className="w-full text-sm font-medium bg-transparent border-b border-transparent focus:border-brand-300 focus:outline-none" />
+                    <Textarea value={it.description || ''} onChange={e=> setPlaylistItems(s=> s.map((x,i)=> i===idx? {...x, description:e.target.value}:x))} rows={2} placeholder="Lecture description (optional)" />
                     <p className="text-xs text-ink-500">{it.videoId} • {it.duration}</p>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Button size="sm" variant="outline" disabled={idx===0} onClick={()=> setPlaylistItems(s=> { const next=[...s]; [next[idx-1],next[idx]]=[next[idx],next[idx-1]]; return next; })}>↑</Button>
+                    <Button size="sm" variant="outline" disabled={idx===playlistItems.length-1} onClick={()=> setPlaylistItems(s=> { const next=[...s]; [next[idx],next[idx+1]]=[next[idx+1],next[idx]]; return next; })}>↓</Button>
                   </div>
                 </div>
               ))}
