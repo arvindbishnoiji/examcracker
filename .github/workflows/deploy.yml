@@ -56,9 +56,16 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      - name: Post deployment info
+      - name: Deploy Cloudflare media proxy (ec-content-api)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config workers/ec-content-api/wrangler.toml
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Verify deployed media proxy health
         run: |
-          echo "Deployed exam-cracker-web to Cloudflare Workers"
-          echo "Account ID: 93f8cbbe79e248f8d1db9fccc586f0c3"
-          echo "Worker name: exam-cracker-web (separate from ec-content-api)"
-          echo "Check Cloudflare Dashboard → Workers & Pages for URL"
+          curl --fail --silent --show-error https://ec-content-api.arvinddara0290.workers.dev/health
