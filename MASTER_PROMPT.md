@@ -25,18 +25,19 @@ You are the implementation agent for **Exam Cracker (EC)**. Build a complete, pr
 This repository was intentionally started empty. Service-only files were copied into it:
 - MASTER_PROMPT.md, README.md, .env.example and .gitignore
 - google-services.json, firebase.json and firestore.rules
+- reference/iio/src/types/index.ts, reference/iio/src/lib/{config,validation,date,api,firebase,firestore,mediaProxy}.ts and reference/iio/src/__tests__/examCracker.test.ts (adapt these; do not blindly import them)
 - supabase/functions/exam-cracker-api/index.ts
 - supabase/migrations/20261017000000_ec_query_indexes.sql
 - workers/ec-content-api/src/index.js
 - workers/ec-content-api/wrangler.toml
 
-There is no finished Vite/React app and no existing student/admin UI to migrate. Do NOT refer to, import, or depend on files from iio. Build the complete Next.js App Router project in this repository: package.json and lockfile, app routes/layouts, src components/features, Firebase client setup, Supabase API client, Cloudflare Worker integration, tests, lint/typecheck scripts, deployment config and CI workflows.
+There is no finished Vite/React app and no existing student/admin UI to migrate. A curated, read-only-style reference copy of core iio modules exists under reference/iio/ (types, API client, Firebase/Firestore helpers, media proxy, validation/date helpers and tests). Inspect these as implementation references for expected data shapes and behaviour, but do not directly import them into the new Next.js app without reviewing and adapting them; they may contain Vite-specific assumptions. Do not depend on the iio repository being available at build time. Build the complete Next.js App Router project in this repository: package.json and lockfile, app routes/layouts, src components/features, Firebase client setup, Supabase API client, Cloudflare Worker integration, tests, lint/typecheck scripts, deployment config and CI workflows.
 
-Before coding, inspect every service/config file copied above. Preserve and test the existing Supabase Edge Function and Cloudflare Worker source. Never overwrite a service with a mock implementation just to make the frontend work. Keep the media proxy Worker named ec-content-api and deployed at its existing URL. Its Wrangler config must stay at workers/ec-content-api/wrangler.toml with main = "src/index.js" relative to that config directory. Create a separate root configuration for the Next.js website so website deploys can never overwrite the media proxy.
+Before coding, inspect every service/config file copied above and the curated reference files under reference/iio/. Reuse the reference types and business logic where appropriate after checking compatibility, and port/adapt them into the new Next.js source tree. The reference folder is guidance, not the production source path. Preserve and test the existing Supabase Edge Function and Cloudflare Worker source. Never overwrite a service with a mock implementation just to make the frontend work. Keep the media proxy Worker named ec-content-api and deployed at its existing URL. Its Wrangler config must stay at workers/ec-content-api/wrangler.toml with main = "src/index.js" relative to that config directory. Create a separate root configuration for the Next.js website so website deploys can never overwrite the media proxy.
 
 Do not copy the old Android/Vite app into this repository. This deliverable is a Next.js web app. The Firebase google-services.json is Android client configuration retained for reference/future native packaging; it is not the Next.js web configuration and is not a Firebase Admin service-account key.
 
-Since the repository starts without frontend source, implement all student and admin screens from the requirements below rather than writing a migration plan. You may borrow design/feature concepts described in this prompt, but the resulting code must be self-contained and build inside examcracker.
+Since the repository starts without frontend source, implement all student and admin screens from the requirements below rather than writing a migration plan. You may use reference/iio files to preserve proven data contracts and logic, but the resulting code must be self-contained and build inside examcracker.
 
 
 ## 3. Next.js and Cloudflare hosting
