@@ -21,6 +21,9 @@ jobs:
       - name: Install deps (npm ci)
         run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
+      - name: Install OpenNext bundler dependency
+        run: npm install --no-save --package-lock=false esbuild@^0.25.5
+
       - name: Verify jsdom available
         run: npx vitest --version && node -e "require('jsdom'); console.log('jsdom ok')"
 
@@ -35,6 +38,9 @@ jobs:
 
       - name: Production build (Next.js)
         run: npm run build
+
+      - name: Build OpenNext Cloudflare bundle
+        run: npx @opennextjs/cloudflare build
 
       - name: Audit (non-blocking)
         run: npm audit --audit-level=high || true
