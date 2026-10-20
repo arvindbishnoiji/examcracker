@@ -27,6 +27,9 @@ jobs:
       - name: Verify jsdom available
         run: npx vitest --version && node -e "require('jsdom'); console.log('jsdom ok')"
 
+      - name: Validate Cloudflare media proxy JavaScript
+        run: node --check workers/ec-content-api/src/index.js
+
       - name: Type check
         run: npm run typecheck
 
