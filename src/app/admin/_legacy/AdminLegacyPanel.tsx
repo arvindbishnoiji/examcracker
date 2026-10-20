@@ -333,6 +333,9 @@ function AdminLecturesTab(){
   const [playlistItems, setPlaylistItems] = useState<any[]>([]);
   const [playlistTitle, setPlaylistTitle] = useState('');
   const [playlistLoading, setPlaylistLoading] = useState(false);
+  const [playlistProgress, setPlaylistProgress] = useState('');
+  const [playlistError, setPlaylistError] = useState<string|null>(null);
+  const [playlistIncomplete, setPlaylistIncomplete] = useState(false);
   const [playlistTarget, setPlaylistTarget] = useState('');
   const [playlistExam, setPlaylistExam] = useState('JEE');
   const [playlistClasses, setPlaylistClasses] = useState<string[]>(['11']);
@@ -421,17 +424,38 @@ function AdminLecturesTab(){
     const pid = extractYoutubePlaylistId(playlistUrl);
     if(!pid){ push('Invalid playlist URL (needs list= param)','error'); return; }
     setPlaylistLoading(true);
-    setPlaylistItems([]); setPlaylistTitle('');
+    setPlaylistItems([]);
+    setPlaylistTitle('');
+    setPlaylistError(null);
+    setPlaylistProgress('Connecting to the playlist proxy…');
+    setPlaylistIncomplete(false);
     try{
       const res = await importFullYoutubePlaylist(playlistUrl, {
-        onProgress: (p)=> { /* progress */ }
+        onProgress: (p)=> setPlaylistProgress(`Fetched ${p.pagesFetched} page(s) • ${p.totalItems} unique videos${p.hasMore ? ' • loading more…' : ''}`)
       });
       setPlaylistItems(res.items);
       setPlaylistTitle(res.title);
-      const incomplete = Boolean(res.note && (res.note.includes('safety limit') || res.note.includes('repeated a pagination cursor')));
+      const incomplete = Boolean(res.note && (
+        res.note.includes('safety limit') ||
+        res.note.includes('repeated a pagination cursor') ||
+        res.note.includes('did not return a continuation cursor')
+      ));
+      setPlaylistIncomplete(incomplete);
       const summary = `Imported ${res.items.length} unique videos in ${res.pagesFetched} pages.`;
-      push(incomplete ? `${summary} ${res.note}` : summary, incomplete ? 'error' : 'success');
-    }catch(e){ push(e instanceof Error? e.message:'Playlist import failed. Try manual add.','error'); }
+      if (incomplete) {
+        setPlaylistError(`${summary} ${res.note || 'The playlist may be incomplete. Retry before saving.'}`);
+        push('Playlist import may be incomplete. Retry before saving.', 'error');
+      } else {
+        setPlaylistError(null);
+        setPlaylistProgress(summary);
+        push(summary, 'success');
+      }
+    }catch(e){
+      const message = e instanceof Error ? e.message : 'Playlist import failed. Try manual add.';
+      setPlaylistError(message);
+      setPlaylistItems([]);
+      push(message, 'error');
+    }
     finally{ setPlaylistLoading(false); }
   }
 
@@ -492,8 +516,11 @@ function AdminLecturesTab(){
         <p className="text-xs text-ink-500 mt-1">Paste public playlist URL → fetch via Cloudflare /playlist → follow nextCursor → deduplicate by videoId → select/reorder/edit → save to batch/series.</p>
         <div className="flex gap-2 mt-3 flex-wrap">
           <Input placeholder="https://www.youtube.com/playlist?list=..." value={playlistUrl} onChange={e=> setPlaylistUrl(e.target.value)} className="flex-1 min-w-[260px]" />
-          <Button loading={playlistLoading} onClick={handlePlaylistImport}>Import</Button>
+          <Button loading={playlistLoading} disabled={playlistLoading} onClick={handlePlaylistImport}>Import</Button>
         </div>
+        {playlistLoading && <p role="status" aria-live="polite" className="mt-2 text-xs text-brand-700">{playlistProgress}</p>}
+        {!playlistLoading && playlistProgress && !playlistError && <p role="status" className="mt-2 text-xs text-ink-500">{playlistProgress}</p>}
+        {playlistError && <div role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">{playlistError}</div>}
         {playlistItems.length>0 && (
           <div className="mt-4 space-y-3">
             <div className="flex flex-wrap gap-2 items-end">
@@ -529,8 +556,8 @@ function AdminLecturesTab(){
                 </div>
               ))}
             </div>
-            <Button onClick={handlePlaylistSave} loading={saving}>Save {playlistItems.filter((i:any)=> i.selected!==false).length} lectures to target</Button>
-            <p className="text-xs text-ink-400">Never silently save half-import. Preserve failed URLs and allow manual add. Uses public YouTube page metadata.</p>
+            <Button onClick={handlePlaylistSave} loading={saving} disabled={saving || playlistLoading || playlistIncomplete}>Save {playlistItems.filter((i:any)=> i.selected!==false).length} lectures to target</Button>
+            <p className={`text-xs ${playlistIncomplete ? 'text-red-700 font-semibold' : 'text-ink-400'}`}>{playlistIncomplete ? 'Saving is disabled because pagination was incomplete. Retry the import so videos are not silently missed.' : 'Review the selected videos before saving. Uses public YouTube page metadata; private, removed or region-blocked videos may be unavailable.'}</p>
           </div>
         )}
       </Card>
