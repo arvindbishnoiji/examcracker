@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { subscribeToStudentMessages, sendStudentMessage, markThreadReadForStudent } from '@/lib/firestore';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -18,9 +17,16 @@ export default function StudentChatPage(){
 
   useEffect(()=>{
     if(!user) return;
-    const unsub = subscribeToStudentMessages(user.uid, setMessages, (err)=> setError(err.message));
-    markThreadReadForStudent(user.uid).catch(()=>{});
-    return ()=> unsub();
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    import('@/lib/firestore').then(({ subscribeToStudentMessages, markThreadReadForStudent }) => {
+      if (cancelled) return;
+      unsub = subscribeToStudentMessages(user.uid, setMessages, (err)=> setError(err.message));
+      markThreadReadForStudent(user.uid).catch(()=>{});
+    }).catch((err) => {
+      if (!cancelled) setError(err instanceof Error ? err.message : 'Unable to load chat');
+    });
+    return () => { cancelled = true; unsub?.(); };
   },[user]);
 
   useEffect(()=>{
@@ -34,6 +40,7 @@ export default function StudentChatPage(){
     if(text.length>5000){ push('Message too long (max 5000 chars)','error'); return; }
     setSending(true);
     try{
+      const { sendStudentMessage } = await import('@/lib/firestore');
       await sendStudentMessage(user.uid, text.trim(), 'student', user.uid);
       setText('');
     }catch(err){ push(err instanceof Error? err.message:'Failed to send','error'); }
