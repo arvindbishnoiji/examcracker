@@ -36,6 +36,9 @@ jobs:
       - name: Production build (Next.js)
         run: npm run build
 
+      - name: Build OpenNext Cloudflare bundle
+        run: npx @opennextjs/cloudflare build
+
       - name: Audit (non-blocking)
         run: npm audit --audit-level=high || true
 
