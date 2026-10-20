@@ -13,7 +13,6 @@ import {
 import { fetchVideoMetadata, importFullYoutubePlaylist, extractYoutubeVideoId, extractYoutubePlaylistId, getYoutubeDefaultThumbnail } from '@/lib/mediaProxy';
 import { fromISTDateTimeLocalInput, toISTDateTimeLocalInput } from '@/lib/date';
 import { isSafeHttpUrl, validateQuestionsJson } from '@/lib/validation';
-import { subscribeToAllStudentThreads, subscribeToStudentMessages, sendStudentMessage } from '@/lib/firestore';
 import type { CourseCatalogItem } from '@/types';
 
 type AdminTab = 'overview'|'goals'|'batches'|'lectures'|'series'|'tests'|'events'|'announcements'|'students'|'chat';
@@ -850,22 +849,34 @@ function AdminChatTab(){
   const [sending, setSending] = useState(false);
 
   useEffect(()=>{
-    const unsub = subscribeToAllStudentThreads(setThreads);
-    return ()=> unsub();
-  },[]);
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    import('@/lib/firestore').then(({ subscribeToAllStudentThreads }) => {
+      if (!cancelled) unsub = subscribeToAllStudentThreads(setThreads);
+    }).catch(() => {
+      if (!cancelled) push('Unable to load live student threads', 'error');
+    });
+    return () => { cancelled = true; unsub?.(); };
+  },[push]);
 
   useEffect(()=>{
     if(!selected || !user) return;
-    const unsub = subscribeToStudentMessages(selected, setMessages);
-    return ()=> unsub();
-  },[selected, user]);
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    import('@/lib/firestore').then(({ subscribeToStudentMessages }) => {
+      if (!cancelled) unsub = subscribeToStudentMessages(selected, setMessages);
+    }).catch(() => {
+      if (!cancelled) push('Unable to load student messages', 'error');
+    });
+    return () => { cancelled = true; unsub?.(); };
+  },[selected, user, push]);
 
   async function handleReply(e: React.FormEvent){
     e.preventDefault();
     if(!selected || !user || !reply.trim()) return;
     if(reply.length>5000){ push('Message too long','error'); return; }
     setSending(true);
-    try{ await sendStudentMessage(selected, reply.trim(), 'admin', user.uid); setReply(''); push('Replied','success'); }catch(err){ push(err instanceof Error? err.message:'Failed','error'); } finally{ setSending(false); }
+    try{ const { sendStudentMessage } = await import('@/lib/firestore'); await sendStudentMessage(selected, reply.trim(), 'admin', user.uid); setReply(''); push('Replied','success'); }catch(err){ push(err instanceof Error? err.message:'Failed','error'); } finally{ setSending(false); }
   }
 
   return (
