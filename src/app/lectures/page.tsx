@@ -1,6 +1,6 @@
 'use client';
-
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import YoutubeThumbnail from '@/components/YoutubeThumbnail';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -272,12 +272,12 @@ function LecturesHubPageInner() {
               >
                 <div className="relative">
                   {thumb && isSafeHttpUrl(thumb) ? (
-                    <img
+                    <YoutubeThumbnail
                       src={thumb}
-                      alt=""
+                      videoId={String(meta.videoId || '')}
+                      alt={item.title}
                       className="h-40 w-full bg-ink-100 object-cover"
                       loading="lazy"
-                      decoding="async"
                     />
                   ) : (
                     <div className="grid h-40 w-full place-items-center bg-gradient-to-br from-brand-50 via-[var(--ec-surface-2)] to-ink-100 text-brand-700">
@@ -298,8 +298,7 @@ function LecturesHubPageInner() {
                     )}
                   </div>
                 </div>
-                <div className="flex flex-1 flex-col gap-2 p-4">
-                  <div className="flex items-start justify-between gap-2">
+                <div className="flex flex-1 flex-col gap-2 p-4">                  <div className="flex items-start justify-between gap-2">
                     <h2 className="text-sm font-bold leading-snug line-clamp-2">{item.title}</h2>
                     <Badge variant={paid ? 'warning' : 'success'}>{coursePriceLabel(item)}</Badge>
                   </div>

@@ -3,7 +3,7 @@
 Date: 2026-10-20
 Branch: `arena/40a03224-examcracker`
 Pull request: [#18](https://github.com/arvindbishnoiji/examcracker/pull/18)
-Implementation commit: `5ca357f` (documentation/assets follow-up commit appended below it)
+Implementation commits: `5ca357f`, `ecabe3c`, plus a merge of `origin/main` (`9dac00b`) to integrate the upstream thumbnail-fallback component without regressing it.
 Repository: [arvindbishnoiji/examcracker](https://github.com/arvindbishnoiji/examcracker)
 
 > **Deployment status: NOT deployed.** No Supabase function, migration, Cloudflare
@@ -83,7 +83,9 @@ Repository: [arvindbishnoiji/examcracker](https://github.com/arvindbishnoiji/exa
 
 ### 1.5 Preserved importer
 
-`workers/ec-content-api/src/index.js` and `src/lib/mediaProxy.ts` were **not** rewritten. No thumbnail fix is claimed. The admin legacy console that hosts the importer remains available under `/admin/classic`.
+`workers/ec-content-api/src/index.js` and `src/lib/mediaProxy.ts` were **not** rewritten. No thumbnail fix is claimed by this work. The admin legacy console that hosts the importer remains available under `/admin/classic`.
+
+While this branch was open, `main` received `9dac00b` ("fix: add YouTube thumbnail fallbacks"), which adds `src/components/YoutubeThumbnail.tsx` and wires it into the importer. That commit was merged into this branch to resolve the PR conflict, and the redesigned lectures hub now renders thumbnails through the same `YoutubeThumbnail` component so the upstream fallback behaviour is preserved.
 
 ---
 
@@ -160,7 +162,7 @@ New tests:
 - **Not deployed.** PR #18 is open; merging it will auto-deploy via `.github/workflows/deploy.yml`.
 - **Migration unapplied.** No database changes were executed anywhere.
 - **No live API test.** Bulk endpoints, trigger and RLS were reviewed and syntax-checked, not executed against Postgres. A staging run is required before relying on the unique-index dedupe.
-- **Playlist importer / thumbnails:** intentionally untouched per instruction. Any existing thumbnail issue remains; this report does not claim otherwise.
+- **Playlist importer / thumbnails:** not modified by this work. The separate upstream thumbnail-fallback commit (`9dac00b`) is included via merge; this branch does not claim it as its own fix or guarantee thumbnails for private/blocked videos.
 - **No CSP.** A strict Content-Security-Policy needs an allowlist audit of Firebase, YouTube embeds and Supabase endpoints; adding it unverified could break sign-in. Security headers were added without CSP.
 - **Rate limiting is per-isolate** and best-effort; a global quota needs Cloudflare/WAF or a shared store.
 - **`/admin` client-side routing** still relies on `AdminShell` plus server-side admin checks on every API call. There is no server-rendered middleware check; no admin data is exposed without an authorized token.
