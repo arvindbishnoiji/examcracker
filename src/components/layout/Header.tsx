@@ -1,9 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { isAdminEmail } from '@/lib/config';
 import { Button } from '@/components/ui/Button';
-import { useState, useEffect } from 'react';
 
 export function Header({ showNav = true }: { showNav?: boolean }) {
   const { user, profile, signOut, isAdmin } = useAuth();
