@@ -48,7 +48,9 @@ update public.enrollments
 set metadata = '{}'::jsonb
 where metadata is null;
 
-alter table public.enrollments alter column status set default 'active';
+-- Leave status unset on insert so the trigger can derive it from legacy `active`.
+-- A DEFAULT 'active' would silently reactivate rows inserted with active=false.
+alter table public.enrollments alter column status drop default;
 alter table public.enrollments alter column source set default 'manual';
 alter table public.enrollments alter column metadata set default '{}'::jsonb;
 alter table public.enrollments alter column status set not null;
