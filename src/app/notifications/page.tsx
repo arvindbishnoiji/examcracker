@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { subscribeToNotifications, markNotificationRead } from '@/lib/firestore';
 import { Card, Badge, EmptyState } from '@/components/ui/Card';
 import Link from 'next/link';
 
@@ -11,8 +10,14 @@ export default function NotificationsPage(){
 
   useEffect(()=>{
     if(!user) return;
-    const unsub = subscribeToNotifications(user.uid, setItems);
-    return ()=> unsub();
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    import('@/lib/firestore').then(({ subscribeToNotifications }) => {
+      if (!cancelled) unsub = subscribeToNotifications(user.uid, setItems);
+    }).catch(() => {
+      if (!cancelled) setItems([]);
+    });
+    return () => { cancelled = true; unsub?.(); };
   },[user]);
 
   if(!user) return <div className="max-w-xl mx-auto text-sm text-ink-500">Sign in to view notifications.</div>;
@@ -34,7 +39,7 @@ export default function NotificationsPage(){
               <div className="flex flex-col gap-2 items-end">
                 <Badge variant={n.isRead?'default':'info'}>{n.isRead?'Read':'Unread'}</Badge>
                 {n.deepLink && <Link href={n.deepLink} className="text-xs font-semibold text-brand-600 hover:underline">Open →</Link>}
-                {!n.isRead && <button onClick={()=> markNotificationRead(user.uid, n.id)} className="text-xs px-3 py-1 bg-white border border-ink-200 rounded-full">Mark read</button>}
+                {!n.isRead && <button onClick={async()=>{ const { markNotificationRead } = await import('@/lib/firestore'); await markNotificationRead(user.uid, n.id); }} className="text-xs px-3 py-1 bg-white border border-ink-200 rounded-full">Mark read</button>}
               </div>
             </div>
           </Card>
