@@ -1,4 +1,5 @@
 'use client';
+import YoutubeThumbnail from '@/components/YoutubeThumbnail';
 import { Suspense, useEffect, useMemo, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -111,7 +112,7 @@ function LecturesHubPageInner(){
             const codeValue = enrollCodes[item.id] || '';
             return (
               <Card key={item.id} className="overflow-hidden flex flex-col">
-                {thumb && isSafeHttpUrl(thumb) ? <img src={thumb} alt={item.title} className="w-full h-40 object-cover bg-ink-100" loading="lazy" /> : <div className="w-full h-40 bg-gradient-to-br from-brand-50 to-ink-100 grid place-items-center text-ink-400 text-sm">No thumbnail</div>}
+                {thumb && isSafeHttpUrl(thumb) ? <YoutubeThumbnail src={thumb} videoId={String(meta.videoId || '')} alt={item.title} className="w-full h-40 object-cover bg-ink-100" loading="lazy" /> : <div className="w-full h-40 bg-gradient-to-br from-brand-50 to-ink-100 grid place-items-center text-ink-400 text-sm">No thumbnail</div>}
                 <CardBody className="flex-1 flex flex-col gap-2">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="font-semibold text-sm leading-tight line-clamp-2">{item.title}</h3>
