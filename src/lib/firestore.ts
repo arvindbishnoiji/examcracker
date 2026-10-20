@@ -1,7 +1,6 @@
 'use client';
 
-import {
-  collection,
+import { getFirestore, collection,
   doc,
   addDoc,
   setDoc,
@@ -13,8 +12,34 @@ import {
   limit,
   getDocs,
   type Unsubscribe,
+  type Firestore,
 } from 'firebase/firestore';
-import { getFirestoreDb } from './firebase';
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
+import { APP_CONFIG } from './config';
+
+// Firestore is isolated from the shared auth module so the Node-only gRPC/protobuf
+// dependency graph is not pulled into the root route's server bundle.
+let firestoreApp: FirebaseApp | null = null;
+let firestoreDb: import('firebase/firestore').Firestore | null = null;
+function getFirestoreDb() {
+  if (typeof window === 'undefined') {
+    throw new Error('Firestore can only be initialized in the browser');
+  }
+  if (!firestoreApp) {
+    firestoreApp = getApps().length ? getApp() : initializeApp({
+      apiKey: APP_CONFIG.firebase.apiKey,
+      authDomain: APP_CONFIG.firebase.authDomain,
+      projectId: APP_CONFIG.firebase.projectId,
+      storageBucket: APP_CONFIG.firebase.storageBucket,
+      messagingSenderId: APP_CONFIG.firebase.messagingSenderId,
+      appId: APP_CONFIG.firebase.appId,
+      measurementId: APP_CONFIG.firebase.measurementId || undefined,
+    });
+  }
+  if (!firestoreDb) firestoreDb = getFirestore(firestoreApp);
+  return firestoreDb;
+}
+
 import type {
   AppNotification,
   BroadcastNotice,
