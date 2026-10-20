@@ -4,30 +4,9 @@ import { useAuth } from '@/context/AuthContext';
 import { isAdminEmail } from '@/lib/config';
 import { Button } from '@/components/ui/Button';
 import { useState, useEffect } from 'react';
-import { subscribeToNotifications, subscribeToStudentMessages } from '@/lib/firestore';
 
 export function Header({ showNav = true }: { showNav?: boolean }) {
   const { user, profile, signOut, isAdmin } = useAuth();
-  const [notifCount, setNotifCount] = useState(0);
-  const [chatCount, setChatCount] = useState(0);
-
-  useEffect(()=>{
-    if(!user) return;
-    const unsub = subscribeToNotifications(user.uid, (items)=>{
-      setNotifCount(items.filter(i=>!i.isRead).length);
-    });
-    return ()=>unsub();
-  },[user]);
-
-  useEffect(()=>{
-    if(!user || !profile) return;
-    // student unread: listen to thread
-    const unsub = subscribeToStudentMessages(user.uid, (msgs)=>{
-      // unread by student: admin messages not read? Simple heuristic: last admin message unread
-      // Firestore thread unread flag would be better; using dummy
-    });
-    return ()=>unsub();
-  },[user, profile]);
 
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-ink-100">
