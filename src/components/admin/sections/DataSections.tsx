@@ -6,24 +6,18 @@ import { readAdminPreferences } from '@/lib/admin-prefs';
 import type {
   AdminActivityEntry,
   AdminAnalyticsResponse,
-  AdminEnrollmentRow,
   Banner,
   ChallengesConfig,
   CourseCatalogItem,
   LeaderboardEntry,
   NoticePopup,
   SiteSettingRow,
-  StudentProfile,
 } from '@/types';
 import {
-  createAdminEnrollment,
-  deleteAdminEnrollment,
   getAdminActivity,
   getAdminAnalytics,
   getAdminContentList,
-  getAdminEnrollments,
   getAdminSiteSettings,
-  getAdminStudents,
   getTestLeaderboard,
 } from '@/lib/api';
 import { isSafeHttpUrl } from '@/lib/validation';
@@ -700,192 +694,6 @@ export function CampaignsSection() {
           )}
         </div>
       </Panel>
-    </div>
-  );
-}
-
-export function StudentsSection() {
-  const { push } = useToast();
-  const [students, setStudents] = useState<StudentProfile[]>([]);
-  const [enrollments, setEnrollments] = useState<AdminEnrollmentRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<StudentProfile | null>(null);
-  const [form, setForm] = useState({ itemType: 'batch' as 'batch' | 'series', itemId: '', saving: false });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(() => readAdminPreferences().pageSize);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [studentList, enrollmentList] = await Promise.all([getAdminStudents(), getAdminEnrollments().catch(() => [])]);
-      setStudents(studentList);
-      setEnrollments(enrollmentList);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load students.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return students;
-    return students.filter((student) =>
-      `${student.display_name} ${student.email || ''} ${student.exam} ${student.class_level}`.toLowerCase().includes(q)
-    );
-  }, [students, query]);
-
-  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
-
-  if (loading) return <Spinner label="Loading student records…" />;
-
-  return (
-    <div>
-      <AdminPageHeader
-        eyebrow="Students"
-        title="Students & Enrollments"
-        description="Search real profiles, inspect onboarding choices and grant or revoke batch and series access."
-        meta={
-          <>
-            <StatusPill tone="brand">{students.length} students</StatusPill>
-            <StatusPill tone="info">{enrollments.filter((row) => row.active).length} active enrollments</StatusPill>
-          </>
-        }
-        actions={<button type="button" onClick={() => void load()} className="ec-btn px-3 py-2 text-xs font-semibold border border-ink-200 bg-white">⟳ Refresh</button>}
-      />
-      {error && <Callout tone="danger" title="Could not load students">{error}</Callout>}
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] items-start mt-4">
-        <Panel
-          title="Student directory"
-          action={
-            <div className="flex gap-2">
-              <SearchInput value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search name, email, exam…" />
-              <select className="ec-field !py-1.5 !text-xs !w-auto" value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}>
-                {[12, 24, 50].map((size) => <option key={size} value={size}>{size} / page</option>)}
-              </select>
-            </div>
-          }
-        >
-          <div className="space-y-1.5">
-            {paged.map((student) => (
-              <button
-                key={student.firebase_uid}
-                type="button"
-                onClick={() => { setSelected(student); setForm({ ...form, itemId: '' }); }}
-                className={`w-full text-left rounded-xl border px-3 py-2.5 transition ${
-                  selected?.firebase_uid === student.firebase_uid ? 'border-brand-300 bg-brand-50/50' : 'border-ink-200 hover:bg-ink-50'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold truncate">{student.display_name || 'Unnamed student'}</p>
-                    <p className="text-[10px] text-ink-400 truncate">{student.email || student.firebase_uid}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <StatusPill tone="brand">{student.exam}</StatusPill>
-                    <StatusPill tone="neutral">Class {student.class_level}</StatusPill>
-                  </div>
-                </div>
-              </button>
-            ))}
-            {paged.length === 0 && <p className="text-xs text-ink-500 py-6 text-center">No students match this search.</p>}
-          </div>
-          <div className="mt-3">
-            <Pagination page={page} pageSize={pageSize} total={filtered.length} onPage={setPage} />
-          </div>
-        </Panel>
-
-        <div className="space-y-4">
-          <Panel title={selected ? `Enrollments · ${selected.display_name || 'Student'}` : 'Enrollments'} description={selected ? 'Grant access by batch or series ID.' : 'Select a student to manage access.'}>
-            {selected ? (
-              <>
-                <div className="space-y-2 mb-3">
-                  {enrollments.filter((row) => row.firebase_uid === selected.firebase_uid).map((row) => (
-                    <div key={row.id} className="flex items-center justify-between gap-2 rounded-lg border border-ink-200 px-2.5 py-1.5">
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-semibold truncate">{row.item_title || row.item_id}</p>
-                        <p className="text-[10px] text-ink-400">{row.item_type} · {formatISTDateTime(row.created_at)}</p>
-                      </div>
-                      <button type="button" onClick={() => setDeleteId(row.id)} className="text-[10px] font-semibold text-red-600">Remove</button>
-                    </div>
-                  ))}
-                  {enrollments.filter((row) => row.firebase_uid === selected.firebase_uid).length === 0 && (
-                    <p className="text-[11px] text-ink-500">No enrollments yet.</p>
-                  )}
-                </div>
-                <div className="grid grid-cols-[100px_1fr] gap-2">
-                  <select className="ec-field !text-xs" value={form.itemType} onChange={(event) => setForm({ ...form, itemType: event.target.value as 'batch' | 'series' })}>
-                    <option value="batch">Batch</option>
-                    <option value="series">Series</option>
-                  </select>
-                  <input className="ec-field !text-xs" placeholder="Batch or series ID" value={form.itemId} onChange={(event) => setForm({ ...form, itemId: event.target.value })} />
-                </div>
-                <button
-                  type="button"
-                  disabled={form.saving || !form.itemId.trim()}
-                  onClick={async () => {
-                    setForm({ ...form, saving: true });
-                    try {
-                      const created = await createAdminEnrollment({ studentUid: selected.firebase_uid, itemType: form.itemType, itemId: form.itemId.trim() });
-                      setEnrollments((previous) => [created, ...previous]);
-                      setForm({ ...form, itemId: '', saving: false });
-                      push('Enrollment created.', 'success');
-                    } catch (err) {
-                      setForm({ ...form, saving: false });
-                      push(err instanceof Error ? err.message : 'Unable to create enrollment.', 'error');
-                    }
-                  }}
-                  className="mt-2 w-full ec-btn px-3 py-2 text-xs font-semibold bg-brand-600 text-white disabled:opacity-50"
-                >
-                  {form.saving ? 'Granting…' : 'Grant access'}
-                </button>
-              </>
-            ) : (
-              <p className="text-xs text-ink-500">Pick a student from the directory.</p>
-            )}
-          </Panel>
-
-          <Panel title="All enrollments" description="Newest first.">
-            <div className="space-y-1.5 max-h-72 overflow-y-auto">
-              {[...enrollments].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 30).map((row) => (
-                <div key={row.id} className="flex items-center justify-between gap-2 text-[11px]">
-                  <span className="truncate">{row.student_name || row.firebase_uid.slice(0, 8)} · {row.item_title || row.item_id.slice(0, 8)}</span>
-                  <StatusPill tone={row.active ? 'success' : 'neutral'}>{row.item_type}</StatusPill>
-                </div>
-              ))}
-              {enrollments.length === 0 && <p className="text-xs text-ink-500">No enrollments recorded.</p>}
-            </div>
-          </Panel>
-        </div>
-      </div>
-
-      <ConfirmDialog
-        open={Boolean(deleteId)}
-        title="Revoke this enrollment?"
-        description="The student loses access immediately. Their attempt history is preserved."
-        confirmLabel="Revoke access"
-        onCancel={() => setDeleteId(null)}
-        onConfirm={async () => {
-          if (!deleteId) return;
-          try {
-            await deleteAdminEnrollment(deleteId);
-            setEnrollments((previous) => previous.filter((row) => row.id !== deleteId));
-            push('Enrollment revoked.', 'success');
-          } catch (err) {
-            push(err instanceof Error ? err.message : 'Unable to revoke enrollment.', 'error');
-          }
-          setDeleteId(null);
-        }}
-      />
     </div>
   );
 }

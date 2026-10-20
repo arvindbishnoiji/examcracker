@@ -11,9 +11,25 @@
 // role key is used server-side. No browser ever receives a service key.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  BULK_CHUNK_SIZE,
+  MAX_BULK_STUDENTS,
+  enrollmentIsActive,
+  isEligibleForItem,
+  isUuid,
+  normalizeStudentUids,
+  parseBulkEnrollInput,
+  resolveAudience,
+  summarizeBulkResults,
+  type EnrollmentItemType,
+  type StudentLike,
+} from "../_shared/enrollment-core.ts";
 
 const FIREBASE_PROJECT_ID = "darvo1";
-const ADMIN_EMAIL = "arvinddarabishnoi@gmail.com";
+const ADMIN_EMAIL = (Deno.env.get("ADMIN_EMAIL") || "arvinddarabishnoi@gmail.com").toLowerCase();
+const MAX_BODY_BYTES = 512 * 1024;
+const PAGE_SIZE_DEFAULT = 25;
+const PAGE_SIZE_MAX = 100;
 const SITE_SETTING_KEYS = ["theme", "login", "homepage", "navigation", "footer", "banners", "popups", "testimonials", "challenges", "features", "seo", "media"];
 const LIBRARY_ITEM_TYPES = new Set(["bookmark", "note", "recent", "challenge", "revision"]);
 const MAX_SETTING_BYTES = 512 * 1024;
@@ -23,11 +39,70 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
   "Access-Control-Max-Age": "86400",
 };
+/**
+ * Browser-origin allowlist. Requests without an Origin header (curl, server
+ * jobs, native apps) are allowed; unknown browser origins are refused before
+ * any data is read. Keep the production worker and local dev origins here and
+ * add custom domains through the ALLOWED_ORIGINS secret.
+ */
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://exam-cracker-web.arvinddara0290.workers.dev",
+  "http://localhost:3000",
+  "http://localhost:8787",
+  "http://127.0.0.1:3000",
+];
+function allowedOrigins() {
+  const extra = (Deno.env.get("ALLOWED_ORIGINS") || "")
+    .split(",")
+    .map((value) => value.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+  return new Set([...DEFAULT_ALLOWED_ORIGINS, ...extra]);
+}
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (allowedOrigins().has(origin)) return true;
+  try {
+    const host = new URL(origin).hostname;
+    // Sandbox/preview hosts used while reviewing the app.
+    if (host === "localhost" || host === "127.0.0.1") return true;
+    if (host.endsWith(".e2b.app")) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+/**
+ * Best-effort per-isolate rate limiting (Supabase runs many isolates, so this
+ * stops accidental loops and casual abuse rather than guaranteeing a global
+ * quota). Wider protection belongs at the CDN/WAF layer.
+ */
+const rateBuckets = new Map();
+function rateLimited(key, limit, windowMs) {
+  const now = Date.now();
+  const bucket = rateBuckets.get(key);
+  if (!bucket || now - bucket.start > windowMs) {
+    rateBuckets.set(key, { start: now, count: 1 });
+    if (rateBuckets.size > 5000) rateBuckets.clear();
+    return false;
+  }
+  bucket.count += 1;
+  return bucket.count > limit;
+}
+const RATE_LIMITED_BODY = { error: "Too many requests. Please wait a moment and try again." };
+
 let cachedJwks = null;
 let cachedJwksExpiresAt = 0;
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
+  const origin = req.headers.get("origin");
+  if (!isAllowedOrigin(origin)) {
+    return new Response(JSON.stringify({ error: "Origin not allowed." }), {
+      status: 403,
+      headers: Object.assign({}, CORS_HEADERS, { "Content-Type": "application/json; charset=utf-8", Vary: "Origin" }),
+    });
+  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: Object.assign({}, CORS_HEADERS, { Vary: "Origin" }) });
   const url = new URL(req.url);
   if (url.pathname.endsWith("/health")) {
     return json({ ok: true, service: "Exam Cracker Site API", firebaseProjectId: FIREBASE_PROJECT_ID });
@@ -135,66 +210,67 @@ Deno.serve(async (req) => {
 
     if (path === "/admin/enrollments" && method === "GET") {
       if (!isAdmin) return json({ error: "Admin access denied." }, 403);
-      const studentFilter = String(url.searchParams.get("student") || "").trim().toLowerCase();
-      const itemFilter = String(url.searchParams.get("item") || "").trim().toLowerCase();
-      const { data: rows, error } = await db.from("enrollments").select("*").order("created_at", { ascending: false }).limit(5000);
-      if (error) throw error;
-      const items = await hydrateEnrollments(db, rows || []);
-      const filtered = items.filter((row) => {
-        if (studentFilter) {
-          const haystack = `${row.student_name || ""} ${row.student_email || ""} ${row.firebase_uid}`.toLowerCase();
-          if (!haystack.includes(studentFilter)) return false;
-        }
-        if (itemFilter) {
-          const haystack = `${row.item_title || ""} ${row.item_id}`.toLowerCase();
-          if (!haystack.includes(itemFilter)) return false;
-        }
-        return true;
-      });
-      return json({ items: filtered });
+      return await adminListEnrollments(db, url);
     }
 
     if (path === "/admin/enrollments" && method === "POST") {
       if (!isAdmin) return json({ error: "Admin access denied." }, 403);
-      const body = await bodyJson(req);
-      const studentUid = String(body.studentUid || "").trim();
-      const itemType = String(body.itemType || "");
-      const itemId = String(body.itemId || "");
-      if (!studentUid) return json({ error: "Choose a student." }, 400);
-      if (!["batch", "series"].includes(itemType) || !isUuid(itemId)) return json({ error: "Choose a valid batch or series." }, 400);
-      const { data: profile, error: profileError } = await db.from("student_profiles").select("firebase_uid").eq("firebase_uid", studentUid).maybeSingle();
-      if (profileError) throw profileError;
-      if (!profile) return json({ error: "Student not found." }, 404);
-      const { data: item, error: itemError } = await db.from("course_catalog").select("id,kind,title").eq("id", itemId).maybeSingle();
-      if (itemError) throw itemError;
-      if (!item || item.kind !== itemType) return json({ error: "That batch or series does not exist." }, 404);
-      const { data: existing, error: existingError } = await db.from("enrollments").select("id,active").eq("firebase_uid", studentUid).eq("item_type", itemType).eq("item_id", itemId).maybeSingle();
-      if (existingError) throw existingError;
-      let row;
-      if (existing) {
-        const { data, error } = await db.from("enrollments").update({ active: true }).eq("id", existing.id).select("*").single();
-        if (error) throw error;
-        row = data;
-      } else {
-        const { data, error } = await db.from("enrollments").insert({ firebase_uid: studentUid, item_type: itemType, item_id: itemId, active: true }).select("*").single();
-        if (error) throw error;
-        row = data;
-      }
-      await logActivity(db, claims, "enrollment.create", "enrollments", row.id, `Enrolled ${studentUid} in ${item.title}`);
-      const hydrated = await hydrateEnrollments(db, [row]);
-      return json({ item: hydrated[0] }, existing ? 200 : 201);
+      return await adminGrantEnrollment(db, claims, await bodyJson(req));
     }
 
-    const enrollmentMatch = path.match(/^\/admin\/enrollments\/([0-9a-f-]{36})$/i);
-    if (enrollmentMatch && method === "DELETE") {
+    if (path === "/admin/enrollments/bulk" && method === "POST") {
       if (!isAdmin) return json({ error: "Admin access denied." }, 403);
-      const { data: row, error: lookupError } = await db.from("enrollments").select("id,firebase_uid,item_type,item_id").eq("id", enrollmentMatch[1]).maybeSingle();
-      if (lookupError) throw lookupError;
-      if (!row) return json({ error: "Enrollment not found." }, 404);
-      const { error } = await db.from("enrollments").delete().eq("id", row.id);
+      if (rateLimited(`bulk:${claims.sub}`, 12, 300_000)) return json(RATE_LIMITED_BODY, 429);
+      return await adminBulkEnroll(db, claims, await bodyJson(req));
+    }
+
+    if (path === "/admin/enrollments/bulk-revoke" && method === "POST") {
+      if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      if (rateLimited(`revoke:${claims.sub}`, 12, 300_000)) return json(RATE_LIMITED_BODY, 429);
+      return await adminBulkRevoke(db, claims, await bodyJson(req));
+    }
+
+    if (path === "/admin/enrollments/history" && method === "GET") {
+      if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      const limit = Math.max(1, Math.min(300, Number(url.searchParams.get("limit") || 120) || 120));
+      return await adminEnrollmentHistory(db, limit);
+    }
+
+    if (path === "/admin/enrollment-rules" && method === "GET") {
+      if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      return await adminListEnrollmentRules(db);
+    }
+
+    const ruleMatch = path.match(/^\/admin\/enrollment-rules\/([0-9a-f-]{36})$/i);
+    if (ruleMatch && method === "PATCH") {
+      if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      const body = await bodyJson(req);
+      const active = body.active === true;
+      const { data, error } = await db.from("enrollment_rules")
+        .update({ active, updated_at: new Date().toISOString() })
+        .eq("id", ruleMatch[1]).select("*").maybeSingle();
       if (error) throw error;
-      await logActivity(db, claims, "enrollment.remove", "enrollments", row.id, `Removed enrollment ${row.firebase_uid} → ${row.item_type}:${row.item_id}`);
+      if (!data) return json({ error: "Enrollment rule not found." }, 404);
+      await logActivity(db, claims, active ? "enrollment_rule.enable" : "enrollment_rule.disable", "enrollment_rules", data.id, `${active ? "Enabled" : "Paused"} future auto-enrollment for ${data.item_type}:${data.item_id}`);
+      return json({ item: data });
+    }
+    if (ruleMatch && method === "DELETE") {
+      if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      const { data, error } = await db.from("enrollment_rules").delete().eq("id", ruleMatch[1]).select("id,item_type,item_id").maybeSingle();
+      if (error) throw error;
+      if (!data) return json({ error: "Enrollment rule not found." }, 404);
+      await logActivity(db, claims, "enrollment_rule.delete", "enrollment_rules", data.id, `Deleted auto-enrollment rule for ${data.item_type}:${data.item_id}`);
       return json({ removed: true });
+    }
+
+    const enrollmentMatch = path.match(/^\/admin\/enrollments\/([0-9a-f-]{36})(?:\/(restore))?$/i);
+    if (enrollmentMatch && method === "DELETE" && !enrollmentMatch[2]) {
+      if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      return await adminRevokeEnrollment(db, claims, enrollmentMatch[1]);
+    }
+    if (enrollmentMatch && method === "POST" && enrollmentMatch[2] === "restore") {
+      if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      return await adminRestoreEnrollment(db, claims, enrollmentMatch[1], await bodyJson(req));
     }
 
     if (path === "/library" && method === "GET") {
@@ -233,7 +309,12 @@ Deno.serve(async (req) => {
     const message = String((error && error.message) || error || "Unexpected server error");
     if (message.indexOf("Unauthorized") >= 0) return json({ error: "Please sign in again." }, 401);
     if (message.indexOf("Server database credentials") >= 0) return json({ error: message }, 503);
-    return json({ error: "Request failed.", detail: message }, 500);
+    if (message.indexOf("Invalid JSON") >= 0) return json({ error: "The request body is not valid JSON." }, 400);
+    if (message.indexOf("Request body is too large") >= 0) return json({ error: message }, 413);
+    // Never leak database/stack details to the browser unless explicitly enabled
+    // for a local debugging session.
+    const debug = Deno.env.get("DEBUG_API_ERRORS") === "1";
+    return json(debug ? { error: "Request failed.", detail: message } : { error: "Request failed. Please try again." }, 500);
   }
 });
 
@@ -252,7 +333,15 @@ function normalizePath(path) {
 }
 
 async function bodyJson(req) {
-  try { return await req.json(); } catch (_) { throw new Error("Invalid JSON request body."); }
+  const declared = Number(req.headers.get("content-length") || 0);
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+    throw new Error("Request body is too large.");
+  }
+  let text;
+  try { text = await req.text(); } catch (_) { throw new Error("Invalid JSON request body."); }
+  if (text.length > MAX_BODY_BYTES) throw new Error("Request body is too large.");
+  if (!text) return {};
+  try { return JSON.parse(text); } catch (_) { throw new Error("Invalid JSON request body."); }
 }
 
 function b64urlDecode(s) {
@@ -402,6 +491,11 @@ async function hydrateEnrollments(db, rows) {
     item_id: row.item_id,
     item_title: titles[row.item_id] || null,
     active: Boolean(row.active),
+    status: row.status || (row.active ? "active" : "revoked"),
+    source: row.source || "manual",
+    expires_at: row.expires_at || null,
+    revoked_at: row.revoked_at || null,
+    updated_at: row.updated_at || row.created_at,
     created_at: row.created_at,
   }));
 }
@@ -536,4 +630,660 @@ async function buildAnalytics(db) {
     enrollments: { total: enrollments.filter((row) => row.active).length, byItem },
     contentHealth: { missingThumbnails, testsWithoutQuestions, eventsMissingSchedule, inactiveContent },
   };
+}
+
+// ===========================================================================
+// Enrollment administration helpers
+// ---------------------------------------------------------------------------
+// Every helper below is only reachable after `isAdmin` has been verified from
+// the Firebase ID token. They never trust a client-provided role. Bulk actions
+// are validated with the shared, unit-tested enrollment core before writing.
+// ===========================================================================
+
+function isMissingColumn(error) {
+  const code = String(error && error.code || "");
+  const message = String(error && error.message || "");
+  return code === "42703" || (message.includes("column") && message.includes("does not exist"));
+}
+
+function isMissingRelation(error) {
+  const code = String(error && error.code || "");
+  const message = String(error && error.message || "");
+  return code === "42P01" || message.includes("does not exist");
+}
+
+function parseExpiry(raw) {
+  if (!raw) return { value: null, error: "" };
+  const date = new Date(String(raw));
+  if (Number.isNaN(date.getTime())) return { value: null, error: "The access expiry date is not valid." };
+  if (date.getTime() <= Date.now()) return { value: null, error: "The access expiry date must be in the future." };
+  return { value: date.toISOString(), error: "" };
+}
+
+async function getEnrollmentItem(db, itemId) {
+  const { data, error } = await db.from("course_catalog")
+    .select("id,kind,title,exam,classes,active,access_code,metadata")
+    .eq("id", itemId).maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function getEnrollmentStudent(db, uid) {
+  const { data, error } = await db.from("student_profiles")
+    .select("firebase_uid,display_name,email,exam,class_level")
+    .eq("firebase_uid", uid).maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function fetchProfilesByUids(db, uids) {
+  const out = [];
+  for (const chunk of chunkList(uids, 100)) {
+    const { data, error } = await db.from("student_profiles")
+      .select("firebase_uid,display_name,email,exam,class_level")
+      .in("firebase_uid", chunk);
+    if (error) throw error;
+    out.push(...(data || []));
+  }
+  return out;
+}
+
+async function fetchAudienceProfiles(db, input) {
+  if (input.mode === "selected") return fetchProfilesByUids(db, input.studentUids);
+  const out = [];
+  const pageSize = 1000;
+  for (let offset = 0; offset < 10000; offset += pageSize) {
+    let query = db.from("student_profiles")
+      .select("firebase_uid,display_name,email,exam,class_level")
+      .order("created_at", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (input.filterExam) query = query.eq("exam", input.filterExam);
+    if (input.filterClass) query = query.eq("class_level", input.filterClass);
+    const { data, error } = await query;
+    if (error) throw error;
+    const rows = data || [];
+    out.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+  return out;
+}
+
+function chunkList(items, size) {
+  const out = [];
+  for (let index = 0; index < items.length; index += size) out.push(items.slice(index, index + size));
+  return out;
+}
+
+async function mapWithConcurrency(items, limit, worker) {
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+}
+
+async function countEnrollments(db, itemId, status) {
+  let query = db.from("enrollments").select("id", { count: "exact", head: true });
+  if (itemId) query = query.eq("item_id", itemId);
+  if (status === "active") {
+    query = query.eq("active", true).or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
+  } else if (status === "revoked") {
+    query = query.eq("active", false);
+  }
+  const { count, error } = await query;
+  if (error) {
+    if (!isMissingColumn(error)) throw error;
+    let legacy = db.from("enrollments").select("id", { count: "exact", head: true });
+    if (itemId) legacy = legacy.eq("item_id", itemId);
+    if (status === "active") legacy = legacy.eq("active", true);
+    if (status === "revoked") legacy = legacy.eq("active", false);
+    const fallback = await legacy;
+    if (fallback.error) throw fallback.error;
+    return fallback.count || 0;
+  }
+  return count || 0;
+}
+
+async function adminListEnrollments(db, url) {
+  const page = Math.max(1, Math.floor(Number(url.searchParams.get("page") || 1) || 1));
+  const pageSize = Math.min(PAGE_SIZE_MAX, Math.max(1, Math.floor(Number(url.searchParams.get("pageSize") || PAGE_SIZE_DEFAULT) || PAGE_SIZE_DEFAULT)));
+  const statusFilter = String(url.searchParams.get("status") || "all");
+  const itemId = String(url.searchParams.get("itemId") || "").trim();
+  const itemType = String(url.searchParams.get("itemType") || "").trim();
+  const search = String(url.searchParams.get("query") || url.searchParams.get("student") || "").trim().toLowerCase();
+  const itemSearch = String(url.searchParams.get("item") || "").trim().toLowerCase();
+
+  let uidFilter = null;
+  if (search) {
+    const safe = search.replace(/[,()%_]/g, "").slice(0, 80);
+    if (!safe) return json({ items: [], total: 0, page, pageSize, counts: { active: 0, revoked: 0, total: 0 } });
+    const { data: profiles, error: searchError } = await db.from("student_profiles")
+      .select("firebase_uid")
+      .or(`display_name.ilike.%${safe}%,email.ilike.%${safe}%,firebase_uid.eq.${safe}`)
+      .limit(500);
+    if (searchError) throw searchError;
+    uidFilter = (profiles || []).map((row) => row.firebase_uid);
+    if (!uidFilter.length) return json({ items: [], total: 0, page, pageSize, counts: { active: await countEnrollments(db, itemId, "active"), revoked: await countEnrollments(db, itemId, "revoked"), total: await countEnrollments(db, itemId, "all") } });
+  }
+
+  let query = db.from("enrollments").select("*", { count: "exact" });
+  if (itemId && isUuid(itemId)) query = query.eq("item_id", itemId);
+  if (itemType === "batch" || itemType === "series") query = query.eq("item_type", itemType);
+  if (statusFilter === "active") {
+    query = query.eq("active", true).or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
+  } else if (statusFilter === "revoked") {
+    query = query.eq("active", false);
+  }
+  if (uidFilter) query = query.in("firebase_uid", uidFilter);
+  const from = (page - 1) * pageSize;
+  const { data, error, count } = await query.order("created_at", { ascending: false }).range(from, from + pageSize - 1);
+  if (error) {
+    if (!isMissingColumn(error) && !isMissingRelation(error)) throw error;
+    return await adminListEnrollmentsLegacy(db, { page, pageSize, search, itemSearch, itemId });
+  }
+  let items = await hydrateEnrollments(db, data || []);
+  if (itemSearch) {
+    items = items.filter((row) => `${row.item_title || ""} ${row.item_id}`.toLowerCase().includes(itemSearch));
+  }
+  return json({
+    items,
+    total: count || items.length,
+    page,
+    pageSize,
+    counts: {
+      active: await countEnrollments(db, itemId, "active"),
+      revoked: await countEnrollments(db, itemId, "revoked"),
+      total: await countEnrollments(db, itemId, "all"),
+    },
+  });
+}
+
+async function adminListEnrollmentsLegacy(db, opts) {
+  const { data, error } = await db.from("enrollments").select("*").order("created_at", { ascending: false }).limit(5000);
+  if (error) throw error;
+  let items = await hydrateEnrollments(db, data || []);
+  if (opts.search) {
+    items = items.filter((row) => `${row.student_name || ""} ${row.student_email || ""} ${row.firebase_uid}`.toLowerCase().includes(opts.search));
+  }
+  if (opts.itemSearch) {
+    items = items.filter((row) => `${row.item_title || ""} ${row.item_id}`.toLowerCase().includes(opts.itemSearch));
+  }
+  const start = (opts.page - 1) * opts.pageSize;
+  return json({
+    items: items.slice(start, start + opts.pageSize),
+    total: items.length,
+    page: opts.page,
+    pageSize: opts.pageSize,
+    counts: { active: items.filter((row) => row.active).length, revoked: items.filter((row) => !row.active).length, total: items.length },
+    degraded: true,
+  });
+}
+
+async function recordEnrollmentEvents(db, events) {
+  for (const chunk of chunkList(events, 200)) {
+    try {
+      const { error } = await db.from("enrollment_events").insert(chunk);
+      if (error && !isMissingRelation(error)) throw error;
+      if (error) return;
+    } catch (_) {
+      // The audit trail must never block the primary enrollment write.
+      return;
+    }
+  }
+}
+
+async function adminGrantEnrollment(db, claims, body) {
+  const studentUid = String(body.studentUid || "").trim();
+  const itemType = String(body.itemType || "");
+  const itemId = String(body.itemId || "");
+  if (!studentUid) return json({ error: "Choose a student." }, 400);
+  if (!["batch", "series"].includes(itemType) || !isUuid(itemId)) return json({ error: "Choose a valid batch or series." }, 400);
+  const student = await getEnrollmentStudent(db, studentUid);
+  if (!student) return json({ error: "Student not found." }, 404);
+  const item = await getEnrollmentItem(db, itemId);
+  if (!item || item.kind !== itemType) return json({ error: "That batch or series does not exist." }, 404);
+  const respectEligibility = body.respectEligibility !== false && body.overrideEligibility !== true;
+  if (respectEligibility && !isEligibleForItem(item, student)) {
+    return json({
+      error: "This student's exam/class does not match the course. Confirm the override to enroll anyway.",
+      code: "INELIGIBLE",
+    }, 409);
+  }
+  const expiry = parseExpiry(body.expiresAt);
+  if (expiry.error) return json({ error: expiry.error }, 400);
+  const now = new Date().toISOString();
+  const { data: existing, error: lookupError } = await db.from("enrollments")
+    .select("id,active,status,expires_at")
+    .eq("firebase_uid", studentUid).eq("item_type", itemType).eq("item_id", itemId)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+  const payload = {
+    firebase_uid: studentUid,
+    item_type: itemType,
+    item_id: itemId,
+    active: true,
+    status: "active",
+    source: "manual",
+    granted_by: claims.email || claims.sub,
+    expires_at: expiry.value,
+    revoked_at: null,
+    updated_at: now,
+  };
+  const { data: row, error } = await db.from("enrollments")
+    .upsert(payload, { onConflict: "firebase_uid,item_type,item_id" })
+    .select("*").single();
+  if (error) throw error;
+  const action = !existing ? "granted" : existing.active === false || existing.status === "revoked" || String(existing.expires_at || "") !== String(expiry.value || "") ? "reactivated" : "granted";
+  if (!existing || existing.active === false || existing.status !== "active" || String(existing.expires_at || "") !== String(expiry.value || "")) {
+    await recordEnrollmentEvents(db, [{
+      enrollment_id: row.id,
+      firebase_uid: studentUid,
+      item_type: itemType,
+      item_id: itemId,
+      action,
+      source: "manual",
+      actor_uid: claims.sub,
+      actor_email: claims.email || "",
+      detail: { title: item.title, expiresAt: expiry.value, eligibilityOverride: !respectEligibility },
+    }]);
+  }
+  await logActivity(db, claims, "enrollment.create", "enrollments", row.id,
+    `Enrolled ${student.display_name || studentUid} in ${item.title}${!respectEligibility ? " (eligibility override)" : ""}`);
+  const hydrated = await hydrateEnrollments(db, [row]);
+  return json({ item: hydrated[0], created: !existing }, existing ? 200 : 201);
+}
+
+async function processGrantRows(db, { eligible, item, input, claims, source }) {
+  const itemType = item.kind;
+  const now = new Date().toISOString();
+  const existingByUid = new Map();
+  for (const chunk of chunkList(eligible.map((student) => student.firebase_uid), 100)) {
+    const { data, error } = await db.from("enrollments")
+      .select("id,firebase_uid,active,status,expires_at,revoked_at")
+      .eq("item_type", itemType).eq("item_id", item.id).in("firebase_uid", chunk);
+    if (error) throw error;
+    for (const row of data || []) existingByUid.set(row.firebase_uid, row);
+  }
+
+  let created = 0;
+  let reactivated = 0;
+  let alreadyActive = 0;
+  let failed = 0;
+  const failures = [];
+  const events = [];
+
+  const rows = eligible.map((student) => {
+    const existing = existingByUid.get(student.firebase_uid);
+    return {
+      firebase_uid: student.firebase_uid,
+      item_type: itemType,
+      item_id: item.id,
+      active: true,
+      status: "active",
+      source,
+      granted_by: claims.email || claims.sub,
+      expires_at: input.expiresAt || null,
+      revoked_at: null,
+      updated_at: now,
+      _existing: existing || null,
+      _name: student.display_name || null,
+    };
+  });
+
+  function classify(row) {
+    if (!row._existing) {
+      created += 1;
+      events.push(buildGrantEvent(row, "granted", claims, item, input));
+      return;
+    }
+    if (enrollmentIsActive(row._existing)) {
+      alreadyActive += 1;
+      return;
+    }
+    reactivated += 1;
+    events.push(buildGrantEvent(row, "reactivated", claims, item, input));
+  }
+
+  const writeChunk = async (chunk) => {
+    const clean = chunk.map(({ _existing, _name, ...rest }) => rest);
+    const { error } = await db.from("enrollments").upsert(clean, { onConflict: "firebase_uid,item_type,item_id" });
+    if (!error) {
+      for (const row of chunk) classify(row);
+      return;
+    }
+    // Partial-failure resilience: retry each row so one bad record cannot lose
+    // the whole batch. The failure reasons are returned to the admin.
+    for (const row of chunk) {
+      const single = await db.from("enrollments")
+        .upsert(clean[chunk.indexOf(row)], { onConflict: "firebase_uid,item_type,item_id" });
+      if (single.error) {
+        failed += 1;
+        failures.push({ uid: row.firebase_uid, name: row._name, reason: String(single.error.message || "write failed").slice(0, 240) });
+      } else {
+        classify(row);
+      }
+    }
+  };
+
+  const chunks = chunkList(rows, 100);
+  await mapWithConcurrency(chunks, 4, writeChunk);
+  await recordEnrollmentEvents(db, events);
+
+  return {
+    summary: summarizeBulkResults({
+      targeted: input.audienceTargeted ?? eligible.length,
+      eligible: eligible.length,
+      skipped: input.audienceSkipped ?? 0,
+      created,
+      reactivated,
+      alreadyActive,
+      failed,
+    }),
+    failures: failures.slice(0, 50),
+  };
+}
+
+function buildGrantEvent(row, action, claims, item, input) {
+  return {
+    enrollment_id: null,
+    firebase_uid: row.firebase_uid,
+    item_type: item.kind,
+    item_id: item.id,
+    action,
+    source: input.source || "admin_bulk",
+    actor_uid: claims.sub,
+    actor_email: claims.email || "",
+    detail: {
+      title: item.title,
+      expiresAt: input.expiresAt || null,
+      includeFuture: Boolean(input.includeFuture),
+      eligibilityOverride: !input.respectEligibility,
+    },
+  };
+}
+
+async function saveEnrollmentRule(db, claims, item, input) {
+  try {
+    const { data, error } = await db.from("enrollment_rules").upsert({
+      item_type: item.kind,
+      item_id: item.id,
+      name: String(item.title || "").slice(0, 180),
+      include_future: true,
+      respect_eligibility: input.respectEligibility !== false,
+      filter_exam: input.exam || "",
+      filter_class: input.classLevel || "",
+      expires_at: input.expiresAt || null,
+      active: true,
+      created_by: claims.email || claims.sub,
+      updated_at: new Date().toISOString(),
+      last_applied_at: new Date().toISOString(),
+      last_applied_count: input.appliedCount || 0,
+    }, { onConflict: "item_type,item_id" }).select("*").single();
+    if (error) return { rule: null, error: String(error.message || "rule save failed") };
+    return { rule: data, error: "" };
+  } catch (error) {
+    return { rule: null, error: String(error && error.message || "rule save failed") };
+  }
+}
+
+async function adminBulkEnroll(db, claims, body) {
+  const parsed = parseBulkEnrollInput(body);
+  if (!parsed.ok || !parsed.value) return json({ error: parsed.error || "Invalid enrollment request." }, 400);
+  const input = parsed.value;
+  const item = await getEnrollmentItem(db, input.itemId);
+  if (!item || item.kind !== input.itemType) return json({ error: "That batch or series does not exist." }, 404);
+  if (item.active === false) return json({ error: "Activate this course before enrolling students." }, 409);
+
+  const profiles = await fetchAudienceProfiles(db, {
+    mode: input.mode,
+    studentUids: input.studentUids,
+    filterExam: input.exam,
+    filterClass: input.classLevel,
+  });
+  const plan = resolveAudience(input, profiles, item);
+
+  if (plan.scope.requiresConfirmation && !input.confirmAll) {
+    return json({
+      error: "This audience goes beyond the course's exam/class. Confirm the full scope to continue.",
+      code: "CONFIRMATION_REQUIRED",
+      scope: plan.scope,
+    }, 409);
+  }
+
+  if (input.dryRun) {
+    return json({
+      dryRun: true,
+      scope: plan.scope,
+      preview: {
+        eligible: plan.eligible.length,
+        skipped: plan.skipped.length,
+        sampleSkipped: plan.skipped.slice(0, 20),
+      },
+    });
+  }
+
+  if (!plan.eligible.length) {
+    let emptyRule = null;
+    let emptyRuleError = "";
+    if (input.includeFuture) {
+      const saved = await saveEnrollmentRule(db, claims, item, { ...input, appliedCount: 0 });
+      emptyRule = saved.rule;
+      emptyRuleError = saved.error;
+    }
+    return json({
+      summary: summarizeBulkResults({ targeted: plan.scope.targeted, eligible: 0, skipped: plan.skipped.length, created: 0, reactivated: 0, alreadyActive: 0, failed: 0, ruleSaved: Boolean(emptyRule) }),
+      scope: plan.scope,
+      skipped: plan.skipped.slice(0, 100),
+      failures: [],
+      rule: emptyRule,
+      ruleError: emptyRuleError || null,
+    });
+  }
+
+  const processed = await processGrantRows(db, {
+    eligible: plan.eligible,
+    item,
+    input: {
+      ...input,
+      source: "admin_bulk",
+      audienceTargeted: plan.scope.targeted,
+      audienceSkipped: plan.skipped.length,
+    },
+    claims,
+    source: "admin_bulk",
+  });
+
+  let rule = null;
+  let ruleError = "";
+  if (input.includeFuture) {
+    const saved = await saveEnrollmentRule(db, claims, item, {
+      ...input,
+      appliedCount: processed.summary.created + processed.summary.reactivated,
+    });
+    rule = saved.rule;
+    ruleError = saved.error;
+  }
+
+  processed.summary.ruleSaved = Boolean(rule);
+  await logActivity(db, claims, "enrollment.bulk", "course_catalog", item.id,
+    `Bulk enrollment in ${item.title}: ${processed.summary.created} new, ${processed.summary.reactivated} reactivated, ${processed.summary.alreadyActive} already active, ${processed.summary.failed} failed, ${processed.summary.skipped} skipped${rule ? " · future auto-enrollment on" : ""}`);
+
+  return json({
+    summary: processed.summary,
+    scope: plan.scope,
+    skipped: plan.skipped.slice(0, 100),
+    failures: processed.failures,
+    rule,
+    ruleError: ruleError || null,
+  });
+}
+
+async function adminBulkRevoke(db, claims, body) {
+  const itemType = String(body.itemType || "");
+  const itemId = String(body.itemId || "");
+  if (!["batch", "series"].includes(itemType) || !isUuid(itemId)) return json({ error: "Choose a valid batch or series." }, 400);
+  if (body.confirm !== "REVOKE") return json({ error: "Type REVOKE to confirm a bulk access removal." }, 400);
+  const uids = normalizeStudentUids(body.studentUids);
+  if (!uids.length) return json({ error: "Choose at least one enrollment." }, 400);
+  if (uids.length > MAX_BULK_STUDENTS) return json({ error: `Revoke ${MAX_BULK_STUDENTS} students or fewer at a time.` }, 400);
+  const now = new Date().toISOString();
+  let revoked = 0;
+  let failed = 0;
+  const events = [];
+  for (const chunk of chunkList(uids, 100)) {
+    const { data, error } = await db.from("enrollments")
+      .update({ active: false, status: "revoked", revoked_at: now, updated_at: now })
+      .eq("item_type", itemType).eq("item_id", itemId).in("firebase_uid", chunk).eq("active", true)
+      .select("id,firebase_uid");
+    if (error) {
+      failed += chunk.length;
+      continue;
+    }
+    revoked += (data || []).length;
+    for (const row of data || []) {
+      events.push({
+        enrollment_id: row.id,
+        firebase_uid: row.firebase_uid,
+        item_type: itemType,
+        item_id: itemId,
+        action: "revoked",
+        source: "admin_bulk",
+        actor_uid: claims.sub,
+        actor_email: claims.email || "",
+        detail: { bulk: true },
+      });
+    }
+  }
+  await recordEnrollmentEvents(db, events);
+  await logActivity(db, claims, "enrollment.bulk_revoke", "course_catalog", itemId,
+    `Bulk revoked ${revoked} enrollment(s)${failed ? ` · ${failed} failed` : ""}`);
+  return json({ revoked, failed });
+}
+
+async function adminRevokeEnrollment(db, claims, id) {
+  const { data: row, error: lookupError } = await db.from("enrollments")
+    .select("id,firebase_uid,item_type,item_id,active,status")
+    .eq("id", id).maybeSingle();
+  if (lookupError) throw lookupError;
+  if (!row) return json({ error: "Enrollment not found." }, 404);
+  if (!row.active && row.status === "revoked") return json({ removed: true, alreadyRevoked: true });
+  const now = new Date().toISOString();
+  const { data, error } = await db.from("enrollments").update({
+    active: false, status: "revoked", revoked_at: now, updated_at: now,
+  }).eq("id", row.id).select("*").single();
+  if (error) throw error;
+  await recordEnrollmentEvents(db, [{
+    enrollment_id: row.id,
+    firebase_uid: row.firebase_uid,
+    item_type: row.item_type,
+    item_id: row.item_id,
+    action: "revoked",
+    source: "manual",
+    actor_uid: claims.sub,
+    actor_email: claims.email || "",
+    detail: {},
+  }]);
+  await logActivity(db, claims, "enrollment.remove", "enrollments", row.id,
+    `Revoked ${row.firebase_uid} → ${row.item_type}:${row.item_id}`);
+  return json({ removed: true, item: data });
+}
+
+async function adminRestoreEnrollment(db, claims, id, body) {
+  const { data: row, error: lookupError } = await db.from("enrollments")
+    .select("id,firebase_uid,item_type,item_id,active,status")
+    .eq("id", id).maybeSingle();
+  if (lookupError) throw lookupError;
+  if (!row) return json({ error: "Enrollment not found." }, 404);
+  const [student, item] = await Promise.all([
+    getEnrollmentStudent(db, row.firebase_uid),
+    getEnrollmentItem(db, row.item_id),
+  ]);
+  if (!student || !item) return json({ error: "The student or course no longer exists." }, 409);
+  if (!isEligibleForItem(item, student) && body.force !== true) {
+    return json({ error: "This student no longer matches the course exam/class. Confirm the override to restore access.", code: "INELIGIBLE" }, 409);
+  }
+  const expiry = parseExpiry(body.expiresAt);
+  if (expiry.error) return json({ error: expiry.error }, 400);
+  const now = new Date().toISOString();
+  const { data, error } = await db.from("enrollments").update({
+    active: true, status: "active", revoked_at: null,
+    expires_at: expiry.value, updated_at: now,
+    granted_by: claims.email || claims.sub,
+  }).eq("id", row.id).select("*").single();
+  if (error) throw error;
+  await recordEnrollmentEvents(db, [{
+    enrollment_id: row.id,
+    firebase_uid: row.firebase_uid,
+    item_type: row.item_type,
+    item_id: row.item_id,
+    action: "reactivated",
+    source: "manual",
+    actor_uid: claims.sub,
+    actor_email: claims.email || "",
+    detail: { title: item.title, eligibilityOverride: !isEligibleForItem(item, student) },
+  }]);
+  await logActivity(db, claims, "enrollment.restore", "enrollments", row.id,
+    `Restored ${row.firebase_uid} → ${item.title}`);
+  return json({ item: data });
+}
+
+async function adminEnrollmentHistory(db, limit) {
+  const { data: events, error } = await db.from("enrollment_events")
+    .select("*").order("created_at", { ascending: false }).limit(limit);
+  if (error) {
+    if (isMissingRelation(error)) return json({ items: [], unavailable: true });
+    throw error;
+  }
+  const rows = events || [];
+  const uids = Array.from(new Set(rows.map((row) => row.firebase_uid).filter(Boolean)));
+  const itemIds = Array.from(new Set(rows.map((row) => row.item_id).filter(Boolean)));
+  const names = {};
+  const titles = {};
+  for (const chunk of chunkList(uids, 100)) {
+    const { data, error: profileError } = await db.from("student_profiles")
+      .select("firebase_uid,display_name,email").in("firebase_uid", chunk);
+    if (profileError) throw profileError;
+    for (const profile of data || []) names[profile.firebase_uid] = profile;
+  }
+  if (itemIds.length) {
+    const { data, error: itemError } = await db.from("course_catalog")
+      .select("id,title").in("id", itemIds);
+    if (itemError) throw itemError;
+    for (const item of data || []) titles[item.id] = item.title;
+  }
+  return json({
+    items: rows.map((row) => ({
+      ...row,
+      student_name: names[row.firebase_uid]?.display_name || null,
+      student_email: names[row.firebase_uid]?.email || null,
+      item_title: titles[row.item_id] || null,
+    })),
+  });
+}
+
+async function adminListEnrollmentRules(db) {
+  const { data: rules, error } = await db.from("enrollment_rules")
+    .select("*").order("created_at", { ascending: false }).limit(500);
+  if (error) {
+    if (isMissingRelation(error)) return json({ items: [], unavailable: true });
+    throw error;
+  }
+  const rows = rules || [];
+  const itemIds = Array.from(new Set(rows.map((row) => row.item_id).filter(Boolean)));
+  const titles = {};
+  if (itemIds.length) {
+    const { data, error: itemError } = await db.from("course_catalog").select("id,title,active").in("id", itemIds);
+    if (itemError) throw itemError;
+    for (const item of data || []) titles[item.id] = item;
+  }
+  return json({
+    items: rows.map((row) => ({
+      ...row,
+      item_title: titles[row.item_id]?.title || null,
+      item_active: titles[row.item_id]?.active ?? null,
+    })),
+  });
 }

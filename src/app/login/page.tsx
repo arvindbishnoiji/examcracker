@@ -11,6 +11,7 @@ import {
   onRedirectAuthError,
 } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
+import { postAuthDestination } from '@/lib/auth-gate';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { APP_CONFIG } from '@/lib/config';
 import { LoginShell } from '@/components/login/LoginShell';
@@ -19,7 +20,7 @@ import { Button } from '@/components/ui/Button';
 import { useToast } from '@/hooks/useToast';
 
 export default function LoginPage() {
-  const { user, profile, initializing } = useAuth();
+  const { user, profile, initializing, bootstrapStatus, bootstrapError, isAdmin, refresh } = useAuth();
   const { config } = useSiteConfig();
   const router = useRouter();
   const { push } = useToast();
@@ -45,9 +46,12 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (initializing) return;
-    if (user && profile) router.replace('/home');
-    else if (user && !profile) router.replace('/onboarding');
-  }, [user, profile, initializing, router]);
+    if (!user) return;
+    // Wait for the profile request before choosing a destination. A failed
+    // request is not evidence that onboarding is incomplete.
+    if (bootstrapStatus !== 'ready') return;
+    router.replace(postAuthDestination({ hasProfile: Boolean(profile), isAdmin }));
+  }, [user, profile, initializing, bootstrapStatus, isAdmin, router]);
 
   useEffect(() => {
     return onRedirectAuthError((message) => setError(message));
@@ -116,6 +120,15 @@ export default function LoginPage() {
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800" role="alert">
           {error}
+        </div>
+      )}
+      {user && bootstrapStatus === 'error' && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900" role="alert">
+          <p className="font-semibold">Signed in, but your profile could not load.</p>
+          <p className="mt-0.5">{bootstrapError}</p>
+          <button type="button" onClick={() => void refresh()} className="mt-2 font-semibold underline">
+            Retry profile
+          </button>
         </div>
       )}
       {resetSent && (

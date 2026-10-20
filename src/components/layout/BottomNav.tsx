@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { isActivePath, isRouteEnabled } from '@/lib/navigation';
+import { NavIcon } from '@/components/ui/AppIcon';
+import { Settings2 } from 'lucide-react';
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -41,7 +43,7 @@ export function BottomNav() {
                 active ? 'text-brand-600 bg-brand-50' : 'text-ink-500'
               }`}
             >
-              <span className="text-[17px] leading-none">{item.icon}</span>
+              <NavIcon href={item.href} fallback={item.icon} size={19} strokeWidth={active ? 2.4 : 1.9} />
               <span className="text-[10.5px] font-medium truncate max-w-[64px]">{item.label}</span>
             </Link>
           );
@@ -53,7 +55,7 @@ export function BottomNav() {
               pathname?.startsWith('/admin') ? 'text-brand-600 bg-brand-50' : 'text-ink-500'
             }`}
           >
-            <span className="text-[17px] leading-none">⚙️</span>
+            <Settings2 size={19} strokeWidth={pathname?.startsWith('/admin') ? 2.4 : 1.9} />
             <span className="text-[10.5px] font-medium">Admin</span>
           </Link>
         )}

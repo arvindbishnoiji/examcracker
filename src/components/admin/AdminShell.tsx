@@ -15,6 +15,7 @@ import {
   type AdminSectionMeta,
 } from '@/lib/admin-sections';
 import { readAdminPreferences, writeAdminPreferences } from '@/lib/admin-prefs';
+import { AdminSectionIcon } from '@/components/ui/AppIcon';
 
 const QUICK_ACTIONS: Array<{ label: string; href: string; hint: string; icon: string }> = [
   { label: 'Create a banner', href: '/admin/banners', hint: 'Design studio', icon: '▰' },
@@ -329,7 +330,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       className="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl hover:bg-ink-50 text-left"
                     >
                       <span className="h-7 w-7 rounded-lg bg-brand-50 text-brand-700 grid place-items-center text-xs">
-                        {action.icon}
+                        <AdminSectionIcon slug={action.href.split('/').pop() || ''} size={14} />
                       </span>
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm font-medium truncate">{action.label}</span>
@@ -351,7 +352,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       className="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl hover:bg-ink-50 text-left"
                     >
                       <span className="h-7 w-7 rounded-lg bg-ink-100 text-ink-700 grid place-items-center text-xs">
-                        {section.icon}
+                        <AdminSectionIcon slug={section.slug} size={14} />
                       </span>
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm font-medium truncate">{section.label}</span>
@@ -481,7 +482,9 @@ function SidebarContent({
                     onClick={onNavigate}
                     className={`ec-admin-link ${collapsed ? 'justify-center px-0' : ''}`}
                   >
-                    <span className="text-sm leading-none w-4 text-center shrink-0">{section.icon}</span>
+                    <span className="w-4 text-center shrink-0 grid place-items-center">
+                      <AdminSectionIcon slug={section.slug} size={15} />
+                    </span>
                     {!collapsed && <span className="truncate">{section.label}</span>}
                   </Link>
                 );

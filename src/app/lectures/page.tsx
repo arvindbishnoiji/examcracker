@@ -1,173 +1,427 @@
 'use client';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import YoutubeThumbnail from '@/components/YoutubeThumbnail';
-import { Suspense, useEffect, useMemo, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import {
+  BookOpen,
+  CheckCircle2,
+  FileText,
+  GraduationCap,
+  Layers,
+  ListVideo,
+  Lock,
+  PlayCircle,
+  RefreshCw,
+  Search,
+  Sparkles,
+} from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { getCatalogContent, enrollInBatchOrSeries, ApiError } from '@/lib/api';
-import { Card, CardBody, Badge, EmptyState, Skeleton } from '@/components/ui/Card';
+import { Badge, EmptyState, Skeleton } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useToast } from '@/hooks/useToast';
 import type { CourseCatalogItem } from '@/types';
 import { isSafeHttpUrl } from '@/lib/validation';
+import { activeEnrollmentKeys, coursePriceLabel, isPaidCourse } from '@/lib/enrollment';
 
-type Tab = 'batches'|'series'|'lectures'|'resources';
+type Tab = 'batches' | 'series' | 'lectures' | 'resources';
 
-function LecturesHubPageInner(){
+const TAB_META: Record<Tab, { label: string; icon: React.ReactNode; empty: string }> = {
+  batches: {
+    label: 'Batches',
+    icon: <Layers size={14} />,
+    empty: 'No batches match your exam and class yet. New programmes appear here when published.',
+  },
+  series: {
+    label: 'Series',
+    icon: <ListVideo size={14} />,
+    empty: 'No series match your exam and class yet. Check back after your mentor publishes one.',
+  },
+  lectures: {
+    label: 'Lectures',
+    icon: <PlayCircle size={14} />,
+    empty: 'No lectures available for your selection yet.',
+  },
+  resources: {
+    label: 'Resources',
+    icon: <FileText size={14} />,
+    empty: 'No notes or PDFs available for your selection yet.',
+  },
+};
+
+function thumbOf(item: CourseCatalogItem, tab: Tab): string {
+  const meta = (item.metadata || {}) as Record<string, unknown>;
+  const raw = String(meta.thumbnailUrl || meta.thumbnail_url || '');
+  if (isSafeHttpUrl(raw)) return raw;
+  if (tab === 'lectures' && meta.videoId) return `https://img.youtube.com/vi/${String(meta.videoId)}/hqdefault.jpg`;
+  return '';
+}
+
+function LecturesHubPageInner() {
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
-  const { profile, user } = useAuth();
+  const { profile, bootstrap, isAdmin } = useAuth();
   const { push } = useToast();
   const [tab, setTab] = useState<Tab>('batches');
   const [items, setItems] = useState<CourseCatalogItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string|null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState(initialQuery);
-  const [sort, setSort] = useState<'newest'|'title'>('newest');
-  const [enrollCodes, setEnrollCodes] = useState<Record<string,string>>({});
-  const [enrolling, setEnrolling] = useState<string|null>(null);
-  const [myEnrollments, setMyEnrollments] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<'newest' | 'title'>('newest');
+  const [enrollCodes, setEnrollCodes] = useState<Record<string, string>>({});
+  const [enrolling, setEnrolling] = useState<string | null>(null);
+  const [justEnrolled, setJustEnrolled] = useState<Set<string>>(new Set());
+  const [onlyMine, setOnlyMine] = useState(false);
 
-  const load = useCallback(async ()=>{
-    if(!profile) return;
-    setLoading(true); setError(null);
-    try{
-      const kind = tab==='batches' ? 'batch' : tab==='series' ? 'series' : tab;
-      const data = await getCatalogContent({ kind: kind as any });
+  const load = useCallback(async () => {
+    if (!profile) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const kind = tab === 'batches' ? 'batch' : tab === 'series' ? 'series' : tab;
+      const data = await getCatalogContent({ kind: kind as 'batch' | 'series' | 'lecture' | 'resource' });
       setItems(data);
-    }catch(e){
-      setError(e instanceof Error ? e.message : 'Failed to load');
-    } finally{ setLoading(false); }
-  },[profile, tab]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load this section.');
+    } finally {
+      setLoading(false);
+    }
+  }, [profile, tab]);
 
-  useEffect(()=>{ load(); },[load]);
-  useEffect(()=>{ setFilter(initialQuery); },[initialQuery]);
-  useEffect(()=>{
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    setFilter(initialQuery);
+  }, [initialQuery]);
+
+  useEffect(() => {
     const kindParam = searchParams.get('kind');
-    if(kindParam === 'batch') setTab('batches');
-    else if(kindParam === 'series') setTab('series');
-    else if(kindParam === 'resources') setTab('resources');
-    else if(kindParam === 'lectures') setTab('lectures');
-  },[searchParams]);
+    if (kindParam === 'batch') setTab('batches');
+    else if (kindParam === 'series') setTab('series');
+    else if (kindParam === 'resources') setTab('resources');
+    else if (kindParam === 'lectures') setTab('lectures');
+  }, [searchParams]);
 
-  async function handleEnroll(item: CourseCatalogItem){
-    const code = enrollCodes[item.id] || '';
-    setEnrolling(item.id);
-    try{
-      await enrollInBatchOrSeries({ itemType: item.kind as 'batch'|'series', itemId: item.id, accessCode: code || undefined });
-      setMyEnrollments(s=> new Set([...Array.from(s), item.id]));
-      push('Enrolled successfully','success');
-    }catch(e){
-      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Enrollment failed';
-      push(msg,'error');
-    } finally{ setEnrolling(null); }
+  const activeKeys = useMemo(
+    () => activeEnrollmentKeys(bootstrap?.enrollments),
+    [bootstrap?.enrollments]
+  );
+
+  function isEnrolled(item: CourseCatalogItem): boolean {
+    return (justEnrolled.has(item.id) || activeKeys.has(`${item.kind}:${item.id}`)) && ['batch', 'series'].includes(item.kind);
   }
 
-  const filtered = useMemo(()=>{
+  async function handleEnroll(item: CourseCatalogItem) {
+    const code = enrollCodes[item.id] || '';
+    setEnrolling(item.id);
+    try {
+      await enrollInBatchOrSeries({ itemType: item.kind as 'batch' | 'series', itemId: item.id, accessCode: code || undefined });
+      setJustEnrolled((previous) => new Set([...Array.from(previous), item.id]));
+      push(`You now have access to ${item.title}.`, 'success');
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Enrollment failed.';
+      push(msg, 'error');
+    } finally {
+      setEnrolling(null);
+    }
+  }
+
+  const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    const list = items.filter(i=> !q || `${i.title} ${i.description} ${(i.metadata as Record<string,unknown>)?.subject || ''} ${(i.metadata as Record<string,unknown>)?.topic || ''}`.toLowerCase().includes(q));
-    return sort === 'title' ? [...list].sort((a,b)=> a.title.localeCompare(b.title)) : [...list].sort((a,b)=> b.updated_at.localeCompare(a.updated_at));
-  }, [items, filter, sort]);
+    const list = items.filter((item) => {
+      if (onlyMine && !isEnrolled(item)) return false;
+      if (!q) return true;
+      const meta = (item.metadata || {}) as Record<string, unknown>;
+      return `${item.title} ${item.description} ${meta.subject || ''} ${meta.topic || ''}`.toLowerCase().includes(q);
+    });
+    return sort === 'title'
+      ? [...list].sort((a, b) => a.title.localeCompare(b.title))
+      : [...list].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, filter, sort, onlyMine, activeKeys, justEnrolled]);
+
+  const canFilterMine = tab === 'batches' || tab === 'series';
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto max-w-6xl space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Lectures & Batches</h1>
-          <p className="text-sm text-ink-500">Browse All Batches, My Batches, Series and Lessons. Content filtered for {profile?.exam} • Class {profile?.class_level}</p>
+          <p className="ec-eyebrow flex items-center gap-1.5">
+            <BookOpen size={12} /> Learning library
+          </p>
+          <h1 className="mt-1 text-2xl font-extrabold tracking-tight sm:text-3xl">Lectures &amp; batches</h1>
+          <p className="mt-1 text-sm text-ink-500">
+            Curated for {profile?.exam || 'your exam'} · Class {profile?.class_level || '—'}. Access is verified on every
+            lesson.
+          </p>
         </div>
-        <Link href="/lectures" className="px-3 py-2 bg-white border border-ink-200 rounded-xl text-sm">Refresh</Link>
+        <div className="flex items-center gap-2">
+          <span className="ec-chip"><GraduationCap size={12} /> {activeKeys.size} unlocked</span>
+          <Button size="sm" variant="outline" onClick={() => void load()} aria-label="Refresh content">
+            <RefreshCw size={14} className="mr-1.5" /> Refresh
+          </Button>
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-2" role="tablist">
-        {(['batches','series','lectures','resources'] as Tab[]).map(t=>(
-          <button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 rounded-full text-sm font-semibold border ${tab===t ? 'bg-ink-900 text-white border-ink-900' : 'bg-white text-ink-700 border-ink-200'}`}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Learning content types">
+          {(Object.keys(TAB_META) as Tab[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => {
+                setTab(key);
+                setOnlyMine(false);
+              }}
+              className={`ec-btn inline-flex items-center gap-1.5 border px-3.5 py-2 text-xs font-bold transition ${
+                tab === key
+                  ? 'border-ink-900 bg-ink-900 text-white'
+                  : 'border-[rgb(var(--ec-ink-200))] bg-[var(--ec-surface)] text-ink-700 hover:bg-ink-50'
+              }`}
+            >
+              {TAB_META[key].icon} {TAB_META[key].label}
+            </button>
+          ))}
+        </div>
+        {canFilterMine && (
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[rgb(var(--ec-ink-200))] bg-[var(--ec-surface)] px-3 py-1.5 text-[11px] font-semibold text-ink-700">
+            <input type="checkbox" checked={onlyMine} onChange={(event) => setOnlyMine(event.target.checked)} />
+            My courses only
+          </label>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex-1 min-w-[220px]">
-          <Input placeholder={`Search ${tab}...`} value={filter} onChange={e=>setFilter(e.target.value)} />
+        <div className="min-w-[220px] flex-1">
+          <div className="relative">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+            <Input
+              aria-label={`Search ${tab}`}
+              placeholder={`Search ${TAB_META[tab].label.toLowerCase()}…`}
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              className="!pl-9"
+            />
+          </div>
         </div>
-        <select className="ec-field !py-2 !text-xs !w-auto" value={sort} onChange={(e)=>setSort(e.target.value as 'newest'|'title')}>
+        <select
+          className="ec-field !w-auto !py-2 !text-xs"
+          value={sort}
+          onChange={(event) => setSort(event.target.value as 'newest' | 'title')}
+          aria-label="Sort content"
+        >
           <option value="newest">Newest first</option>
           <option value="title">A–Z</option>
         </select>
-        <span className="text-[11px] text-ink-500">{filtered.length} result{filtered.length===1?'':'s'}</span>
+        <span className="text-[11px] text-ink-500">
+          {filtered.length} result{filtered.length === 1 ? '' : 's'}
+        </span>
       </div>
 
-      {loading && <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{[1,2,3,4,5,6].map(i=> <Skeleton key={i} className="h-48" />)}</div>}
-      {error && <div className="p-3 bg-red-50 border border-red-200 text-sm text-red-700 rounded-xl">{error} <Button size="sm" variant="outline" className="ml-2" onClick={load}>Retry</Button></div>}
-      {!loading && !error && filtered.length===0 && (
-        <EmptyState title={`No ${tab} yet`} description={`No ${tab} match your exam/class. Admin can add ${tab} from Dashboard → Lectures.`} />
+      {loading && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3, 4, 5, 6].map((index) => (
+            <Skeleton key={index} className="h-56" />
+          ))}
+        </div>
+      )}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+          <Button size="sm" variant="outline" className="ml-2" onClick={() => void load()}>
+            Retry
+          </Button>
+        </div>
+      )}
+      {!loading && !error && filtered.length === 0 && (
+        <EmptyState
+          icon={onlyMine ? <Lock size={18} /> : <Sparkles size={18} />}
+          title={onlyMine ? 'No unlocked courses here yet' : `${TAB_META[tab].label} coming soon`}
+          description={onlyMine ? 'Enroll in a batch or enter an access code from your mentor to unlock it.' : TAB_META[tab].empty}
+          action={
+            isAdmin ? (
+              <Link href="/admin/batches" className="ec-btn inline-flex bg-ink-900 px-4 py-2 text-sm font-semibold text-white">
+                Manage content
+              </Link>
+            ) : undefined
+          }
+        />
       )}
 
-      {!loading && !error && filtered.length>0 && (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(item=>{
+      {!loading && !error && filtered.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((item) => {
             const meta = item.metadata as Record<string, unknown>;
-            const thumb = (meta.thumbnailUrl as string) || (meta.thumbnail_url as string) || (tab==='lectures' ? `https://img.youtube.com/vi/${meta.videoId as string}/hqdefault.jpg` : '');
+            const thumb = thumbOf(item, tab);
             const needsCode = Boolean(item.hasAccessCode);
+            const enrolled = isEnrolled(item);
+            const paid = isPaidCourse(item);
             const codeValue = enrollCodes[item.id] || '';
+            const lessonParent = String(meta.parentId || meta.parent_id || meta.batchId || '');
+            const preview = meta.isPreview === true;
             return (
-              <Card key={item.id} className="overflow-hidden flex flex-col">
-                {thumb && isSafeHttpUrl(thumb) ? <YoutubeThumbnail src={thumb} videoId={String(meta.videoId || '')} alt={item.title} className="w-full h-40 object-cover bg-ink-100" loading="lazy" /> : <div className="w-full h-40 bg-gradient-to-br from-brand-50 to-ink-100 grid place-items-center text-ink-400 text-sm">No thumbnail</div>}
-                <CardBody className="flex-1 flex flex-col gap-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-sm leading-tight line-clamp-2">{item.title}</h3>
-                    <Badge variant={item.active ? 'success':'danger'}>{item.active?'Active':'Disabled'}</Badge>
+              <article
+                key={item.id}
+                className="ec-card ec-card-interactive flex flex-col overflow-hidden"
+              >
+                <div className="relative">
+                  {thumb && isSafeHttpUrl(thumb) ? (
+                    <YoutubeThumbnail
+                      src={thumb}
+                      videoId={String(meta.videoId || '')}
+                      alt={item.title}
+                      className="h-40 w-full bg-ink-100 object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="grid h-40 w-full place-items-center bg-gradient-to-br from-brand-50 via-[var(--ec-surface-2)] to-ink-100 text-brand-700">
+                      {tab === 'batches' ? <Layers size={30} /> : tab === 'series' ? <ListVideo size={30} /> : tab === 'resources' ? <FileText size={30} /> : <PlayCircle size={30} />}
+                    </div>
+                  )}
+                  <div className="absolute left-2.5 top-2.5 flex flex-wrap gap-1.5">
+                    <span className="rounded-full bg-black/60 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white backdrop-blur">
+                      {item.kind}
+                    </span>
+                    {enrolled && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] font-bold text-white">
+                        <CheckCircle2 size={10} /> Enrolled
+                      </span>
+                    )}
+                    {preview && (
+                      <span className="rounded-full bg-white/90 px-2 py-0.5 text-[9px] font-bold text-brand-700">Preview</span>
+                    )}
                   </div>
-                  <p className="text-xs text-ink-500 line-clamp-2">{item.description || '—'}</p>
+                </div>
+                <div className="flex flex-1 flex-col gap-2 p-4">                  <div className="flex items-start justify-between gap-2">
+                    <h2 className="text-sm font-bold leading-snug line-clamp-2">{item.title}</h2>
+                    <Badge variant={paid ? 'warning' : 'success'}>{coursePriceLabel(item)}</Badge>
+                  </div>
+                  <p className="text-xs text-ink-500 line-clamp-2">{item.description || 'No description added yet.'}</p>
                   <div className="flex flex-wrap gap-1">
-                    <Badge>{item.exam}</Badge><Badge>Class {item.classes.join('/')}</Badge>
-                    {needsCode && <Badge variant="warning">Access code required</Badge>}
-                    {(meta.isPreview as boolean) && <Badge variant="success">Preview</Badge>}
+                    <Badge>{item.exam}</Badge>
+                    <Badge>Class {item.classes.join('/')}</Badge>
+                    {needsCode && <Badge variant="info"><Lock size={9} className="mr-0.5" /> Access code</Badge>}
+                    {Boolean(meta.subject) && <Badge variant="default">{String(meta.subject)}</Badge>}
                   </div>
-                  {(tab==='batches' || tab==='series') && (
-                    <div className="mt-2 space-y-2">
-                      {needsCode && (
-                        <Input placeholder="Enter access code" value={codeValue} onChange={e=> setEnrollCodes(s=> ({...s, [item.id]: e.target.value}))} />
+
+                  {(tab === 'batches' || tab === 'series') && (
+                    <div className="mt-auto space-y-2 pt-2">
+                      {needsCode && !enrolled && (
+                        <Input
+                          aria-label={`Access code for ${item.title}`}
+                          placeholder="Enter access code"
+                          value={codeValue}
+                          onChange={(event) => setEnrollCodes((previous) => ({ ...previous, [item.id]: event.target.value }))}
+                        />
                       )}
-                      <div className="flex gap-2">
-                        <Button size="sm" loading={enrolling===item.id} onClick={()=>handleEnroll(item)} className="flex-1">{myEnrollments.has(item.id) ? 'Enrolled ✓' : needsCode ? 'Enroll with code' : 'Enroll'}</Button>
-                        <Link href={`/lectures/${item.id}`} className="px-3 py-2 bg-white border border-ink-200 rounded-xl text-sm font-semibold text-center flex-1">View</Link>
-                      </div>
-                      <p className="text-[11px] text-ink-400">Access code is validated server-side; wrong code never creates enrollment.</p>
+                      {enrolled ? (
+                        <Link
+                          href={`/lectures/${item.id}`}
+                          className="ec-btn flex w-full items-center justify-center gap-1.5 bg-emerald-600 px-3 py-2 text-xs font-bold text-white"
+                        >
+                          <PlayCircle size={14} /> Open course
+                        </Link>
+                      ) : paid && !needsCode ? (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-900">
+                          Paid course — ask your mentor to enroll you. You cannot self-grant paid access.
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          loading={enrolling === item.id}
+                          onClick={() => void handleEnroll(item)}
+                          className="w-full"
+                        >
+                          {needsCode ? 'Unlock with code' : 'Enroll free'}
+                        </Button>
+                      )}
+                      <Link
+                        href={`/lectures/${item.id}`}
+                        className="block text-center text-[11px] font-semibold text-ink-500 hover:text-brand-700"
+                      >
+                        View course details
+                      </Link>
                     </div>
                   )}
-                  {tab==='lectures' && (
-                    <div className="flex gap-2 mt-2">
-                      <Link href={`/lectures/${item.id}`} className="flex-1 px-3 py-2 bg-brand-600 text-white rounded-xl text-sm font-semibold text-center">Watch</Link>
-                      {(meta.notesPdfUrl as unknown as string) && isSafeHttpUrl(meta.notesPdfUrl as unknown as string) && <a href={meta.notesPdfUrl as unknown as string} target="_blank" rel="noopener noreferrer" className="px-3 py-2 bg-white border border-ink-200 rounded-xl text-sm font-semibold">PDF</a>}
+
+                  {tab === 'lectures' && (
+                    <div className="mt-auto flex gap-2 pt-2">
+                      <Link
+                        href={`/lectures/${item.id}`}
+                        className="ec-btn flex flex-1 items-center justify-center gap-1.5 bg-brand-600 px-3 py-2 text-xs font-bold text-white"
+                      >
+                        <PlayCircle size={14} /> Watch
+                      </Link>
+                      {Boolean(meta.notesPdfUrl) && isSafeHttpUrl(String(meta.notesPdfUrl)) && (
+                        <a
+                          href={String(meta.notesPdfUrl)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ec-btn inline-flex items-center gap-1 border border-ink-200 px-3 py-2 text-xs font-semibold"
+                        >
+                          <FileText size={13} /> Notes
+                        </a>
+                      )}
                     </div>
                   )}
-                  {tab==='resources' && (
-                    <div className="flex gap-2 mt-2">
-                      {(meta.pdfUrl as unknown as string) && isSafeHttpUrl(meta.pdfUrl as unknown as string) ? (
-                        <a href={meta.pdfUrl as unknown as string} target="_blank" rel="noopener noreferrer" className="flex-1 px-3 py-2 bg-ink-900 text-white rounded-xl text-sm font-semibold text-center">Open PDF</a>
-                      ): <span className="text-xs text-ink-400">No PDF URL</span>}
+
+                  {tab === 'resources' && (
+                    <div className="mt-auto pt-2">
+                      {Boolean(meta.pdfUrl) && isSafeHttpUrl(String(meta.pdfUrl)) ? (
+                        <a
+                          href={String(meta.pdfUrl)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ec-btn flex w-full items-center justify-center gap-1.5 bg-ink-900 px-3 py-2 text-xs font-bold text-white"
+                        >
+                          <FileText size={14} /> Open resource
+                        </a>
+                      ) : (
+                        <span className="text-xs text-ink-400">No file linked yet.</span>
+                      )}
                     </div>
                   )}
-                  <p className="text-[11px] text-ink-400 mt-1">ID {item.id.slice(0,8)} • {new Date(item.updated_at).toLocaleDateString('en-IN')}</p>
-                </CardBody>
-              </Card>
+
+                  {lessonParent && tab === 'lectures' && !preview && (
+                    <p className="text-[10px] text-ink-400">Parent course access is checked server-side.</p>
+                  )}
+                </div>
+              </article>
             );
           })}
         </div>
       )}
 
-      <Card className="p-4 bg-amber-50 border-amber-200">
-        <p className="text-sm font-semibold text-amber-900">Enrolment & access</p>
-        <p className="text-xs text-amber-800 mt-1">Lessons/resources with parentId pointing to a batch/series are restricted to active enrollees, except explicitly marked preview. Server enforces enrolment; UI never fakes security.</p>
-      </Card>
+      <div className="rounded-[var(--ec-radius)] border border-ink-100 bg-[var(--ec-surface)] p-4">
+        <p className="flex items-center gap-1.5 text-sm font-bold">
+          <Lock size={14} className="text-brand-600" /> How access works
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-ink-500">
+          Free courses can be joined directly. Paid courses and restricted batches need a mentor grant or a valid access
+          code. Lessons belonging to a batch or series stay locked until the server confirms an active enrollment, even
+          if you open a direct URL.
+        </p>
+      </div>
     </div>
   );
 }
 
-export default function LecturesHubPage(){
+export default function LecturesHubPage() {
   return (
-    <Suspense fallback={<div className="max-w-6xl mx-auto space-y-4"><div className="ec-skeleton h-10 w-64" /><div className="ec-skeleton h-48 w-full" /></div>}>
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-6xl space-y-4">
+          <div className="ec-skeleton h-10 w-64" />
+          <div className="ec-skeleton h-48 w-full" />
+        </div>
+      }
+    >
       <LecturesHubPageInner />
     </Suspense>
   );

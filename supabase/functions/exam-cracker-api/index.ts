@@ -1,7 +1,13 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  enrollmentIsActive,
+  isEligibleForItem,
+  isPaidItem,
+} from "../_shared/enrollment-core.ts";
 
 const FIREBASE_PROJECT_ID = "darvo1";
-const ADMIN_EMAIL = "arvinddarabishnoi@gmail.com";
+const ADMIN_EMAIL = (Deno.env.get("ADMIN_EMAIL") || "arvinddarabishnoi@gmail.com").toLowerCase();
+const MAX_BODY_BYTES = 512 * 1024;
 const ALLOWED_EXAMS = new Set(["JEE", "NEET", "Both"]);
 const ALLOWED_KINDS = new Set(["batch", "series", "lecture", "resource", "event", "goal", "test"]);
 const SITE_SETTING_KEYS = ["theme", "login", "homepage", "navigation", "footer", "banners", "popups", "testimonials", "challenges", "features", "seo", "media"];
@@ -13,11 +19,70 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
   "Access-Control-Max-Age": "86400"
 };
+/**
+ * Browser-origin allowlist. Requests without an Origin header (curl, server
+ * jobs, native apps) are allowed; unknown browser origins are refused before
+ * any data is read. Keep the production worker and local dev origins here and
+ * add custom domains through the ALLOWED_ORIGINS secret.
+ */
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://exam-cracker-web.arvinddara0290.workers.dev",
+  "http://localhost:3000",
+  "http://localhost:8787",
+  "http://127.0.0.1:3000",
+];
+function allowedOrigins() {
+  const extra = (Deno.env.get("ALLOWED_ORIGINS") || "")
+    .split(",")
+    .map((value) => value.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+  return new Set([...DEFAULT_ALLOWED_ORIGINS, ...extra]);
+}
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (allowedOrigins().has(origin)) return true;
+  try {
+    const host = new URL(origin).hostname;
+    // Sandbox/preview hosts used while reviewing the app.
+    if (host === "localhost" || host === "127.0.0.1") return true;
+    if (host.endsWith(".e2b.app")) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+/**
+ * Best-effort per-isolate rate limiting (Supabase runs many isolates, so this
+ * stops accidental loops and casual abuse rather than guaranteeing a global
+ * quota). Wider protection belongs at the CDN/WAF layer.
+ */
+const rateBuckets = new Map();
+function rateLimited(key, limit, windowMs) {
+  const now = Date.now();
+  const bucket = rateBuckets.get(key);
+  if (!bucket || now - bucket.start > windowMs) {
+    rateBuckets.set(key, { start: now, count: 1 });
+    if (rateBuckets.size > 5000) rateBuckets.clear();
+    return false;
+  }
+  bucket.count += 1;
+  return bucket.count > limit;
+}
+const RATE_LIMITED_BODY = { error: "Too many requests. Please wait a moment and try again." };
+
 let cachedJwks = null;
 let cachedJwksExpiresAt = 0;
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
+  const origin = req.headers.get("origin");
+  if (!isAllowedOrigin(origin)) {
+    return new Response(JSON.stringify({ error: "Origin not allowed." }), {
+      status: 403,
+      headers: Object.assign({}, CORS_HEADERS, { "Content-Type": "application/json; charset=utf-8", Vary: "Origin" }),
+    });
+  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: Object.assign({}, CORS_HEADERS, { Vary: "Origin" }) });
   const url = new URL(req.url);
   if (url.pathname.endsWith("/health") || url.pathname === "/health") {
     return json({ ok: true, service: "Exam Cracker API", firebaseProjectId: FIREBASE_PROJECT_ID }, 200);
@@ -53,11 +118,18 @@ Deno.serve(async (req) => {
       const avatarUrl = body.avatarUrl !== undefined ? (body.avatarUrl ? String(body.avatarUrl).trim() : null) : (body.avatar_url !== undefined ? (body.avatar_url ? String(body.avatar_url).trim() : null) : (claims.picture || null));
       if (displayName.length < 2 || displayName.length > 80) return json({ error: "Name must be 2-80 characters." }, 400);
       if (!["JEE", "NEET"].includes(exam) || !["11", "12"].includes(classLevel)) return json({ error: "Choose JEE or NEET and class 11 or 12." }, 400);
+      const existingProfile = await getProfile(db, claims.sub);
       const { data, error } = await db.from("student_profiles").upsert({
         firebase_uid: claims.sub, display_name: displayName, email: claims.email || null,
         exam: exam, class_level: classLevel, avatar_url: avatarUrl, updated_at: new Date().toISOString()
       }, { onConflict: "firebase_uid" }).select("*").single();
       if (error) throw error;
+      if (!existingProfile) {
+        // Running "all current and future students" audiences are applied here.
+        // Failure never blocks onboarding; the admin console shows the rule and
+        // can re-run enrollment at any time.
+        await applyAutoEnrollmentRules(db, data).catch(() => undefined);
+      }
       return json({ profile: data });
     }
     if (path === "/bootstrap" && method === "GET") {
@@ -65,12 +137,12 @@ Deno.serve(async (req) => {
       if (!profile) return json({ needsOnboarding: true, profile: null, content: [], announcements: [], enrollments: [] });
       let content = await readContent(db, { exam: profile.exam, classLevel: profile.class_level, activeOnly: true });
       content = await hideUnenrolledContent(db, claims.sub, content);
-      const { data: userEnrollments } = await db.from("enrollments").select("id,item_type,item_id,active,created_at").eq("firebase_uid", claims.sub).eq("active", true);
+      const userEnrollments = await readActiveEnrollments(db, claims.sub);
       const { data: announcements, error } = await db.from("announcements").select("id,title,body,audience,active,scheduled_at,created_at")
         .eq("active", true).order("created_at", { ascending: false }).limit(50);
       if (error) throw error;
       const filteredAnnouncements = (announcements || []).filter((a) => audienceMatches(a.audience, profile.exam, profile.class_level) && dateIsVisible(a.scheduled_at));
-      return json({ needsOnboarding: false, profile: profile, content: redactStudentContent(content), announcements: filteredAnnouncements, enrollments: userEnrollments || [] });
+      return json({ needsOnboarding: false, profile: profile, content: redactStudentContent(content), announcements: filteredAnnouncements, enrollments: userEnrollments });
     }
     if (path === "/content" && method === "GET") {
       const profile = await getProfile(db, claims.sub);
@@ -88,8 +160,8 @@ Deno.serve(async (req) => {
         const { data: parent, error: parentError } = await db.from("course_catalog").select("id,kind").eq("id", parentId).maybeSingle();
         if (parentError) throw parentError;
         if (parent && ["batch", "series"].includes(parent.kind)) {
-          const { data: enrolled, error: enrollmentError } = await db.from("enrollments").select("id").eq("firebase_uid", claims.sub).eq("item_id", parentId).eq("item_type", parent.kind).eq("active", true).maybeSingle();
-          if (enrollmentError) throw enrollmentError;
+          const activeRows = await readActiveEnrollments(db, claims.sub);
+          const enrolled = activeRows.some((row) => row.item_id === parentId && row.item_type === parent.kind);
           if (!enrolled) return json({ error: "Enroll in this batch or series to view its lessons." }, 403);
         }
       }
@@ -100,6 +172,7 @@ Deno.serve(async (req) => {
     if (path === "/enrollments" && method === "POST") {
       const profile = await getProfile(db, claims.sub);
       if (!profile) return json({ error: "Finish onboarding first." }, 409);
+      if (rateLimited(`enroll:${claims.sub}`, 15, 60_000)) return json(RATE_LIMITED_BODY, 429);
       const body = await bodyJson(req);
       const itemType = String(body.itemType || "");
       const itemId = String(body.itemId || "");
@@ -108,27 +181,62 @@ Deno.serve(async (req) => {
       if (itemError) throw itemError;
       if (!item || item.kind !== itemType) return json({ error: "This item is not available." }, 404);
       if (!examMatches(item.exam, profile.exam) || !classMatches(item.classes, profile.class_level)) return json({ error: "This item is not available for your selected exam/class." }, 403);
-      if (item.access_code && String(body.accessCode || "") !== item.access_code) return json({ error: "The batch code is incorrect." }, 403);
-      const { data: existing, error: existingError } = await db.from("enrollments").select("id,active").eq("firebase_uid", claims.sub).eq("item_type", itemType).eq("item_id", itemId).maybeSingle();
+      const suppliedCode = String(body.accessCode || "");
+      const hasValidCode = Boolean(item.access_code) && suppliedCode === item.access_code;
+      if (item.access_code && !hasValidCode) return json({ error: "The batch code is incorrect." }, 403);
+      // Paid courses are granted by an administrator (or a valid access code).
+      // A student can never self-grant paid access by editing a request.
+      if (isPaidItem(item) && !hasValidCode) {
+        return json({ error: "This is a paid course. Ask your mentor to enroll you." }, 402);
+      }
+      const expiresAt = accessExpiryForItem(item);
+      let { data: existing, error: existingError } = await db.from("enrollments")
+        .select("id,active,status,expires_at")
+        .eq("firebase_uid", claims.sub).eq("item_type", itemType).eq("item_id", itemId)
+        .maybeSingle();
+      let legacySchema = false;
+      if (existingError && isMissingColumn(existingError)) {
+        legacySchema = true;
+        const fallback = await db.from("enrollments").select("id,active")
+          .eq("firebase_uid", claims.sub).eq("item_type", itemType).eq("item_id", itemId).maybeSingle();
+        existing = fallback.data;
+        existingError = fallback.error;
+      }
       if (existingError) throw existingError;
-      if (existing) {
-        if (!existing.active) {
-          const { data, error } = await db.from("enrollments").update({ active: true }).eq("id", existing.id).select("*").single();
-          if (error) throw error;
-          return json({ enrollment: data });
-        }
+      if (existing && enrollmentIsActive(existing)) {
         return json({ enrolled: true, enrollment: existing });
       }
-      const { data, error } = await db.from("enrollments").insert({ firebase_uid: claims.sub, item_type: itemType, item_id: itemId, active: true }).select("*").single();
+      if (existing) {
+        const update = legacySchema
+          ? { active: true }
+          : {
+              active: true, status: "active", revoked_at: null, expires_at: expiresAt,
+              source: hasValidCode ? "access_code" : "self_service", updated_at: new Date().toISOString(),
+            };
+        const { data, error } = await db.from("enrollments").update(update).eq("id", existing.id).select("*").single();
+        if (error) throw error;
+        return json({ enrolled: true, enrollment: data });
+      }
+      const insert = legacySchema
+        ? { firebase_uid: claims.sub, item_type: itemType, item_id: itemId, active: true }
+        : {
+            firebase_uid: claims.sub, item_type: itemType, item_id: itemId, active: true,
+            status: "active", source: hasValidCode ? "access_code" : "self_service", expires_at: expiresAt,
+          };
+      const { data, error } = await db.from("enrollments").insert(insert).select("*").single();
       if (error) throw error;
       return json({ enrolled: true, enrollment: data });
     }
     if (path === "/progress" && method === "POST") {
+      const profile = await getProfile(db, claims.sub);
+      if (!profile) return json({ error: "Finish onboarding first." }, 409);
       const body = await bodyJson(req);
       const lectureId = String(body.lectureId || body.lecture_id || "");
       const watchedSeconds = Math.max(0, Math.min(2147483647, Number(body.watchedSeconds || body.watched_seconds || 0) || 0));
       const completed = body.completed === true;
       if (!isUuid(lectureId)) return json({ error: "Invalid lecture id." }, 400);
+      const access = await canAccessLecture(db, claims.sub, lectureId);
+      if (!access.ok) return json({ error: access.error }, 403);
       const { data: existing, error: lookupError } = await db.from("lesson_progress").select("id,watched_seconds,completed")
         .eq("firebase_uid", claims.sub).eq("lecture_id", lectureId).maybeSingle();
       if (lookupError) throw lookupError;
@@ -400,11 +508,15 @@ Deno.serve(async (req) => {
     // Student personal library
     // -----------------------------------------------------------------
     if (path === "/library" && method === "GET") {
+      const profile = await getProfile(db, claims.sub);
+      if (!profile) return json({ error: "Finish onboarding first." }, 409);
       const { data, error } = await db.from("student_library").select("*").eq("firebase_uid", claims.sub).order("updated_at", { ascending: false }).limit(500);
       if (error) throw error;
       return json({ items: data || [] });
     }
     if (path === "/library" && method === "POST") {
+      const profile = await getProfile(db, claims.sub);
+      if (!profile) return json({ error: "Finish onboarding first." }, 409);
       const body = await bodyJson(req);
       const itemType = String(body.itemType || "");
       const itemId = String(body.itemId || "").trim();
@@ -425,6 +537,8 @@ Deno.serve(async (req) => {
     }
     const libraryDeleteMatch = path.match(/^\/library\/(bookmark|note|recent|challenge|revision)\/([^/]+)$/);
     if (libraryDeleteMatch && method === "DELETE") {
+      const profile = await getProfile(db, claims.sub);
+      if (!profile) return json({ error: "Finish onboarding first." }, 409);
       const itemType = libraryDeleteMatch[1];
       const itemId = decodeURIComponent(libraryDeleteMatch[2]);
       if (!itemId || itemId.length > 200) return json({ error: "Invalid library item id." }, 400);
@@ -449,9 +563,23 @@ Deno.serve(async (req) => {
     }
     if (path === "/admin/students" && method === "GET") {
       if (!isAdmin) return json({ error: "Admin access denied." }, 403);
-      const { data, error } = await db.from("student_profiles").select("firebase_uid,display_name,email,exam,class_level,avatar_url,created_at,updated_at").order("created_at", { ascending: false }).limit(2000);
+      const search = String(url.searchParams.get("query") || "").trim();
+      const exam = String(url.searchParams.get("exam") || "").toUpperCase();
+      const classLevel = String(url.searchParams.get("class") || "");
+      const page = Math.max(1, Math.floor(Number(url.searchParams.get("page") || 1) || 1));
+      const pageSize = Math.min(100, Math.max(1, Math.floor(Number(url.searchParams.get("pageSize") || 25) || 25)));
+      let query = db.from("student_profiles")
+        .select("firebase_uid,display_name,email,exam,class_level,avatar_url,created_at,updated_at", { count: "exact" });
+      if (exam === "JEE" || exam === "NEET") query = query.eq("exam", exam);
+      if (classLevel === "11" || classLevel === "12") query = query.eq("class_level", classLevel);
+      if (search) {
+        const safe = search.replace(/[,()%_]/g, "").slice(0, 80);
+        if (safe) query = query.or(`display_name.ilike.%${safe}%,email.ilike.%${safe}%,firebase_uid.eq.${safe}`);
+      }
+      const from = (page - 1) * pageSize;
+      const { data, error, count } = await query.order("created_at", { ascending: false }).range(from, from + pageSize - 1);
       if (error) throw error;
-      return json({ items: data || [] });
+      return json({ items: data || [], total: count || 0, page, pageSize });
     }
     if (path === "/admin/content" && method === "GET") {
       if (!isAdmin) return json({ error: "Admin access denied." }, 403);
@@ -519,7 +647,10 @@ Deno.serve(async (req) => {
     const message = String(error && error.message || error || "Unexpected server error");
     if (message.indexOf("Unauthorized") >= 0) return json({ error: "Please sign in again." }, 401);
     if (message.indexOf("Server database credentials") >= 0) return json({ error: message }, 503);
-    return json({ error: "Request failed.", detail: message }, 500);
+    if (message.indexOf("Invalid JSON") >= 0) return json({ error: "The request body is not valid JSON." }, 400);
+    if (message.indexOf("Request body is too large") >= 0) return json({ error: message }, 413);
+    const debug = Deno.env.get("DEBUG_API_ERRORS") === "1";
+    return json(debug ? { error: "Request failed.", detail: message } : { error: "Request failed. Please try again." }, 500);
   }
 });
 
@@ -533,7 +664,13 @@ function normalizePath(path) {
   return (index >= 0 ? p.slice(index + marker.length) : p) || "/";
 }
 async function bodyJson(req) {
-  try { return await req.json(); } catch (_) { throw new Error("Invalid JSON request body."); }
+  const declared = Number(req.headers.get("content-length") || 0);
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) throw new Error("Request body is too large.");
+  let text;
+  try { text = await req.text(); } catch (_) { throw new Error("Invalid JSON request body."); }
+  if (text.length > MAX_BODY_BYTES) throw new Error("Request body is too large.");
+  if (!text) return {};
+  try { return JSON.parse(text); } catch (_) { throw new Error("Invalid JSON request body."); }
 }
 function b64urlDecode(s) {
   const v = s.replace(/-/g, "+").replace(/_/g, "/");
@@ -628,9 +765,8 @@ function redactStudentContent(rows) {
 async function hideUnenrolledContent(db, uid, rows) {
   const candidates = (rows || []).filter((r) => ["lecture", "resource"].includes(r.kind));
   if (!candidates.length) return rows || [];
-  const { data, error } = await db.from("enrollments").select("item_type,item_id").eq("firebase_uid", uid).eq("active", true);
-  if (error) throw error;
-  const enrolled = new Set((data || []).map((x) => x.item_type + ":" + x.item_id));
+  const activeRows = await readActiveEnrollments(db, uid);
+  const enrolled = new Set(activeRows.map((x) => x.item_type + ":" + x.item_id));
   return (rows || []).filter((r) => {
     if (!["lecture", "resource"].includes(r.kind)) return true;
     const m = r.metadata || {};
@@ -778,6 +914,135 @@ async function logActivity(db, claims, action, targetType, targetId, summary, me
     if (error) return;
   } catch (_) {
     // Auditing must never block the primary write.
+  }
+}
+
+function isMissingColumn(error) {
+  const code = String(error && error.code || "");
+  const message = String(error && error.message || "");
+  return code === "42703" || (message.includes("column") && message.includes("does not exist"));
+}
+
+function accessExpiryForItem(item) {
+  const meta = (item && item.metadata) || {};
+  const days = Number(meta.accessDays ?? meta.access_days ?? meta.durationDays ?? meta.duration_days ?? 0);
+  if (Number.isFinite(days) && days > 0 && days <= 3650) {
+    return new Date(Date.now() + days * 86400000).toISOString();
+  }
+  return null;
+}
+
+async function readActiveEnrollments(db, uid) {
+  const full = await db.from("enrollments")
+    .select("id,item_type,item_id,active,status,expires_at,created_at")
+    .eq("firebase_uid", uid).eq("active", true);
+  if (!full.error) return (full.data || []).filter((row) => enrollmentIsActive(row));
+  // Graceful fallback while a deployment is waiting for the enrollment
+  // migration to run. Access still requires an active row.
+  const legacy = await db.from("enrollments")
+    .select("id,item_type,item_id,active,created_at")
+    .eq("firebase_uid", uid).eq("active", true);
+  if (legacy.error) throw legacy.error;
+  return legacy.data || [];
+}
+
+async function canAccessLecture(db, uid, lectureId, profile) {
+  const { data: lecture, error } = await db.from("course_catalog")
+    .select("id,kind,active,exam,classes,metadata").eq("id", lectureId).maybeSingle();
+  if (error) throw error;
+  if (!lecture || lecture.active === false) return { ok: false, error: "This lesson is not available." };
+  if (!["lecture", "resource"].includes(lecture.kind)) return { ok: false, error: "This content is not a lesson." };
+  if (!examMatches(lecture.exam, profile.exam) || !classMatches(lecture.classes, profile.class_level)) {
+    return { ok: false, error: "This lesson is not available for your exam/class." };
+  }
+  const meta = lecture.metadata || {};
+  if (meta.isPreview === true) return { ok: true };
+  const parent = String(meta.parentId || meta.parent_id || meta.batchId || meta.batch_id || "");
+  if (!parent) return { ok: true };
+  const rows = await readActiveEnrollments(db, uid);
+  const enrolled = rows.some((row) => row.item_id === parent);
+  return enrolled
+    ? { ok: true }
+    : { ok: false, error: "Enroll in the parent batch or series to record progress." };
+}
+
+async function applyAutoEnrollmentRules(db, profile) {
+  let rules = [];
+  try {
+    const { data, error } = await db.from("enrollment_rules")
+      .select("id,item_type,item_id,filter_exam,filter_class,respect_eligibility,expires_at,active,include_future")
+      .eq("active", true).eq("include_future", true).limit(200);
+    if (error) return;
+    rules = data || [];
+  } catch (_) {
+    return;
+  }
+  if (!rules.length) return;
+  const itemIds = Array.from(new Set(rules.map((rule) => rule.item_id)));
+  const { data: items, error: itemsError } = await db.from("course_catalog")
+    .select("id,kind,title,exam,classes,active,metadata").in("id", itemIds);
+  if (itemsError) return;
+  const itemsById = {};
+  for (const item of items || []) itemsById[item.id] = item;
+
+  for (const rule of rules) {
+    try {
+      const item = itemsById[rule.item_id];
+      if (!item || item.active === false) continue;
+      if (rule.filter_exam && profile.exam !== rule.filter_exam) continue;
+      if (rule.filter_class && String(profile.class_level) !== String(rule.filter_class)) continue;
+      if (rule.respect_eligibility !== false && !isEligibleForItem(item, profile)) continue;
+
+      const { data: existing, error: lookupError } = await db.from("enrollments")
+        .select("id,active,status,expires_at")
+        .eq("firebase_uid", profile.firebase_uid)
+        .eq("item_type", item.kind).eq("item_id", item.id).maybeSingle();
+      if (lookupError) continue;
+      if (existing && enrollmentIsActive(existing)) continue;
+
+      const now = new Date().toISOString();
+      const payload = {
+        firebase_uid: profile.firebase_uid,
+        item_type: item.kind,
+        item_id: item.id,
+        active: true,
+        status: "active",
+        source: "auto_rule",
+        granted_by: "auto-enrollment-rule",
+        expires_at: rule.expires_at || null,
+        revoked_at: null,
+        updated_at: now,
+      };
+      let enrollmentId = existing?.id || null;
+      let writeError = null;
+      if (existing) {
+        const result = await db.from("enrollments").update(payload).eq("id", existing.id).select("id").single();
+        writeError = result.error;
+        enrollmentId = result.data?.id || enrollmentId;
+      } else {
+        const result = await db.from("enrollments").insert(payload).select("id").single();
+        writeError = result.error;
+        enrollmentId = result.data?.id || null;
+      }
+      if (writeError) continue;
+      await db.from("enrollment_events").insert({
+        enrollment_id: enrollmentId,
+        firebase_uid: profile.firebase_uid,
+        item_type: item.kind,
+        item_id: item.id,
+        action: "auto_enrolled",
+        source: "auto_rule",
+        actor_uid: "system",
+        actor_email: "",
+        detail: { title: item.title, ruleId: rule.id },
+      }).then(() => undefined, () => undefined);
+      await db.from("enrollment_rules").update({
+        last_applied_at: now,
+        last_applied_count: Number(rule.last_applied_count || 0) + 1,
+      }).eq("id", rule.id).then(() => undefined, () => undefined);
+    } catch (_) {
+      // A single broken rule must not prevent the student from onboarding.
+    }
   }
 }
 

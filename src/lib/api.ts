@@ -26,6 +26,12 @@ import type {
   AdminActivityEntry,
   AdminAnalyticsResponse,
   AdminEnrollmentRow,
+  AdminEnrollmentListResponse,
+  AdminStudentDirectoryResponse,
+  EnrollmentBulkResult,
+  EnrollmentHistoryEvent,
+  EnrollmentRule,
+  EnrollmentScope,
   LibraryItem,
   LibraryItemType,
 } from '@/types';
@@ -528,24 +534,75 @@ export async function getAdminAnalytics(): Promise<AdminAnalyticsResponse> {
   return requestEdgeFunction<AdminAnalyticsResponse>('/admin/analytics');
 }
 
+export async function searchAdminStudents(params?: {
+  query?: string;
+  exam?: 'JEE' | 'NEET' | '';
+  classLevel?: '11' | '12' | '';
+  page?: number;
+  pageSize?: number;
+}): Promise<AdminStudentDirectoryResponse> {
+  const query = new URLSearchParams();
+  if (params?.query) query.set('query', params.query);
+  if (params?.exam) query.set('exam', params.exam);
+  if (params?.classLevel) query.set('class', params.classLevel);
+  if (params?.page) query.set('page', String(params.page));
+  if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+  const qs = query.toString();
+  return requestEdgeFunction<AdminStudentDirectoryResponse>(`/admin/students${qs ? `?${qs}` : ''}`);
+}
+
+export async function getAdminEnrollmentList(params?: {
+  query?: string;
+  item?: string;
+  itemId?: string;
+  itemType?: 'batch' | 'series' | '';
+  status?: 'active' | 'revoked' | 'all';
+  page?: number;
+  pageSize?: number;
+}): Promise<AdminEnrollmentListResponse> {
+  const query = new URLSearchParams();
+  if (params?.query) query.set('query', params.query);
+  if (params?.item) query.set('item', params.item);
+  if (params?.itemId) query.set('itemId', params.itemId);
+  if (params?.itemType) query.set('itemType', params.itemType);
+  if (params?.status && params.status !== 'all') query.set('status', params.status);
+  if (params?.page) query.set('page', String(params.page));
+  if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+  const qs = query.toString();
+  const res = await requestEdgeFunction<AdminEnrollmentListResponse>(
+    `/admin/enrollments${qs ? `?${qs}` : ''}`
+  );
+  return {
+    items: res.items || [],
+    total: res.total || 0,
+    page: res.page || params?.page || 1,
+    pageSize: res.pageSize || params?.pageSize || 25,
+    counts: res.counts || { active: 0, revoked: 0, total: 0 },
+    degraded: res.degraded,
+  };
+}
+
+/** Backwards-compatible helper used by the student directory panel. */
 export async function getAdminEnrollments(params?: {
   student?: string;
   item?: string;
 }): Promise<AdminEnrollmentRow[]> {
-  const query = new URLSearchParams();
-  if (params?.student) query.set('student', params.student);
-  if (params?.item) query.set('item', params.item);
-  const qs = query.toString();
-  const res = await requestEdgeFunction<{ items: AdminEnrollmentRow[] }>(
-    `/admin/enrollments${qs ? `?${qs}` : ''}`
-  );
-  return res.items || [];
+  const res = await getAdminEnrollmentList({
+    query: params?.student,
+    item: params?.item,
+    page: 1,
+    pageSize: 100,
+  });
+  return res.items;
 }
 
 export async function createAdminEnrollment(input: {
   studentUid: string;
   itemType: 'batch' | 'series';
   itemId: string;
+  respectEligibility?: boolean;
+  overrideEligibility?: boolean;
+  expiresAt?: string | null;
 }): Promise<AdminEnrollmentRow> {
   const res = await requestEdgeFunction<{ item: AdminEnrollmentRow }>('/admin/enrollments', {
     method: 'POST',
@@ -554,10 +611,88 @@ export async function createAdminEnrollment(input: {
   return res.item;
 }
 
+export interface BulkEnrollInput {
+  itemType: 'batch' | 'series';
+  itemId: string;
+  mode: 'selected' | 'all' | 'filter';
+  studentUids?: string[];
+  exam?: 'JEE' | 'NEET' | '';
+  classLevel?: '11' | '12' | '';
+  includeFuture?: boolean;
+  respectEligibility?: boolean;
+  confirmAll?: boolean;
+  expiresAt?: string | null;
+  dryRun?: boolean;
+}
+
+export async function bulkEnrollStudents(input: BulkEnrollInput): Promise<EnrollmentBulkResult> {
+  return requestEdgeFunction<EnrollmentBulkResult>('/admin/enrollments/bulk', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export async function bulkRevokeEnrollments(input: {
+  itemType: 'batch' | 'series';
+  itemId: string;
+  studentUids: string[];
+}): Promise<{ revoked: number; failed: number }> {
+  return requestEdgeFunction('/admin/enrollments/bulk-revoke', {
+    method: 'POST',
+    body: { ...input, confirm: 'REVOKE' },
+  });
+}
+
 export async function deleteAdminEnrollment(id: string): Promise<{ removed: boolean }> {
   return requestEdgeFunction(`/admin/enrollments/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
+}
+
+export async function restoreAdminEnrollment(
+  id: string,
+  input?: { expiresAt?: string | null; force?: boolean }
+): Promise<AdminEnrollmentRow> {
+  const res = await requestEdgeFunction<{ item: AdminEnrollmentRow }>(
+    `/admin/enrollments/${encodeURIComponent(id)}/restore`,
+    { method: 'POST', body: input || {} }
+  );
+  return res.item;
+}
+
+export async function getEnrollmentHistory(limit = 120): Promise<EnrollmentHistoryEvent[]> {
+  const res = await requestEdgeFunction<{ items: EnrollmentHistoryEvent[]; unavailable?: boolean }>(
+    `/admin/enrollments/history?limit=${encodeURIComponent(String(limit))}`
+  );
+  return res.items || [];
+}
+
+export async function getEnrollmentRules(): Promise<EnrollmentRule[]> {
+  const res = await requestEdgeFunction<{ items: EnrollmentRule[]; unavailable?: boolean }>(
+    '/admin/enrollment-rules'
+  );
+  return res.items || [];
+}
+
+export async function setEnrollmentRuleActive(id: string, active: boolean): Promise<EnrollmentRule> {
+  const res = await requestEdgeFunction<{ item: EnrollmentRule }>(
+    `/admin/enrollment-rules/${encodeURIComponent(id)}`,
+    { method: 'PATCH', body: { active } }
+  );
+  return res.item;
+}
+
+export async function deleteEnrollmentRule(id: string): Promise<{ removed: boolean }> {
+  return requestEdgeFunction(`/admin/enrollment-rules/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+/** Shape of the 409 payload returned when a wide audience needs confirmation. */
+export interface EnrollmentConfirmationError {
+  code: 'CONFIRMATION_REQUIRED';
+  scope: EnrollmentScope;
+  preview: number;
 }
 
 // ---------------------------------------------------------------------------
