@@ -1,5 +1,5 @@
 name = "exam-cracker-web"
-main = ".open-next/worker.js"
+main = "custom-worker.mjs"
 compatibility_date = "2026-10-17"
 compatibility_flags = ["nodejs_compat", "enable_nodejs_process_v2"]
 account_id = "93f8cbbe79e248f8d1db9fccc586f0c3"
