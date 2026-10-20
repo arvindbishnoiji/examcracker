@@ -1,4 +1,4 @@
-name = "ec"
+name = "exam-cracker-web"
 main = ".open-next/worker.js"
 compatibility_date = "2026-10-17"
 compatibility_flags = ["nodejs_compat"]
