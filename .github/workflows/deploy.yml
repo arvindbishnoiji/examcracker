@@ -1,0 +1,61 @@
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build Next.js
+        run: npm run build
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyDuvN6q4ybHc6rLTHlYdhSs5_rzvc8nhTA' }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: darvo1.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: darvo1
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: darvo1.firebasestorage.app
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: 283467136948
+          NEXT_PUBLIC_FIREBASE_APP_ID: 1:283467136948:web:c66fd594827909eb3f7ce1
+          NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: G-FMV79YMHBC
+          NEXT_PUBLIC_SUPABASE_URL: https://kncbvcozpcrfvxdbkbtf.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_-4si2gp96FDx7ziHHMO7Kg_sasmLYB2
+          NEXT_PUBLIC_SUPABASE_FUNCTION_URL: https://kncbvcozpcrfvxdbkbtf.supabase.co/functions/v1/exam-cracker-api
+          NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL: https://ec-content-api.arvinddara0290.workers.dev
+          NEXT_PUBLIC_ADMIN_EMAIL: arvinddarabishnoi@gmail.com
+
+      - name: Build OpenNext Cloudflare bundle
+        run: npx @opennextjs/cloudflare build
+
+      - name: Deploy to Cloudflare Workers (exam-cracker-web)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Post deployment info
+        run: |
+          echo "Deployed exam-cracker-web to Cloudflare Workers"
+          echo "Account ID: 93f8cbbe79e248f8d1db9fccc586f0c3"
+          echo "Worker name: exam-cracker-web (separate from ec-content-api)"
+          echo "Check Cloudflare Dashboard → Workers & Pages for URL"
