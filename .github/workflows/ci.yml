@@ -51,7 +51,7 @@ jobs:
           grep -q 'exam-cracker-web' wrangler.toml
           test -f workers/ec-content-api/wrangler.toml
           grep -q 'ec-content-api' workers/ec-content-api/wrangler.toml
-          test "$(grep -c 'name =' wrangler.toml)" -eq 1
+          test "$(grep -c '^name =' wrangler.toml)" -eq 1
           echo "✓ Worker configs separate and correct"
 
       - name: Verify OpenNext config exists
