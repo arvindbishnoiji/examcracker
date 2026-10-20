@@ -68,4 +68,4 @@ jobs:
 
       - name: Verify deployed media proxy health
         run: |
-          curl --fail --silent --show-error https://ec-content-api.arvinddara0290.workers.dev/health
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 https://ec-content-api.arvinddara0290.workers.dev/health
