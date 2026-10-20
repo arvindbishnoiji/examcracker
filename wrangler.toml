@@ -1,6 +1,7 @@
 name = "exam-cracker-web"
-type = "javascript"
+main = ".open-next/worker.js"
 compatibility_date = "2026-10-17"
+compatibility_flags = ["nodejs_compat"]
 account_id = "93f8cbbe79e248f8d1db9fccc586f0c3"
 workers_dev = true
 
@@ -11,7 +12,7 @@ workers_dev = true
 
 [assets]
 directory = ".open-next/assets"
-not_found_handling = "single-page-application"
+binding = "ASSETS"
 
 [observability]
 enabled = true
