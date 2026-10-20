@@ -25,6 +25,8 @@ export default function TestAttemptPage(){
   const [showResult, setShowResult] = useState(false);
   const [result, setResult] = useState<any>(null);
   const timerRef = useRef<number|null>(null);
+  const submitLockRef = useRef(false);
+  const submitHandlerRef = useRef<(isAuto?: boolean) => Promise<void>>(async () => {});
 
   const load = useCallback(async()=>{
     setLoading(true); setError(null);
@@ -62,22 +64,28 @@ export default function TestAttemptPage(){
 
   useEffect(()=>{ load(); },[load]);
 
-  // countdown
+  // Keep one stable interval while a timed attempt is active.
+  const hasTimer = timeLeft !== null;
   useEffect(()=>{
-    if(timeLeft===null || showResult) return;
+    if(!hasTimer || showResult) return;
     timerRef.current = window.setInterval(()=>{
       setTimeLeft(s=>{
-        if(s===null || s<=1){
-          if(timerRef.current) clearInterval(timerRef.current);
-          // auto submit when time expires
-          handleSubmit(true);
+        if(s===null) return null;
+        if(s<=1){
+          if(timerRef.current !== null) window.clearInterval(timerRef.current);
+          timerRef.current = null;
+          // The lock in handleSubmit prevents duplicate auto/manual submissions.
+          void submitHandlerRef.current(true);
           return 0;
         }
         return s-1;
       });
     },1000);
-    return ()=> { if(timerRef.current) clearInterval(timerRef.current); };
-  },[timeLeft, showResult]);
+    return ()=>{
+      if(timerRef.current !== null) window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    };
+  },[hasTimer, showResult]);
 
   // persist draft
   useEffect(()=>{
@@ -85,26 +93,35 @@ export default function TestAttemptPage(){
   },[answers, id, questions.length]);
 
   async function handleSubmit(isAuto=false){
-    if(!questions.length) return;
+    if(!questions.length || submitLockRef.current) return;
     if(!isAuto && !confirm('Submit your answers? You cannot change after submission.')) return;
+    submitLockRef.current = true;
     setSubmitting(true);
+    let completed = false;
     try{
       const res = await submitTestAttempt(id, answers);
       setResult(res);
       setShowResult(true);
+      completed = true;
       localStorage.removeItem(`ec_test_draft_${id}`);
       push('Test submitted — score calculated server-side','success');
-      if(timerRef.current) clearInterval(timerRef.current);
+      if(timerRef.current !== null) window.clearInterval(timerRef.current);
+      timerRef.current = null;
     }catch(e){
       push(e instanceof Error ? e.message : 'Submit failed','error');
-      // try to show result if already submitted
+      // Try to show the result if the server accepted a previous submission.
       try{
         const res = await getSubmittedTestResult(id);
         setResult(res);
         setShowResult(true);
+        completed = true;
       }catch{}
-    } finally{ setSubmitting(false); }
+    } finally{
+      if(!completed) submitLockRef.current = false;
+      setSubmitting(false);
+    }
   }
+  submitHandlerRef.current = handleSubmit;
 
   if(loading) return <div className="max-w-3xl mx-auto space-y-4"><Skeleton className="h-40 w-full" /><Skeleton className="h-60 w-full" /></div>;
   if(error) return (
