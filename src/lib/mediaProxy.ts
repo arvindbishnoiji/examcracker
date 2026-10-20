@@ -204,7 +204,11 @@ export async function importFullYoutubePlaylist(
       hasMore: Boolean(page.hasMore && page.nextCursor),
     });
 
-    if (!page.hasMore || !page.nextCursor) {
+    if (page.hasMore && !page.nextCursor) {
+      note = 'The proxy reported more playlist videos but did not return a continuation cursor. The import may be incomplete; retry before saving.';
+      break;
+    }
+    if (!page.hasMore) {
       break;
     }
     cursor = page.nextCursor;
@@ -212,6 +216,12 @@ export async function importFullYoutubePlaylist(
 
   if (!cancelled && pagesFetched >= maxPages && cursor) {
     note = `Playlist is larger than the current safety limit of ${maxPages} pages. Import the remaining videos separately or raise the page limit; this list may be incomplete.`;
+  }
+
+  if (!cancelled && deduplicated.length === 0) {
+    throw new Error(
+      'Playlist import returned no videos. Confirm the playlist is public and accessible, then retry. If it still fails, the YouTube page format may have changed.'
+    );
   }
 
   return {
