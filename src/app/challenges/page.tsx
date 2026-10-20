@@ -77,7 +77,10 @@ export default function ChallengesPage() {
           profile.class_level
         )
       )
-      .sort((a, b) => challengeState(a).localeCompare(challengeState(b)));
+      .sort((a, b) => {
+        const order = { upcoming: 0, active: 1, ended: 2 } as const;
+        return order[challengeState(a)] - order[challengeState(b)];
+      });
   }, [config.challenges.items, profile]);
 
   const savedByChallenge = useMemo(() => {
