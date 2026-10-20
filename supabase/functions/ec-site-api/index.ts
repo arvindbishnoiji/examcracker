@@ -72,6 +72,25 @@ function isAllowedOrigin(origin) {
   return false;
 }
 
+/**
+ * Best-effort per-isolate rate limiting (Supabase runs many isolates, so this
+ * stops accidental loops and casual abuse rather than guaranteeing a global
+ * quota). Wider protection belongs at the CDN/WAF layer.
+ */
+const rateBuckets = new Map();
+function rateLimited(key, limit, windowMs) {
+  const now = Date.now();
+  const bucket = rateBuckets.get(key);
+  if (!bucket || now - bucket.start > windowMs) {
+    rateBuckets.set(key, { start: now, count: 1 });
+    if (rateBuckets.size > 5000) rateBuckets.clear();
+    return false;
+  }
+  bucket.count += 1;
+  return bucket.count > limit;
+}
+const RATE_LIMITED_BODY = { error: "Too many requests. Please wait a moment and try again." };
+
 let cachedJwks = null;
 let cachedJwksExpiresAt = 0;
 
@@ -201,11 +220,13 @@ Deno.serve(async (req) => {
 
     if (path === "/admin/enrollments/bulk" && method === "POST") {
       if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      if (rateLimited(`bulk:${claims.sub}`, 12, 300_000)) return json(RATE_LIMITED_BODY, 429);
       return await adminBulkEnroll(db, claims, await bodyJson(req));
     }
 
     if (path === "/admin/enrollments/bulk-revoke" && method === "POST") {
       if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      if (rateLimited(`revoke:${claims.sub}`, 12, 300_000)) return json(RATE_LIMITED_BODY, 429);
       return await adminBulkRevoke(db, claims, await bodyJson(req));
     }
 
