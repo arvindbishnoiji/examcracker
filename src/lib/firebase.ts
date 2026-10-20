@@ -19,13 +19,11 @@ import {
   type Auth,
   type User,
 } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
 import { APP_CONFIG } from './config';
 
 // Guard to ensure Firebase only initializes on client
 let app: FirebaseApp | null = null;
 let authInstance: Auth | null = null;
-let dbInstance: Firestore | null = null;
 
 function getFirebaseApp(): FirebaseApp {
   if (typeof window === 'undefined') {
@@ -55,21 +53,14 @@ export function getFirebaseAuth(): Auth {
   return a;
 }
 
-export function getFirestoreDb(): Firestore {
-  if (dbInstance) return dbInstance;
-  dbInstance = getFirestore(getFirebaseApp());
-  return dbInstance;
-}
 
 // Lazy getters for backward compat
 export const auth = typeof window !== 'undefined' ? getFirebaseAuth() : (null as unknown as Auth);
-export const db = typeof window !== 'undefined' ? (() => { try { return getFirestoreDb(); } catch { return null as unknown as Firestore; } })() : (null as unknown as Firestore);
+// Legacy compatibility export. Use the browser-only helpers in ./firestore instead.
+export const db = null as unknown as import('firebase/firestore').Firestore;
 
 export function getAuthSafe(): Auth {
   return getFirebaseAuth();
-}
-export function getDbSafe(): Firestore {
-  return getFirestoreDb();
 }
 
 const googleProvider = new GoogleAuthProvider();
