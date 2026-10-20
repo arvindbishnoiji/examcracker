@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { APP_CONFIG } from '@/lib/config';
 
 type YoutubeThumbnailProps = {
   src?: string | null;
@@ -15,6 +16,7 @@ function getFallbacks(videoId?: string | null): string[] {
   if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) return [];
   const encoded = encodeURIComponent(id);
   return [
+    `${APP_CONFIG.cloudflare.mediaProxyUrl}/thumbnail?videoId=${encoded}`,
     `https://i.ytimg.com/vi/${encoded}/mqdefault.jpg`,
     `https://i.ytimg.com/vi/${encoded}/hqdefault.jpg`,
     `https://i.ytimg.com/vi/${encoded}/sddefault.jpg`,
