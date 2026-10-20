@@ -12,6 +12,30 @@ export default {
     const respond = (body, status) => new Response(JSON.stringify(body), { status: status || 200, headers: cors });
     if (url.pathname === "/health") return respond({ ok: true, service: "Exam Cracker YouTube metadata proxy", youtubeDataApiKeyRequired: false });
     if (request.method !== "GET") return respond({ error: "Method not allowed" }, 405);
+    if (url.pathname === "/thumbnail") {
+      const videoId = String(url.searchParams.get("videoId") || "").trim();
+      if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+        return new Response("Invalid YouTube video ID", { status: 400, headers: { ...cors, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      const candidates = ["mqdefault.jpg", "hqdefault.jpg", "sddefault.jpg", "0.jpg"];
+      for (const file of candidates) {
+        try {
+          const upstream = await fetch("https://i.ytimg.com/vi/" + encodeURIComponent(videoId) + "/" + file, {
+            headers: { "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8", "User-Agent": "Mozilla/5.0 (compatible; ExamCracker/1.0)" },
+            cf: { cacheTtl: 86400, cacheEverything: true }
+          });
+          const type = upstream.headers.get("content-type") || "";
+          if (upstream.ok && type.startsWith("image/")) {
+            const headers = new Headers(upstream.headers);
+            headers.set("Access-Control-Allow-Origin", "*");
+            headers.set("Cache-Control", "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400");
+            headers.set("X-Thumbnail-Source", "youtube");
+            return new Response(upstream.body, { status: 200, headers });
+          }
+        } catch (_) {}
+      }
+      return new Response("Thumbnail unavailable for this video", { status: 404, headers: { ...cors, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=300" } });
+    }
     if (url.pathname === "/video") {
       const videoUrl = url.searchParams.get("url") || "";
       const videoId = getVideoId(videoUrl);
@@ -77,9 +101,12 @@ export default {
             const videoId = String(video.videoId || "");
             const thumbnails = Array.isArray(video.videoThumbnails) ? video.videoThumbnails : [];
             const chosen = thumbnails.find((thumbnail) => thumbnail && /medium|high|maxres/i.test(String(thumbnail.quality || ""))) || thumbnails[thumbnails.length - 1];
-            const thumbnail = chosen && chosen.url
-              ? (String(chosen.url).startsWith("//") ? "https:" + chosen.url : chosen.url)
-              : "https://img.youtube.com/vi/" + encodeURIComponent(videoId) + "/hqdefault.jpg";
+            const upstreamThumbnail = chosen && chosen.url
+              ? (String(chosen.url).startsWith("//") ? "https:" + chosen.url : String(chosen.url).startsWith("/") ? "https://www.youtube.com" + chosen.url : String(chosen.url))
+              : "";
+            const thumbnail = /^[a-zA-Z0-9_-]{11}$/.test(videoId)
+              ? url.origin + "/thumbnail?videoId=" + encodeURIComponent(videoId)
+              : upstreamThumbnail;
             const seconds = Number(video.lengthSeconds ?? video.duration ?? 0);
             return {
               videoId,
