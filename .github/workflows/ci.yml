@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "arena/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps (npm ci)
+        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+      - name: Verify jsdom available
+        run: npx vitest --version && node -e "require('jsdom'); console.log('jsdom ok')"
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint (next lint)
+        run: npm run lint --if-present || npx next lint
+
+      - name: Unit tests (vitest)
+        run: npm test -- --reporter=verbose
+
+      - name: Production build (Next.js)
+        run: npm run build
+
+      - name: Audit (non-blocking)
+        run: npm audit --audit-level=high || true
+
+      - name: Check public config not containing secrets
+        run: |
+          echo "Checking for accidental secret commit..."
+          ! grep -R "service_role" --include="*.ts" --include="*.tsx" --include="*.js" src/ || (echo "Found service_role in src — remove before commit" && exit 1)
+          ! grep -R "SUPABASE_SERVICE_ROLE_KEY" --include="*.ts" --include="*.tsx" src/ || (echo "Found service key in src" && exit 1)
+
+      - name: Verify Cloudflare web worker config is separate
+        run: |
+          test -f wrangler.toml
+          grep -q 'exam-cracker-web' wrangler.toml
+          test -f workers/ec-content-api/wrangler.toml
+          grep -q 'ec-content-api' workers/ec-content-api/wrangler.toml
+          test "$(grep -c '^name =' wrangler.toml)" -eq 1
+          echo "✓ Worker configs separate and correct"
+
+      - name: Verify OpenNext config exists
+        run: test -f open-next.config.ts && echo "✓ open-next.config.ts present"

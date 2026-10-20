@@ -1,0 +1,25 @@
+name = "exam-cracker-web"
+type = "javascript"
+compatibility_date = "2026-10-17"
+account_id = "93f8cbbe79e248f8d1db9fccc586f0c3"
+workers_dev = true
+
+# Next.js on Cloudflare via OpenNext
+# Build with: npx @opennextjs/cloudflare build
+# Deploy with: npx @opennextjs/cloudflare deploy
+# Or use GitHub Actions deploy workflow
+
+[assets]
+directory = ".open-next/assets"
+not_found_handling = "single-page-application"
+
+[observability]
+enabled = true
+
+# Environment variables (public NEXT_PUBLIC_* are baked at build time via .env)
+# Secrets must be set via `wrangler secret put` or GitHub Actions secrets, never committed
+
+# Routes — add custom domain after deployment
+# [[routes]]
+# pattern = "examcracker.example.com/*"
+# zone_name = "example.com"
