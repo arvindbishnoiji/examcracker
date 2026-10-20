@@ -99,6 +99,7 @@ While this branch was open, `main` received `9dac00b` ("fix: add YouTube thumbna
 | `npm run build` | **Success**, 20 routes |
 | `npx @opennextjs/cloudflare build` | **Success**, `.open-next/worker.js` generated |
 | Secret scan (CI rule over `src/`) | **Clean** |
+| GitHub Actions `ci.yml` on PR #18 (typecheck, lint, 57 tests, Next build, OpenNext bundle, secret scan, worker config) | **Passed** (run 39508243308, 3m07s) |
 | SSR smoke test (`/`, `/login`, `/home`, `/onboarding`, `/lectures`, `/tests`, `/profile`, `/admin`, `/admin/students`, `/robots.txt`, `/sitemap.xml`, `/manifest.webmanifest`, unknown path) | 200/404 as expected; robots and sitemap content inspected |
 | Edge Function syntax (`typescript.transpileModule`) | **Syntax OK** for both functions after every patch |
 
@@ -108,7 +109,7 @@ New tests:
 - `src/__tests__/authGate.test.ts` (11) — mandatory onboarding, no redirect loop, failed bootstrap not treated as missing profile.
 - `src/__tests__/progress.test.ts` (6) — IST date bucketing, streak edge cases, honest metric helpers.
 
-**Not verified:** live Edge Function execution, SQL execution, browser E2E, real Firebase/Supabase calls, CI status on GitHub (the PR was just opened), and deployment. No Supabase credentials or Deno runtime exist in this sandbox.
+**Not verified:** live Edge Function execution, SQL execution, browser E2E, real Firebase/Supabase calls and deployment. No Supabase credentials or Deno runtime exist in this sandbox. The GitHub Actions CI run above did pass end to end.
 
 ---
 

@@ -1050,7 +1050,6 @@ async function adminBulkEnroll(db, claims, body) {
       error: "This audience goes beyond the course's exam/class. Confirm the full scope to continue.",
       code: "CONFIRMATION_REQUIRED",
       scope: plan.scope,
-      preview: plan.eligible.length,
     }, 409);
   }
 
