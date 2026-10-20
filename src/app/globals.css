@@ -2,22 +2,336 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------------
+   Exam Cracker design tokens.
+   The server renders these safe defaults; the SiteConfigProvider replaces them
+   at runtime with the published admin theme (and handles light/dark/system).
+--------------------------------------------------------------------------- */
 :root {
-  --bg: #f8fafc;
+  --ec-bg: #f7f8fc;
+  --ec-surface: #ffffff;
+  --ec-surface-2: #fbfcfe;
+  --ec-text: #0f172a;
+  --ec-muted: #7a7e8b;
+  --ec-border: #ececee;
+  --ec-brand: #2563eb;
+  --ec-secondary: #0f172a;
+  --ec-accent: #f59e0b;
+  --ec-on-brand: #ffffff;
+  --ec-radius: 18px;
+  --ec-radius-sm: 10px;
+  --ec-radius-lg: 26px;
+  --ec-button-radius: 15px;
+  --ec-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 10px 30px rgba(15, 23, 42, 0.07);
+  --ec-font-body: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ec-font-heading: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ec-heading-weight: 800;
+  --ec-heading-tracking: -0.03em;
+  --ec-max-width: 1200px;
+  --ec-page-pad: 20px;
+  --ec-section-gap: 20px;
+  --ec-anim: 0.85;
+  --ec-header-bg: rgba(255, 255, 255, 0.9);
+  --ec-header-text: #0f172a;
+  --ec-header-border: #ececee;
+  --ec-nav-bg: rgba(255, 255, 255, 0.96);
+
+  --ec-brand-50: 240 244 254;
+  --ec-brand-100: 224 233 252;
+  --ec-brand-200: 190 208 249;
+  --ec-brand-300: 142 174 245;
+  --ec-brand-400: 85 133 239;
+  --ec-brand-500: 37 99 235;
+  --ec-brand-600: 37 99 235;
+  --ec-brand-700: 31 83 197;
+  --ec-brand-800: 26 69 164;
+  --ec-brand-900: 21 55 132;
+
+  --ec-ink-50: 251 252 254;
+  --ec-ink-100: 236 236 238;
+  --ec-ink-200: 219 220 223;
+  --ec-ink-300: 193 195 200;
+  --ec-ink-500: 122 126 139;
+  --ec-ink-700: 63 69 85;
+  --ec-ink-900: 15 23 42;
 }
 
-html { scroll-behavior: smooth; }
-body { font-feature-settings: "cv02","cv03","cv04","cv11"; }
+* {
+  box-sizing: border-box;
+}
 
-* { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+html {
+  scroll-behavior: smooth;
+  color-scheme: light;
+}
+
+body {
+  background: var(--ec-bg);
+  color: var(--ec-text);
+  font-family: var(--ec-font-body);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, .ec-heading {
+  font-family: var(--ec-font-heading);
+  font-weight: var(--ec-heading-weight);
+  letter-spacing: var(--ec-heading-tracking);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--ec-ink-200)) transparent;
+}
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+::-webkit-scrollbar-thumb { background: rgb(var(--ec-ink-200)); border-radius: 9999px; }
 ::-webkit-scrollbar-track { background: transparent; }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
 
-/* Aspect helpers */
+/* ---------------------------------------------------------------------------
+   Reusable theme-aware primitives
+--------------------------------------------------------------------------- */
+.ec-main {
+  width: 100%;
+  max-width: var(--ec-max-width);
+  margin-inline: auto;
+  padding: var(--ec-page-pad);
+  padding-bottom: calc(var(--ec-page-pad) + 5rem);
+}
+@media (min-width: 768px) {
+  .ec-main { padding-bottom: var(--ec-page-pad); }
+}
+
+.ec-header {
+  background: var(--ec-header-bg);
+  color: var(--ec-header-text);
+  border-color: var(--ec-header-border);
+  backdrop-filter: blur(18px) saturate(1.2);
+}
+[data-ec-theme='dark'] .ec-header { box-shadow: 0 1px 0 rgba(255,255,255,0.03); }
+
+.ec-card {
+  background: var(--ec-surface);
+  border: 1px solid rgb(var(--ec-ink-100));
+  border-radius: var(--ec-radius);
+  box-shadow: var(--ec-card-shadow);
+  color: var(--ec-text);
+  overflow: hidden;
+}
+[data-ec-card='outlined'] .ec-card { box-shadow: none; border-color: rgb(var(--ec-ink-200)); }
+[data-ec-card='flat'] .ec-card { box-shadow: none; border-color: transparent; }
+[data-ec-card='glass'] .ec-card {
+  background: color-mix(in srgb, var(--ec-surface) 76%, transparent);
+  border-color: color-mix(in srgb, rgb(var(--ec-ink-200)) 60%, transparent);
+  backdrop-filter: blur(18px) saturate(1.15);
+}
+
+.ec-surface {
+  background: var(--ec-surface);
+  color: var(--ec-text);
+}
+.ec-surface-2 { background: var(--ec-surface-2); }
+.ec-border { border-color: rgb(var(--ec-ink-100)); }
+.ec-text-muted { color: rgb(var(--ec-ink-500)); }
+
+.ec-btn { border-radius: var(--ec-button-radius); }
+
+.ec-progress {
+  height: 6px;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(var(--ec-ink-200), 0.7);
+}
+.ec-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--ec-brand), var(--ec-secondary));
+  transition: width 0.35s ease;
+}
+
+.ec-field {
+  width: 100%;
+  border-radius: var(--ec-radius-sm);
+  border: 1px solid rgb(var(--ec-ink-200));
+  background: var(--ec-surface);
+  color: var(--ec-text);
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  transition: border-color calc(160ms * var(--ec-anim)) ease, box-shadow calc(160ms * var(--ec-anim)) ease;
+}
+.ec-field::placeholder { color: rgb(var(--ec-ink-500)); }
+.ec-field:focus {
+  outline: none;
+  border-color: rgb(var(--ec-brand-500));
+  box-shadow: 0 0 0 3px rgb(var(--ec-brand-500) / 0.16);
+}
+
+.ec-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1rem;
+  background: rgb(var(--ec-brand-50));
+  color: rgb(var(--ec-brand-700));
+  border: 1px solid rgb(var(--ec-brand-100));
+}
+
+.ec-section-title {
+  font-family: var(--ec-font-heading);
+  font-weight: var(--ec-heading-weight);
+  letter-spacing: var(--ec-heading-tracking);
+  color: var(--ec-text);
+}
+
+.ec-fade-up {
+  animation: ecFadeUp calc(520ms * var(--ec-anim)) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.ec-fade-in {
+  animation: ecFadeIn calc(380ms * var(--ec-anim)) ease both;
+}
+@keyframes ecFadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ecFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+[data-ec-anim='none'] .ec-fade-up,
+[data-ec-anim='none'] .ec-fade-in { animation: none; }
+
+.ec-hero-gradient {
+  background:
+    radial-gradient(1200px 500px at 90% -10%, rgb(var(--ec-brand-100) / 0.75), transparent 60%),
+    radial-gradient(900px 480px at -10% 10%, rgb(var(--ec-accent) / 0.14), transparent 60%),
+    var(--ec-surface);
+}
+[data-ec-theme='dark'] .ec-hero-gradient {
+  background:
+    radial-gradient(1100px 460px at 90% -10%, rgb(var(--ec-brand-600) / 0.28), transparent 60%),
+    radial-gradient(900px 480px at -10% 10%, rgb(var(--ec-accent) / 0.12), transparent 60%),
+    var(--ec-surface);
+}
+
+.ec-scroll-x {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.ec-scroll-x::-webkit-scrollbar { display: none; }
+
+.ec-line-clamp-1,
+.ec-line-clamp-2,
+.ec-line-clamp-3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ec-line-clamp-1 { -webkit-line-clamp: 1; }
+.ec-line-clamp-2 { -webkit-line-clamp: 2; }
+.ec-line-clamp-3 { -webkit-line-clamp: 3; }
+
 .aspect-video { aspect-ratio: 16 / 9; }
 .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Admin shell: denser, calmer, still theme-aware */
+.ec-admin-sidebar {
+  background:
+    radial-gradient(600px 300px at -10% 0%, rgb(var(--ec-brand-600) / 0.22), transparent 65%),
+    linear-gradient(180deg, color-mix(in srgb, var(--ec-surface) 96%, #000 4%), var(--ec-surface));
+}
+.ec-admin-link {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  border-radius: calc(var(--ec-radius-sm) * 0.9);
+  padding: 0.55rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 550;
+  color: rgb(var(--ec-ink-500));
+  transition: background 160ms ease, color 160ms ease;
+}
+.ec-admin-link:hover { background: rgb(var(--ec-ink-100) / 0.8); color: var(--ec-text); }
+.ec-admin-link[data-active='true'] {
+  background: rgb(var(--ec-brand-600));
+  color: var(--ec-on-brand);
+  box-shadow: 0 8px 20px rgb(var(--ec-brand-600) / 0.24);
+}
+.ec-admin-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(var(--ec-ink-500));
+}
+
+.ec-scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+
+/* Table defaults */
+.ec-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.ec-table th {
+  text-align: left;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(var(--ec-ink-500));
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid rgb(var(--ec-ink-100));
+  white-space: nowrap;
+}
+.ec-table td {
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid rgb(var(--ec-ink-100) / 0.7);
+  vertical-align: middle;
+}
+.ec-table tr:last-child td { border-bottom: none; }
+
+/* Utility for focus rings using the live brand colour */
+.ec-focus:focus-visible {
+  outline: 2px solid rgb(var(--ec-brand-500));
+  outline-offset: 2px;
+}
+
+
+/* --------------------------------------------------------------------------
+   Shared loading + admin motion primitives
+   -------------------------------------------------------------------------- */
+.ec-skeleton {
+  border-radius: var(--ec-radius);
+  background: linear-gradient(
+    90deg,
+    rgb(var(--ec-ink-100)) 25%,
+    rgb(var(--ec-ink-50)) 37%,
+    rgb(var(--ec-ink-100)) 63%
+  );
+  background-size: 400% 100%;
+  animation: ec-shimmer 1.5s ease infinite;
+  min-height: 12px;
+}
+@keyframes ec-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+[data-ec-admin-motion='reduced'] *,
+[data-ec-admin-motion='reduced'] *::before,
+[data-ec-admin-motion='reduced'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+[data-ec-compact='true'] table td,
+[data-ec-compact='true'] table th {
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+}

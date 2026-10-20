@@ -20,6 +20,14 @@ import type {
   TestCardItem,
   TestQuestion,
   TestResultSummary,
+  PublicSiteConfigResponse,
+  SiteSettingKey,
+  SiteSettingRow,
+  AdminActivityEntry,
+  AdminAnalyticsResponse,
+  AdminEnrollmentRow,
+  LibraryItem,
+  LibraryItemType,
 } from '@/types';
 
 export class ApiError extends Error {
@@ -52,6 +60,7 @@ async function requestEdgeFunction<T>(
     body?: unknown;
     publicRoute?: boolean;
     retryOn401?: boolean;
+    baseUrl?: string;
   } = {}
 ): Promise<T> {
   const {
@@ -62,7 +71,13 @@ async function requestEdgeFunction<T>(
   } = options;
 
   const normalizedRoute = route.startsWith('/') ? route : `/${route}`;
-  const url = `${APP_CONFIG.supabase.functionUrl}${normalizedRoute}`;
+  // Site-platform routes are served by the dedicated `ec-site-api` function so
+  // the heavily-used content API stays untouched. Both share auth + database.
+  const isSiteApiRoute = ['/public/site', '/admin/site-settings', '/admin/activity', '/admin/analytics', '/admin/enrollments', '/library'].some(
+    (prefix) => normalizedRoute === prefix || normalizedRoute.startsWith(`${prefix}/`) || normalizedRoute.startsWith(`${prefix}?`)
+  );
+  const baseUrl = options.baseUrl || (isSiteApiRoute ? APP_CONFIG.supabase.siteFunctionUrl : APP_CONFIG.supabase.functionUrl);
+  const url = `${baseUrl}${normalizedRoute}`;
 
   const headers: Record<string, string> = {
     apikey: APP_CONFIG.supabase.publishableKey,
@@ -452,4 +467,130 @@ export async function updateAdminAnnouncement(
     }
   );
   return res.item;
+}
+
+// ---------------------------------------------------------------------------
+// Persisted site configuration (admin CMS)
+// ---------------------------------------------------------------------------
+
+export async function getPublicSiteConfig(): Promise<PublicSiteConfigResponse> {
+  try {
+    return await requestEdgeFunction<PublicSiteConfigResponse>('/public/site', {
+      publicRoute: true,
+      retryOn401: false,
+    });
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 404 || error.status === 405)) {
+      return { config: {}, publishedAt: {}, degraded: true };
+    }
+    throw error;
+  }
+}
+
+export async function getAdminSiteSettings(): Promise<SiteSettingRow[]> {
+  const res = await requestEdgeFunction<{ items: SiteSettingRow[] }>('/admin/site-settings');
+  return res.items || [];
+}
+
+export async function saveAdminSiteSettingDraft<TPayload = unknown>(
+  key: SiteSettingKey,
+  draft: TPayload
+): Promise<SiteSettingRow> {
+  const res = await requestEdgeFunction<{ item: SiteSettingRow }>(
+    `/admin/site-settings/${encodeURIComponent(key)}`,
+    { method: 'PATCH', body: { draft } }
+  );
+  return res.item;
+}
+
+export async function publishAdminSiteSetting(key: SiteSettingKey): Promise<SiteSettingRow> {
+  const res = await requestEdgeFunction<{ item: SiteSettingRow }>(
+    `/admin/site-settings/${encodeURIComponent(key)}/publish`,
+    { method: 'POST', body: {} }
+  );
+  return res.item;
+}
+
+export async function resetAdminSiteSetting(key: SiteSettingKey): Promise<{ reset: boolean }> {
+  return requestEdgeFunction(`/admin/site-settings/${encodeURIComponent(key)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getAdminActivity(limit = 100): Promise<AdminActivityEntry[]> {
+  const res = await requestEdgeFunction<{ items: AdminActivityEntry[] }>(
+    `/admin/activity?limit=${encodeURIComponent(String(limit))}`
+  );
+  return res.items || [];
+}
+
+export async function getAdminAnalytics(): Promise<AdminAnalyticsResponse> {
+  return requestEdgeFunction<AdminAnalyticsResponse>('/admin/analytics');
+}
+
+export async function getAdminEnrollments(params?: {
+  student?: string;
+  item?: string;
+}): Promise<AdminEnrollmentRow[]> {
+  const query = new URLSearchParams();
+  if (params?.student) query.set('student', params.student);
+  if (params?.item) query.set('item', params.item);
+  const qs = query.toString();
+  const res = await requestEdgeFunction<{ items: AdminEnrollmentRow[] }>(
+    `/admin/enrollments${qs ? `?${qs}` : ''}`
+  );
+  return res.items || [];
+}
+
+export async function createAdminEnrollment(input: {
+  studentUid: string;
+  itemType: 'batch' | 'series';
+  itemId: string;
+}): Promise<AdminEnrollmentRow> {
+  const res = await requestEdgeFunction<{ item: AdminEnrollmentRow }>('/admin/enrollments', {
+    method: 'POST',
+    body: input,
+  });
+  return res.item;
+}
+
+export async function deleteAdminEnrollment(id: string): Promise<{ removed: boolean }> {
+  return requestEdgeFunction(`/admin/enrollments/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Student personal library (bookmarks, timestamps notes, recents, challenges)
+// ---------------------------------------------------------------------------
+
+export async function getStudentLibrary(): Promise<LibraryItem[]> {
+  const res = await requestEdgeFunction<{ items: LibraryItem[] }>('/library');
+  return res.items || [];
+}
+
+export async function saveStudentLibraryItem(input: {
+  itemType: LibraryItemType;
+  itemId: string;
+  payload?: Record<string, unknown>;
+}): Promise<LibraryItem> {
+  const res = await requestEdgeFunction<{ item: LibraryItem }>('/library', {
+    method: 'POST',
+    body: {
+      itemType: input.itemType,
+      itemId: input.itemId,
+      payload: input.payload || {},
+    },
+  });
+  return res.item;
+}
+
+export async function deleteStudentLibraryItem(
+  itemType: LibraryItemType,
+  itemId: string
+): Promise<{ removed: boolean }> {
+  return requestEdgeFunction(
+    `/library/${encodeURIComponent(itemType)}/${encodeURIComponent(itemId)}`,
+    { method: 'DELETE' }
+  );
 }

@@ -4,6 +4,9 @@ const FIREBASE_PROJECT_ID = "darvo1";
 const ADMIN_EMAIL = "arvinddarabishnoi@gmail.com";
 const ALLOWED_EXAMS = new Set(["JEE", "NEET", "Both"]);
 const ALLOWED_KINDS = new Set(["batch", "series", "lecture", "resource", "event", "goal", "test"]);
+const SITE_SETTING_KEYS = ["theme", "login", "homepage", "navigation", "footer", "banners", "popups", "testimonials", "challenges", "features", "seo", "media"];
+const LIBRARY_ITEM_TYPES = new Set(["bookmark", "note", "recent", "challenge", "revision"]);
+const MAX_SETTING_BYTES = 512 * 1024;
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type",
@@ -20,14 +23,22 @@ Deno.serve(async (req) => {
     return json({ ok: true, service: "Exam Cracker API", firebaseProjectId: FIREBASE_PROJECT_ID }, 200);
   }
   try {
-    const claims = await requireFirebaseUser(req);
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || getDefaultSecretKey();
     if (!supabaseUrl || !serviceKey) throw new Error("Server database credentials are not configured.");
     const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-    const isAdmin = String(claims.email || "").toLowerCase() === ADMIN_EMAIL.toLowerCase();
     const path = normalizePath(url.pathname);
     const method = req.method.toUpperCase();
+
+    // Public, read-only published site configuration. Required so the login
+    // page can render the admin-designed appearance before a user signs in.
+    // Only values explicitly published by an admin are exposed.
+    if (path === "/public/site" && method === "GET") {
+      return await publicSitePayload(db);
+    }
+
+    const claims = await requireFirebaseUser(req);
+    const isAdmin = String(claims.email || "").toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
     if (path === "/profile" && method === "GET") {
       const { data, error } = await db.from("student_profiles").select("*").eq("firebase_uid", claims.sub).maybeSingle();
@@ -250,6 +261,178 @@ Deno.serve(async (req) => {
       }
       return json({ testId: testId || null, items: rows.map((a, i) => ({ rank: i + 1, testId: a.test_id, firebaseUid: a.firebase_uid, name: names[a.firebase_uid]?.display_name || "Student", avatarUrl: names[a.firebase_uid]?.avatar_url || null, score: a.score, maxScore: a.max_score, submittedAt: a.submitted_at })) });
     }
+    // -----------------------------------------------------------------
+    // Site settings (visual CMS) — admin only, except /public/site above
+    // -----------------------------------------------------------------
+    if (path === "/admin/site-settings" && method === "GET") {
+      if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      const { data, error } = await db.from("site_settings").select("key,draft,published,published_at,updated_at,updated_by").order("key", { ascending: true });
+      if (error) throw error;
+      return json({ items: data || [] });
+    }
+    const siteSettingMatch = path.match(/^\/admin\/site-settings\/([a-z-]+)(?:\/(publish))?$/);
+    if (siteSettingMatch) {
+      if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      const key = siteSettingMatch[1];
+      const action = siteSettingMatch[2] || "";
+      if (!SITE_SETTING_KEYS.includes(key)) return json({ error: "Unknown site settings key." }, 404);
+      if (method === "GET" && !action) {
+        const { data, error } = await db.from("site_settings").select("key,draft,published,published_at,updated_at,updated_by").eq("key", key).maybeSingle();
+        if (error) throw error;
+        return json({ item: data || { key, draft: {}, published: {}, published_at: null, updated_at: null } });
+      }
+      if (method === "PATCH" && !action) {
+        const body = await bodyJson(req);
+        const draft = body.draft;
+        const validationError = validateSettingDraft(key, draft);
+        if (validationError) return json({ error: validationError }, 400);
+        const now = new Date().toISOString();
+        const { data, error } = await db.from("site_settings").upsert({
+          key: key,
+          draft: draft,
+          updated_at: now,
+          updated_by: claims.email || claims.sub,
+        }, { onConflict: "key" }).select("key,draft,published,published_at,updated_at,updated_by").single();
+        if (error) throw error;
+        await logActivity(db, claims, "settings.draft.save", "site_settings", key, `Saved draft for ${key}`);
+        return json({ item: data });
+      }
+      if (method === "POST" && action === "publish") {
+        const { data: current, error: currentError } = await db.from("site_settings").select("*").eq("key", key).maybeSingle();
+        if (currentError) throw currentError;
+        if (!current) return json({ error: "Save a draft before publishing." }, 409);
+        if (!current.draft || typeof current.draft !== "object") return json({ error: "The draft is empty or invalid." }, 400);
+        const now = new Date().toISOString();
+        const { data, error } = await db.from("site_settings").update({
+          published: current.draft,
+          published_at: now,
+          updated_at: now,
+          updated_by: claims.email || claims.sub,
+        }).eq("key", key).select("key,draft,published,published_at,updated_at,updated_by").single();
+        if (error) throw error;
+        await logActivity(db, claims, "settings.publish", "site_settings", key, `Published ${key}`);
+        return json({ item: data });
+      }
+      if (method === "DELETE" && !action) {
+        const { error } = await db.from("site_settings").delete().eq("key", key);
+        if (error) throw error;
+        await logActivity(db, claims, "settings.reset", "site_settings", key, `Reset ${key} to built-in defaults`);
+        return json({ reset: true });
+      }
+    }
+
+    if (path === "/admin/activity" && method === "GET") {
+      if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") || 100) || 100));
+      const { data, error } = await db.from("admin_activity").select("id,actor_email,action,target_type,target_id,summary,created_at").order("created_at", { ascending: false }).limit(limit);
+      if (error) throw error;
+      return json({ items: data || [] });
+    }
+
+    if (path === "/admin/analytics" && method === "GET") {
+      if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      return json(await buildAdminAnalytics(db));
+    }
+
+    if (path === "/admin/enrollments" && method === "GET") {
+      if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      const studentFilter = String(url.searchParams.get("student") || "").trim().toLowerCase();
+      const itemFilter = String(url.searchParams.get("item") || "").trim().toLowerCase();
+      const { data: rows, error } = await db.from("enrollments").select("*").order("created_at", { ascending: false }).limit(5000);
+      if (error) throw error;
+      const items = await hydrateEnrollments(db, rows || []);
+      const filtered = items.filter((row) => {
+        if (studentFilter) {
+          const haystack = `${row.student_name || ""} ${row.student_email || ""} ${row.firebase_uid}`.toLowerCase();
+          if (!haystack.includes(studentFilter)) return false;
+        }
+        if (itemFilter) {
+          const haystack = `${row.item_title || ""} ${row.item_id}`.toLowerCase();
+          if (!haystack.includes(itemFilter)) return false;
+        }
+        return true;
+      });
+      return json({ items: filtered });
+    }
+    if (path === "/admin/enrollments" && method === "POST") {
+      if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      const body = await bodyJson(req);
+      const studentUid = String(body.studentUid || "").trim();
+      const itemType = String(body.itemType || "");
+      const itemId = String(body.itemId || "");
+      if (!studentUid) return json({ error: "Choose a student." }, 400);
+      if (!["batch", "series"].includes(itemType) || !isUuid(itemId)) return json({ error: "Choose a valid batch or series." }, 400);
+      const { data: profile, error: profileError } = await db.from("student_profiles").select("firebase_uid").eq("firebase_uid", studentUid).maybeSingle();
+      if (profileError) throw profileError;
+      if (!profile) return json({ error: "Student not found." }, 404);
+      const { data: item, error: itemError } = await db.from("course_catalog").select("id,kind,title").eq("id", itemId).maybeSingle();
+      if (itemError) throw itemError;
+      if (!item || item.kind !== itemType) return json({ error: "That batch or series does not exist." }, 404);
+      const { data: existing, error: existingError } = await db.from("enrollments").select("id,active").eq("firebase_uid", studentUid).eq("item_type", itemType).eq("item_id", itemId).maybeSingle();
+      if (existingError) throw existingError;
+      let row;
+      if (existing) {
+        const { data, error } = await db.from("enrollments").update({ active: true }).eq("id", existing.id).select("*").single();
+        if (error) throw error;
+        row = data;
+      } else {
+        const { data, error } = await db.from("enrollments").insert({ firebase_uid: studentUid, item_type: itemType, item_id: itemId, active: true }).select("*").single();
+        if (error) throw error;
+        row = data;
+      }
+      await logActivity(db, claims, "enrollment.create", "enrollments", row.id, `Enrolled ${studentUid} in ${item.title}`);
+      const hydrated = await hydrateEnrollments(db, [row]);
+      return json({ item: hydrated[0] }, existing ? 200 : 201);
+    }
+    const adminEnrollmentMatch = path.match(/^\/admin\/enrollments\/([0-9a-f-]{36})$/i);
+    if (adminEnrollmentMatch && method === "DELETE") {
+      if (!isAdmin) return json({ error: "Admin access denied." }, 403);
+      const { data: row, error: lookupError } = await db.from("enrollments").select("id,firebase_uid,item_type,item_id").eq("id", adminEnrollmentMatch[1]).maybeSingle();
+      if (lookupError) throw lookupError;
+      if (!row) return json({ error: "Enrollment not found." }, 404);
+      const { error } = await db.from("enrollments").delete().eq("id", row.id);
+      if (error) throw error;
+      await logActivity(db, claims, "enrollment.remove", "enrollments", row.id, `Removed enrollment ${row.firebase_uid} → ${row.item_type}:${row.item_id}`);
+      return json({ removed: true });
+    }
+
+    // -----------------------------------------------------------------
+    // Student personal library
+    // -----------------------------------------------------------------
+    if (path === "/library" && method === "GET") {
+      const { data, error } = await db.from("student_library").select("*").eq("firebase_uid", claims.sub).order("updated_at", { ascending: false }).limit(500);
+      if (error) throw error;
+      return json({ items: data || [] });
+    }
+    if (path === "/library" && method === "POST") {
+      const body = await bodyJson(req);
+      const itemType = String(body.itemType || "");
+      const itemId = String(body.itemId || "").trim();
+      const payload = body.payload && typeof body.payload === "object" && !Array.isArray(body.payload) ? body.payload : {};
+      if (!LIBRARY_ITEM_TYPES.has(itemType)) return json({ error: "Invalid library item type." }, 400);
+      if (!itemId || itemId.length > 200) return json({ error: "Invalid library item id." }, 400);
+      if (JSON.stringify(payload).length > 20000) return json({ error: "This library item is too large." }, 400);
+      const now = new Date().toISOString();
+      const { data, error } = await db.from("student_library").upsert({
+        firebase_uid: claims.sub,
+        item_type: itemType,
+        item_id: itemId,
+        payload: payload,
+        updated_at: now,
+      }, { onConflict: "firebase_uid,item_type,item_id" }).select("*").single();
+      if (error) throw error;
+      return json({ item: data });
+    }
+    const libraryDeleteMatch = path.match(/^\/library\/(bookmark|note|recent|challenge|revision)\/([^/]+)$/);
+    if (libraryDeleteMatch && method === "DELETE") {
+      const itemType = libraryDeleteMatch[1];
+      const itemId = decodeURIComponent(libraryDeleteMatch[2]);
+      if (!itemId || itemId.length > 200) return json({ error: "Invalid library item id." }, 400);
+      const { error } = await db.from("student_library").delete().eq("firebase_uid", claims.sub).eq("item_type", itemType).eq("item_id", itemId);
+      if (error) throw error;
+      return json({ removed: true });
+    }
+
     if (path === "/admin/overview" && method === "GET") {
       if (!isAdmin) return json({ error: "Admin access denied." }, 403);
       const counts = {};
@@ -284,6 +467,7 @@ Deno.serve(async (req) => {
       const row = normalizeContentBody(body, null);
       const { data, error } = await db.from("course_catalog").insert(row).select("*").single();
       if (error) throw error;
+      await logActivity(db, claims, "content.create", "course_catalog", data.id, `Created ${data.kind}: ${data.title}`);
       return json({ item: data }, 201);
     }
     const adminContentMatch = path.match(/^\/admin\/content\/([0-9a-f-]{36})$/i);
@@ -293,12 +477,14 @@ Deno.serve(async (req) => {
       const row = normalizeContentBody(body, adminContentMatch[1]);
       const { data, error } = await db.from("course_catalog").update(row).eq("id", adminContentMatch[1]).select("*").single();
       if (error) throw error;
+      await logActivity(db, claims, "content.update", "course_catalog", data.id, `Updated ${data.kind}: ${data.title}`);
       return json({ item: data });
     }
     if (adminContentMatch && method === "DELETE") {
       if (!isAdmin) return json({ error: "Admin access denied." }, 403);
       const { data, error } = await db.from("course_catalog").update({ active: false, updated_at: new Date().toISOString() }).eq("id", adminContentMatch[1]).select("id,kind,title,active").single();
       if (error) throw error;
+      await logActivity(db, claims, "content.disable", "course_catalog", data.id, `Disabled ${data.kind}: ${data.title}`);
       return json({ item: data, disabled: true });
     }
     if (path === "/admin/announcements" && method === "GET") {
@@ -313,6 +499,7 @@ Deno.serve(async (req) => {
       const row = normalizeAnnouncement(body);
       const { data, error } = await db.from("announcements").insert(row).select("*").single();
       if (error) throw error;
+      await logActivity(db, claims, "announcement.create", "announcements", data.id, `Created announcement: ${data.title}`);
       return json({ item: data }, 201);
     }
     const adminAnnouncementMatch = path.match(/^\/admin\/announcements\/([0-9a-f-]{36})$/i);
@@ -324,6 +511,7 @@ Deno.serve(async (req) => {
       const row = normalizeAnnouncement(Object.assign({}, current, body));
       const { data, error } = await db.from("announcements").update(row).eq("id", adminAnnouncementMatch[1]).select("*").single();
       if (error) throw error;
+      await logActivity(db, claims, "announcement.update", "announcements", data.id, `Updated announcement: ${data.title}`);
       return json({ item: data });
     }
     return json({ error: "Not found", path: path }, 404);
@@ -506,4 +694,269 @@ function normalizeAnnouncement(body) {
     scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null
   };
 }
+
+async function publicSitePayload(db) {
+  const { data, error } = await db.from("site_settings").select("key,published,published_at").in("key", SITE_SETTING_KEYS);
+  if (error) {
+    const message = String(error.message || "");
+    if (error.code === "42P01" || message.indexOf("does not exist") >= 0) {
+      return json({ config: {}, publishedAt: {}, degraded: true });
+    }
+    throw error;
+  }
+  const config = {};
+  const publishedAt = {};
+  for (const row of data || []) {
+    if (row.published && typeof row.published === "object" && Object.keys(row.published).length > 0) {
+      config[row.key] = row.published;
+      publishedAt[row.key] = row.published_at;
+    }
+  }
+  return json({ config: config, publishedAt: publishedAt, degraded: false });
+}
+
+function validateSettingDraft(key, draft) {
+  if (!draft || typeof draft !== "object" || Array.isArray(draft)) return "Settings must be a JSON object.";
+  let serialized = "";
+  try { serialized = JSON.stringify(draft); } catch (_) { return "Settings must be valid JSON."; }
+  if (serialized.length > MAX_SETTING_BYTES) return "This settings document is too large.";
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+  const isArray = (value) => Array.isArray(value);
+  if (key === "theme") {
+    if (typeof draft.brandName !== "string" || !draft.brandName.trim() || draft.brandName.length > 80) return "Brand name is required (80 characters max).";
+    for (const field of ["primaryColor", "secondaryColor", "accentColor", "backgroundColor", "surfaceColor", "textColor"]) {
+      if (typeof draft[field] !== "string" || !hex.test(draft[field])) return "Theme colours must be hex values.";
+    }
+    if (Number(draft.radius) < 0 || Number(draft.radius) > 32) return "Radius must be between 0 and 32.";
+  } else if (key === "login") {
+    if (typeof draft.title !== "string" || !draft.title.trim() || draft.title.length > 120) return "Login title is required (120 characters max).";
+    if (typeof draft.emailLabel !== "string" || !draft.emailLabel.trim()) return "Email label is required.";
+    if (typeof draft.passwordLabel !== "string" || !draft.passwordLabel.trim()) return "Password label is required.";
+    if (isArray(draft.highlights) && draft.highlights.length > 8) return "Keep highlights to 8 items or fewer.";
+  } else if (key === "homepage") {
+    if (!isArray(draft.sections)) return "Homepage sections must be an array.";
+    if (draft.sections.length > 40) return "A maximum of 40 homepage sections is supported.";
+    if (draft.sections.some((section) => !section || typeof section !== "object" || !section.id || !section.type)) return "Every homepage section needs an id and type.";
+  } else if (key === "navigation") {
+    if (!isArray(draft.headerLinks) || !isArray(draft.bottomLinks)) return "Navigation links must be arrays.";
+    if (draft.headerLinks.length > 10 || draft.bottomLinks.length > 10) return "Navigation supports up to 10 links per surface.";
+  } else if (key === "footer") {
+    if (isArray(draft.columns) && draft.columns.length > 4) return "The footer supports up to 4 columns.";
+  } else if (key === "banners") {
+    if (!isArray(draft.items)) return "Banners must include an items array.";
+    if (draft.items.length > 40) return "A maximum of 40 banners is supported.";
+    if (draft.items.some((banner) => !banner || typeof banner.title !== "string" || !banner.title.trim())) return "Every banner needs a title.";
+    if (Number(draft.rotationSeconds) < 3 || Number(draft.rotationSeconds) > 20) return "Carousel rotation must be between 3 and 20 seconds.";
+  } else if (key === "popups") {
+    if (!isArray(draft.items) || draft.items.length > 30) return "Popups must be an items array (30 max).";
+  } else if (key === "testimonials") {
+    if (!isArray(draft.items) || draft.items.length > 40) return "Testimonials must be an items array (40 max).";
+  } else if (key === "challenges") {
+    if (!isArray(draft.items) || draft.items.length > 30) return "Challenges must be an items array (30 max).";
+  } else if (key === "features") {
+    if (Object.keys(draft).length > 40) return "Too many feature flags.";
+  } else if (key === "seo") {
+    if (typeof draft.title !== "string" || !draft.title.trim() || draft.title.length > 120) return "SEO title is required (120 characters max).";
+    if (isArray(draft.keywords) && draft.keywords.length > 20) return "Keep keywords to 20 items or fewer.";
+  } else if (key === "media") {
+    if (!isArray(draft.items) || draft.items.length > 300) return "Media library must be an items array (300 max).";
+  }
+  return "";
+}
+
+async function logActivity(db, claims, action, targetType, targetId, summary, metadata) {
+  try {
+    const { error } = await db.from("admin_activity").insert({
+      actor_uid: claims.sub,
+      actor_email: claims.email || "",
+      action: action,
+      target_type: targetType,
+      target_id: String(targetId || ""),
+      summary: String(summary || "").slice(0, 500),
+      metadata: metadata && typeof metadata === "object" ? metadata : {},
+    });
+    if (error) return;
+  } catch (_) {
+    // Auditing must never block the primary write.
+  }
+}
+
+async function hydrateEnrollments(db, rows) {
+  const list = rows || [];
+  if (!list.length) return [];
+  const uids = Array.from(new Set(list.map((row) => row.firebase_uid)));
+  const itemIds = Array.from(new Set(list.map((row) => row.item_id)));
+  const profiles = {};
+  const titles = {};
+  if (uids.length) {
+    const { data, error } = await db.from("student_profiles").select("firebase_uid,display_name,email,exam,class_level").in("firebase_uid", uids);
+    if (error) throw error;
+    for (const profile of data || []) profiles[profile.firebase_uid] = profile;
+  }
+  if (itemIds.length) {
+    const { data, error } = await db.from("course_catalog").select("id,title").in("id", itemIds);
+    if (error) throw error;
+    for (const item of data || []) titles[item.id] = item.title;
+  }
+  return list.map((row) => ({
+    id: row.id,
+    firebase_uid: row.firebase_uid,
+    student_name: profiles[row.firebase_uid]?.display_name || null,
+    student_email: profiles[row.firebase_uid]?.email || null,
+    exam: profiles[row.firebase_uid]?.exam || null,
+    class_level: profiles[row.firebase_uid]?.class_level || null,
+    item_type: row.item_type,
+    item_id: row.item_id,
+    item_title: titles[row.item_id] || null,
+    active: Boolean(row.active),
+    created_at: row.created_at,
+  }));
+}
+
+async function buildAdminAnalytics(db) {
+  const [profilesRes, contentRes, attemptsRes, enrollmentsRes] = await Promise.all([
+    db.from("student_profiles").select("firebase_uid,display_name,email,exam,class_level,avatar_url,created_at").order("created_at", { ascending: false }).limit(5000),
+    db.from("course_catalog").select("id,kind,title,active,exam,classes,metadata,updated_at").limit(5000),
+    db.from("exam_attempts").select("firebase_uid,test_id,score,max_score,correct_count,incorrect_count,unanswered_count,submitted_at").order("submitted_at", { ascending: false }).limit(5000),
+    db.from("enrollments").select("firebase_uid,item_type,item_id,active").limit(5000),
+  ]);
+  for (const res of [profilesRes, contentRes, attemptsRes, enrollmentsRes]) {
+    if (res.error) throw res.error;
+  }
+  const profiles = profilesRes.data || [];
+  const content = contentRes.data || [];
+  const attempts = attemptsRes.data || [];
+  const enrollments = enrollmentsRes.data || [];
+  const percentage = (score, maxScore) => (Number(maxScore) > 0 ? (Number(score) / Number(maxScore)) * 100 : 0);
+
+  const byExam = { JEE: 0, NEET: 0 };
+  const byClass = { "11": 0, "12": 0 };
+  for (const profile of profiles) {
+    if (profile.exam && byExam[profile.exam] !== undefined) byExam[profile.exam] += 1;
+    if (profile.class_level && byClass[profile.class_level] !== undefined) byClass[profile.class_level] += 1;
+  }
+
+  const byKind = {};
+  for (const item of content) {
+    if (!byKind[item.kind]) byKind[item.kind] = { total: 0, active: 0 };
+    byKind[item.kind].total += 1;
+    if (item.active) byKind[item.kind].active += 1;
+  }
+
+  const dayCounts = {};
+  const now = Date.now();
+  const last14Days = [];
+  for (let i = 13; i >= 0; i -= 1) {
+    const date = new Date(now - i * 86400000).toISOString().slice(0, 10);
+    dayCounts[date] = 0;
+    last14Days.push({ date, count: 0 });
+  }
+  const perStudent = {};
+  let totalPercentage = 0;
+  const testsById = {};
+  for (const item of content) if (item.kind === "test") testsById[item.id] = item;
+  const subjects = {};
+
+  for (const attempt of attempts) {
+    const day = String(attempt.submitted_at || "").slice(0, 10);
+    if (dayCounts[day] !== undefined) dayCounts[day] += 1;
+    const pct = percentage(attempt.score, attempt.max_score);
+    totalPercentage += pct;
+    const uid = attempt.firebase_uid;
+    if (!perStudent[uid]) perStudent[uid] = { attempts: 0, total: 0 };
+    perStudent[uid].attempts += 1;
+    perStudent[uid].total += pct;
+
+    const subject = String(testsById[attempt.test_id]?.metadata?.subject || "General");
+    if (!subjects[subject]) subjects[subject] = { attempts: 0, total: 0, correct: 0, incorrect: 0, unanswered: 0 };
+    subjects[subject].attempts += 1;
+    subjects[subject].total += pct;
+    subjects[subject].correct += Number(attempt.correct_count || 0);
+    subjects[subject].incorrect += Number(attempt.incorrect_count || 0);
+    subjects[subject].unanswered += Number(attempt.unanswered_count || 0);
+  }
+
+  const profileByUid = {};
+  for (const profile of profiles) profileByUid[profile.firebase_uid] = profile;
+  const topStudents = Object.entries(perStudent)
+    .map(([uid, stats]) => ({
+      firebaseUid: uid,
+      name: profileByUid[uid]?.display_name || "Student",
+      avatarUrl: profileByUid[uid]?.avatar_url || null,
+      attempts: stats.attempts,
+      averagePercentage: Math.round((stats.total / stats.attempts) * 10) / 10,
+    }))
+    .sort((a, b) => b.averagePercentage - a.averagePercentage || b.attempts - a.attempts)
+    .slice(0, 8);
+
+  const subjectPerformance = Object.entries(subjects)
+    .map(([subject, stats]) => ({
+      subject,
+      attempts: stats.attempts,
+      averagePercentage: Math.round((stats.total / stats.attempts) * 10) / 10,
+      correct: stats.correct,
+      incorrect: stats.incorrect,
+      unanswered: stats.unanswered,
+    }))
+    .sort((a, b) => b.attempts - a.attempts);
+
+  const enrollmentCounts = {};
+  for (const enrollment of enrollments) {
+    if (!enrollment.active) continue;
+    enrollmentCounts[enrollment.item_id] = (enrollmentCounts[enrollment.item_id] || 0) + 1;
+  }
+  const contentById = {};
+  for (const item of content) contentById[item.id] = item;
+  const enrollmentByItem = Object.entries(enrollmentCounts)
+    .map(([itemId, count]) => ({
+      itemId,
+      title: contentById[itemId]?.title || "Untitled",
+      kind: contentById[itemId]?.kind || "unknown",
+      count,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 20);
+
+  let missingThumbnails = 0;
+  let testsWithoutQuestions = 0;
+  let eventsMissingSchedule = 0;
+  let inactiveContent = 0;
+  for (const item of content) {
+    if (!item.active) inactiveContent += 1;
+    const meta = item.metadata || {};
+    if (["batch", "series", "lecture", "resource", "test", "event"].includes(item.kind)) {
+      const hasThumb = Boolean(meta.thumbnailUrl || meta.thumbnail_url || (Array.isArray(meta.images) && meta.images.length));
+      if (!hasThumb) missingThumbnails += 1;
+    }
+    if (item.kind === "test" && (!Array.isArray(meta.questions) || meta.questions.length === 0)) testsWithoutQuestions += 1;
+    if (item.kind === "event" && !meta.startsAt && !meta.starts_at) eventsMissingSchedule += 1;
+  }
+
+  return {
+    students: {
+      total: profiles.length,
+      byExam,
+      byClass,
+      recent: profiles.slice(0, 8).map((profile) => ({
+        firebase_uid: profile.firebase_uid,
+        display_name: profile.display_name,
+        email: profile.email,
+        exam: profile.exam,
+        class_level: profile.class_level,
+        created_at: profile.created_at,
+      })),
+    },
+    content: { total: content.length, active: content.filter((item) => item.active).length, byKind },
+    attempts: {
+      total: attempts.length,
+      averagePercentage: attempts.length ? Math.round((totalPercentage / attempts.length) * 10) / 10 : 0,
+      last14Days: last14Days.map((day) => ({ date: day.date, count: dayCounts[day.date] || 0 })),
+      topStudents,
+    },
+    subjectPerformance,
+    enrollments: { total: enrollments.filter((row) => row.active).length, byItem: enrollmentByItem },
+    contentHealth: { missingThumbnails, testsWithoutQuestions, eventsMissingSchedule, inactiveContent },
+  };
+}
+
 function isUuid(s) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(s)); }

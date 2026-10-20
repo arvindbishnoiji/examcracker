@@ -20,6 +20,9 @@ const ALLOWED_INTERNAL_PREFIXES = [
   '/profile',
   '/chat',
   '/home',
+  '/events',
+  '/search',
+  '/notifications',
   '/admin',
 ];
 
