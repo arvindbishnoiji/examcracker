@@ -30,64 +30,89 @@ export default {
       const playlistUrl = url.searchParams.get("url") || "";
       const playlistId = getPlaylistId(playlistUrl);
       if (!playlistId) return respond({ error: "Provide a valid YouTube playlist URL containing a list= ID." }, 400);
+      const cursorRaw = url.searchParams.get("cursor") || "";
       const requestedLimit = Number(url.searchParams.get("limit") || 200);
       const limit = Math.max(1, Math.min(500, Number.isFinite(requestedLimit) ? requestedLimit : 200));
-      const cursor = url.searchParams.get("cursor") || "";
-      try {
-        const page = await fetch("https://www.youtube.com/playlist?list=" + encodeURIComponent(playlistId), {
-          headers: { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36",
-                     "Accept-Language": "en-US,en;q=0.9" }
-        });
-        if (!page.ok) return respond({ error: "Could not read this playlist. It must be public or accessible by link.", details: "YouTube returned status " + page.status }, page.status);
-        const html = await page.text();
-        const config = extractJsonAfter(html, "ytcfg.set(");
-        const initialData = extractJsonAfter(html, "ytInitialData =") || extractJsonAfter(html, 'window["ytInitialData"] =');
-        if (!initialData) return respond({ error: "YouTube changed the playlist page format. Please retry later or enter videos individually." }, 502);
-        const apiKeyMatch = html.match(/"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"/);
-        const apiKey = (config && config.INNERTUBE_API_KEY) || (apiKeyMatch && apiKeyMatch[1]);
-        const context = (config && config.INNERTUBE_CONTEXT) || null;
-        const playlistTitle = getPlaylistTitle(initialData);
-        const items = [];
-        const seen = new Set();
-        let continuation = decodeCursor(cursor);
-
-        // Return one YouTube page per request. Slicing after scanning multiple
-        // continuation pages can skip videos because the cursor points past them.
-        if (!continuation) {
-          const firstScan = scanPlaylist(initialData, items, seen);
-          continuation = firstScan.continuation || "";
+      const instances = [
+        "https://inv.nadeko.net",
+        "https://invidious.nerdvpn.de",
+        "https://invidious.privacyredirect.com",
+        "https://invidious.f5.si"
+      ];
+      let pageNumber = 1;
+      let preferredInstance = "";
+      if (cursorRaw) {
+        const cursor = decodeCursor(cursorRaw);
+        if (cursor && typeof cursor === "object" && cursor.provider === "invidious") {
+          pageNumber = Math.max(2, Number(cursor.page) || 2);
+          preferredInstance = instances.includes(cursor.instance) ? cursor.instance : "";
         } else {
-          if (!apiKey || !context) {
-            return respond({ error: "YouTube did not provide playlist continuation context. Retry the import; no videos were saved by this request." }, 502);
-          }
-          const browseUrl = "https://www.youtube.com/youtubei/v1/browse?key=" + encodeURIComponent(apiKey) + "&prettyPrint=false";
-          const browse = await fetch(browseUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0", "Origin": "https://www.youtube.com" },
-            body: JSON.stringify({ context: context, continuation: continuation })
-          });
-          if (!browse.ok) {
-            return respond({ error: "YouTube playlist pagination failed (HTTP " + browse.status + "). Retry the import; no videos were saved by this request." }, 502);
-          }
-          const currentData = await browse.json();
-          const scan = scanPlaylist(currentData, items, seen);
-          continuation = scan.continuation || "";
+          // Legacy YouTube cursors cannot be resumed reliably without Innertube context.
+          // The app deduplicates IDs already collected when this page-based fallback continues.
+          pageNumber = 2;
         }
-        const more = Boolean(continuation);
-        return respond({
-          playlistId: playlistId,
-          title: playlistTitle,
-          count: items.length,
-          // Do not slice a scanned page: its cursor is after the complete page.
-          items: items,
-          nextCursor: more ? encodeCursor(continuation) : null,
-          hasMore: more,
-          youtubeDataApiKeyRequired: false,
-          note: "Uses public YouTube page metadata, not the YouTube Data API. Private, restricted, removed, and region-blocked videos may be unavailable."
-        });
-      } catch (_) {
-        return respond({ error: "Could not read this playlist metadata. Check that it is public and try again." }, 502);
       }
+      const orderedInstances = preferredInstance
+        ? [preferredInstance, ...instances.filter((instance) => instance !== preferredInstance)]
+        : instances;
+      const failures = [];
+      for (const instance of orderedInstances) {
+        try {
+          const endpoint = instance + "/api/v1/playlists/" + encodeURIComponent(playlistId) + "?page=" + pageNumber;
+          const upstream = await fetch(endpoint, {
+            headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0 (compatible; ExamCracker/1.0)" },
+            cf: { cacheTtl: 120, cacheEverything: true }
+          });
+          if (!upstream.ok) {
+            failures.push(instance + " returned HTTP " + upstream.status);
+            continue;
+          }
+          const data = await upstream.json();
+          if (!data || !Array.isArray(data.videos)) {
+            failures.push(instance + " returned an unsupported playlist response");
+            continue;
+          }
+          const rawVideos = data.videos.slice(0, limit);
+          const items = rawVideos.map((video, index) => {
+            const videoId = String(video.videoId || "");
+            const thumbnails = Array.isArray(video.videoThumbnails) ? video.videoThumbnails : [];
+            const chosen = thumbnails.find((thumbnail) => thumbnail && /medium|high|maxres/i.test(String(thumbnail.quality || ""))) || thumbnails[thumbnails.length - 1];
+            const thumbnail = chosen && chosen.url
+              ? (String(chosen.url).startsWith("//") ? "https:" + chosen.url : chosen.url)
+              : "https://img.youtube.com/vi/" + encodeURIComponent(videoId) + "/hqdefault.jpg";
+            const seconds = Number(video.lengthSeconds ?? video.duration ?? 0);
+            return {
+              videoId,
+              title: String(video.title || "YouTube video"),
+              description: String(video.description || ""),
+              thumbnail,
+              duration: Number.isFinite(seconds) && seconds > 0 ? formatDuration(seconds) : String(video.duration || ""),
+              position: (pageNumber - 1) * rawVideos.length + index,
+              watchUrl: "https://www.youtube.com/watch?v=" + encodeURIComponent(videoId) + "&list=" + encodeURIComponent(playlistId)
+            };
+          }).filter((video) => /^[a-zA-Z0-9_-]{11}$/.test(video.videoId));
+          const hasMore = Boolean(data.continuation || data.nextpage || rawVideos.length >= Math.min(limit, 100));
+          const nextCursor = hasMore
+            ? encodeCursor(JSON.stringify({ provider: "invidious", instance, page: pageNumber + 1 }))
+            : null;
+          return respond({
+            playlistId: data.playlistId || playlistId,
+            title: data.title || "Imported YouTube Playlist",
+            count: items.length,
+            items,
+            nextCursor,
+            hasMore,
+            youtubeDataApiKeyRequired: false,
+            note: "Playlist loaded through a public Invidious-compatible source. Private, restricted, removed, and region-blocked videos may be unavailable."
+          });
+        } catch (error) {
+          failures.push(instance + ": " + (error instanceof Error ? error.message : "request failed"));
+        }
+      }
+      return respond({
+        error: "All public playlist sources failed. Retry the import in a moment, or verify that the playlist is public.",
+        details: failures.slice(0, 4)
+      }, 502);
     }
     return respond({ error: "Not found", endpoints: ["/health", "/video?url=...", "/playlist?url=...&limit=200&cursor=..."] }, 404);
   }
@@ -195,8 +220,17 @@ function scanContinuation(data) {
   });
   return token;
 }
+function formatDuration(totalSeconds) {
+  const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainder = seconds % 60;
+  return hours > 0
+    ? String(hours) + ":" + String(minutes).padStart(2, "0") + ":" + String(remainder).padStart(2, "0")
+    : String(minutes) + ":" + String(remainder).padStart(2, "0");
+}
 function encodeCursor(value) {
-  try { return btoa(unescape(encodeURIComponent(value))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, ""); }
+  try { return btoa(unescape(encodeURIComponent(value))).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/g, ""); }
   catch (_) { return ""; }
 }
 function decodeCursor(value) {
@@ -204,6 +238,7 @@ function decodeCursor(value) {
   try {
     let s = value.replace(/-/g, "+").replace(/_/g, "/");
     while (s.length % 4) s += "=";
-    return decodeURIComponent(escape(atob(s)));
+    const decoded = decodeURIComponent(escape(atob(s)));
+    try { return JSON.parse(decoded); } catch (_) { return decoded; }
   } catch (_) { return ""; }
 }
