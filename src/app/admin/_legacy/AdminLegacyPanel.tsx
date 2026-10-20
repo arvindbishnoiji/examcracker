@@ -14,6 +14,7 @@ import { fetchVideoMetadata, importFullYoutubePlaylist, extractYoutubeVideoId, e
 import { fromISTDateTimeLocalInput, toISTDateTimeLocalInput } from '@/lib/date';
 import { isSafeHttpUrl, validateQuestionsJson } from '@/lib/validation';
 import type { CourseCatalogItem } from '@/types';
+import YoutubeThumbnail from '@/components/YoutubeThumbnail';
 
 export type AdminTab = 'overview'|'goals'|'batches'|'lectures'|'series'|'tests'|'events'|'announcements'|'students'|'chat';
 
@@ -543,7 +544,7 @@ function AdminLecturesTab(){
               {playlistItems.map((it:any, idx:number)=>(
                 <div key={it.videoId} className="flex gap-3 p-2 border-b border-ink-100">
                   <input type="checkbox" checked={it.selected!==false} onChange={e=> setPlaylistItems(s=> s.map((x:any,i)=> i===idx? {...x, selected:e.target.checked}:x))} />
-                  <img src={it.thumbnail} alt={it.title} className="h-14 w-20 rounded object-cover bg-ink-100" />
+                  <YoutubeThumbnail src={it.thumbnail} videoId={it.videoId} alt={it.title} className="h-14 w-20 rounded object-cover bg-ink-100 shrink-0" />
                   <div className="flex-1 min-w-0">
                     <input aria-label={`Lecture ${idx+1} title`} value={it.title} onChange={e=> setPlaylistItems(s=> s.map((x,i)=> i===idx? {...x, title:e.target.value}:x))} className="w-full text-sm font-medium bg-transparent border-b border-transparent focus:border-brand-300 focus:outline-none" />
                     <Textarea value={it.description || ''} onChange={e=> setPlaylistItems(s=> s.map((x,i)=> i===idx? {...x, description:e.target.value}:x))} rows={2} placeholder="Lecture description (optional)" />
@@ -572,7 +573,7 @@ function AdminLecturesTab(){
           return (
             <Card key={it.id} className="p-4">
               <div className="flex gap-3">
-                <img src={m.thumbnailUrl || (m.videoId? getYoutubeDefaultThumbnail(m.videoId):'https://via.placeholder.co/120x68')} alt={it.title} className="h-16 w-28 rounded-xl object-cover bg-ink-100 shrink-0" />
+                <YoutubeThumbnail src={m.thumbnailUrl || (m.videoId? getYoutubeDefaultThumbnail(m.videoId):'')} videoId={String(m.videoId || '')} alt={it.title} className="h-16 w-28 rounded-xl object-cover bg-ink-100 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm line-clamp-1">{it.title} <Badge variant={it.active?'success':'danger'}>{it.active?'Active':'Disabled'}</Badge> <Badge>{it.exam}</Badge> <Badge>{it.classes.join('/')}</Badge></p>
                   <p className="text-xs text-ink-500 line-clamp-2">{it.description}</p>
