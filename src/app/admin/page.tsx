@@ -430,6 +430,7 @@ function AdminLecturesTab(){
     if(!selectedItems.length){ push('Select at least one video','error'); return; }
     setSaving(true);
     let ok=0, fail=0;
+    const failureMessages: string[] = [];
     for(const it of selectedItems){
       try{
         const metadata = {
@@ -437,9 +438,20 @@ function AdminLecturesTab(){
         };
         await createAdminContent({ kind:'lecture', title: it.title, description: it.description || `Imported from playlist ${playlistTitle}`, exam: playlistExam as any, classes: playlistClasses as any, active:true, accessCode:null, metadata });
         ok++;
-      }catch{ fail++; }
+      }catch(err){
+        fail++;
+        if(failureMessages.length < 2) {
+          failureMessages.push(err instanceof Error ? err.message : 'Unknown save error');
+        }
+      }
     }
-    push(`Saved ${ok} lectures${fail? `, ${fail} failed`:''}`,'success');
+    if(fail === 0) {
+      push(`Successfully saved all ${ok} lectures.`, 'success');
+    } else if(ok === 0) {
+      push(`No lectures were saved (${fail} failed). ${failureMessages.join(' • ')}`, 'error');
+    } else {
+      push(`Saved ${ok} lectures; ${fail} failed. ${failureMessages.join(' • ')}`, 'error');
+    }
     setSaving(false);
     if(ok) load();
   }
