@@ -30,6 +30,7 @@ jobs:
         with:
           # Deploy exactly the commit whose main-branch CI completed successfully.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -92,7 +93,20 @@ jobs:
           NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${{ vars.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED || 'true' }}
           NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://examcrack.pages.dev' }}
 
+      - name: Detect D1 migration changes in this commit
+        id: migration_changes
+        shell: bash
+        run: |
+          if git diff --name-only HEAD^ HEAD -- migrations | grep -q '^migrations/'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "D1 migration files changed; database verification and migrations are required."
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No D1 migration files changed; skipping the D1 API preflight so unrelated frontend/Worker deployments are not blocked by D1-only permissions."
+          fi
+
       - name: Verify configured D1 database and apply schema migrations
+        if: steps.migration_changes.outputs.changed == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
