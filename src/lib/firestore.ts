@@ -1,46 +1,12 @@
 'use client';
 
-import { getFirestore, collection,
-  doc,
-  addDoc,
-  setDoc,
-  updateDoc,
-  onSnapshot,
-  query,
-  orderBy,
-  where,
-  limit,
-  getDocs,
-  writeBatch,
-  type Unsubscribe,
-  type Firestore,
-} from 'firebase/firestore';
-import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
+// Compatibility-named module retained for gradual component migration.
+// Application records now live in Cloudflare D1 via the same-origin API;
+// Firebase is used only to establish the signed-in identity.
+
+import type { Unsubscribe } from 'firebase/firestore';
 import { APP_CONFIG } from './config';
-
-// Firestore is isolated from the shared auth module so the Node-only gRPC/protobuf
-// dependency graph is not pulled into the root route's server bundle.
-let firestoreApp: FirebaseApp | null = null;
-let firestoreDb: import('firebase/firestore').Firestore | null = null;
-function getFirestoreDb() {
-  if (typeof window === 'undefined') {
-    throw new Error('Firestore can only be initialized in the browser');
-  }
-  if (!firestoreApp) {
-    firestoreApp = getApps().length ? getApp() : initializeApp({
-      apiKey: APP_CONFIG.firebase.apiKey,
-      authDomain: APP_CONFIG.firebase.authDomain,
-      projectId: APP_CONFIG.firebase.projectId,
-      storageBucket: APP_CONFIG.firebase.storageBucket,
-      messagingSenderId: APP_CONFIG.firebase.messagingSenderId,
-      appId: APP_CONFIG.firebase.appId,
-      measurementId: APP_CONFIG.firebase.measurementId || undefined,
-    });
-  }
-  if (!firestoreDb) firestoreDb = getFirestore(firestoreApp);
-  return firestoreDb;
-}
-
+import { getFreshIdToken } from './firebase';
 import type {
   AppNotification,
   BroadcastNotice,
@@ -50,238 +16,159 @@ import type {
   StudentThread,
 } from '@/types';
 
-export function subscribeToStudentMessages(
-  studentUid: string,
-  onMessages: (messages: ChatMessage[]) => void,
-  onError?: (err: Error) => void
-): Unsubscribe {
-  const db = getFirestoreDb();
-  const messagesRef = collection(db, 'studentThreads', studentUid, 'messages');
-  const q = query(messagesRef, orderBy('createdAt', 'asc'), limit(250));
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const list: ChatMessage[] = snapshot.docs.map((d) => {
-        const data = d.data() as Record<string, unknown>;
-        return {
-          id: d.id,
-          senderUid: String(data.senderUid || ''),
-          senderRole: data.senderRole === 'admin' ? 'admin' : 'student',
-          text: String(data.text || ''),
-          createdAt: String(data.createdAt || new Date().toISOString()),
-          readAt: data.readAt ? String(data.readAt) : null,
-          isRead: Boolean(data.isRead || data.readAt),
-          attachments: Array.isArray(data.attachments) ? (data.attachments as unknown[]).map(String) : [],
-        };
-      });
-      onMessages(list);
-    },
-    (err) => onError?.(err as Error)
-  );
-}
-
-export function subscribeToAllStudentThreads(
-  onThreads: (threads: StudentThread[]) => void,
-  onError?: (err: Error) => void
-): Unsubscribe {
-  const db = getFirestoreDb();
-  const threadsRef = collection(db, 'studentThreads');
-  const q = query(threadsRef, limit(500));
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const list: StudentThread[] = snapshot.docs
-        .map((d) => {
-          const data = d.data() as Record<string, unknown>;
-          return {
-            id: d.id,
-            studentUid: String((data.studentUid as string) || d.id),
-            studentName: data.studentName ? String(data.studentName) : undefined,
-            studentEmail: data.studentEmail ? String(data.studentEmail) : null,
-            exam: (data.exam as ExamTrack) || undefined,
-            classLevel: (data.classLevel as ClassLevel) || undefined,
-            lastMessageText: data.lastMessageText ? String(data.lastMessageText) : '',
-            lastMessageAt: data.lastMessageAt ? String(data.lastMessageAt) : '',
-            lastSenderRole:
-              data.lastSenderRole === 'admin'
-                ? ('admin' as const)
-                : data.lastSenderRole === 'student'
-                ? ('student' as const)
-                : undefined,
-            unreadByAdmin: Boolean(data.unreadByAdmin),
-            unreadByStudent: Boolean(data.unreadByStudent),
-            updatedAt: data.updatedAt ? String(data.updatedAt) : '',
-          };
-        })
-        .sort((a, b) => {
-          const ta = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
-          const tb = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
-          return tb - ta;
-        });
-      onThreads(list);
-    },
-    (err) => onError?.(err as Error)
-  );
-}
-
-export async function sendStudentMessage(
-  studentUid: string,
-  text: string,
-  senderRole: 'student' | 'admin' = 'student',
-  senderUid: string
-): Promise<void> {
-  if (!text.trim()) throw new Error('Message cannot be empty');
-  if (text.length > 5000) throw new Error('Message is too long (max 5000 characters)');
-  if (senderRole === 'admin' && !senderUid) throw new Error('Admin UID required');
-  // Prevent student spoofing admin role: this is also enforced by Firestore rules
-  if (senderRole === 'admin') {
-    // will be validated server-side via rules email check
-  }
-  const db = getFirestoreDb();
-  const threadRef = doc(db, 'studentThreads', studentUid);
-  const messagesRef = collection(db, 'studentThreads', studentUid, 'messages');
-  const now = new Date().toISOString();
-
-  // Create thread doc if not exists
-  await setDoc(
-    threadRef,
-    {
-      studentUid,
-      lastMessageText: text.slice(0, 200),
-      lastMessageAt: now,
-      lastSenderRole: senderRole,
-      unreadByAdmin: senderRole === 'student',
-      unreadByStudent: senderRole === 'admin',
-      updatedAt: now,
-    },
-    { merge: true }
-  );
-
-  await addDoc(messagesRef, {
-    senderUid,
-    senderRole,
-    text: text.trim(),
-    createdAt: now,
-    readAt: null,
-    isRead: false,
+async function requestD1<T>(path: string, options: { method?: 'GET'|'POST'|'PATCH'|'DELETE'; body?: unknown } = {}): Promise<T> {
+  const token = await getFreshIdToken(false);
+  const response = await fetch(`${APP_CONFIG.apiBaseUrl}${path}`, {
+    method: options.method || 'GET',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    cache: 'no-store',
   });
+  let payload: Record<string, unknown> = {};
+  try { payload = await response.json() as Record<string, unknown>; } catch { payload = {}; }
+  if (!response.ok) throw new Error(typeof payload.error === 'string' ? payload.error : `Request failed (${response.status})`);
+  return payload as T;
+}
 
-  // Update unread flags
-  await setDoc(
-    threadRef,
-    {
-      lastMessageText: text.slice(0, 200),
-      lastMessageAt: now,
-      lastSenderRole: senderRole,
-      unreadByAdmin: senderRole === 'student',
-      unreadByStudent: senderRole === 'admin',
-      updatedAt: now,
-    },
-    { merge: true }
-  );
+function poll<T>(load: () => Promise<T>, onValue: (value: T) => void, onError?: (error: Error) => void, delay = 12000): Unsubscribe {
+  let stopped = false;
+  let busy = false;
+  const tick = async () => {
+    if (stopped || busy) return;
+    busy = true;
+    try { const value = await load(); if (!stopped) onValue(value); }
+    catch (error) { if (!stopped) onError?.(error instanceof Error ? error : new Error('Unable to load data.')); }
+    finally { busy = false; }
+  };
+  void tick();
+  const timer = window.setInterval(() => { void tick(); }, delay);
+  return () => { stopped = true; window.clearInterval(timer); };
+}
+
+function mapMessage(value: Record<string, unknown>): ChatMessage {
+  return {
+    id: String(value.id || ''),
+    senderUid: String(value.sender_uid || value.senderUid || ''),
+    senderRole: value.sender_role === 'admin' || value.senderRole === 'admin' ? 'admin' : 'student',
+    text: String(value.text || ''),
+    createdAt: String(value.created_at || value.createdAt || new Date().toISOString()),
+    readAt: value.read_at ? String(value.read_at) : value.readAt ? String(value.readAt) : null,
+    isRead: Boolean(value.is_read || value.isRead || value.read_at || value.readAt),
+    attachments: Array.isArray((value.payload as Record<string, unknown> | undefined)?.attachments)
+      ? ((value.payload as Record<string, unknown>).attachments as unknown[]).map(String)
+      : [],
+  };
+}
+function mapThread(value: Record<string, unknown>): StudentThread {
+  return {
+    id: String(value.id || ''),
+    studentUid: String(value.firebase_uid || value.studentUid || ''),
+    studentName: value.display_name ? String(value.display_name) : value.studentName ? String(value.studentName) : undefined,
+    studentEmail: value.email ? String(value.email) : value.studentEmail ? String(value.studentEmail) : null,
+    exam: (value.exam as ExamTrack) || undefined,
+    classLevel: (value.class_level as ClassLevel) || (value.classLevel as ClassLevel) || undefined,
+    lastMessageText: String(value.last_message_text || value.lastMessageText || ''),
+    lastMessageAt: String(value.last_message_at || value.lastMessageAt || value.updated_at || value.updatedAt || ''),
+    lastSenderRole: value.last_sender_role === 'admin' || value.lastSenderRole === 'admin' ? 'admin' : 'student',
+    unreadByAdmin: Boolean(value.unread_by_admin || value.unreadByAdmin),
+    unreadByStudent: Boolean(value.unread_by_student || value.unreadByStudent),
+    updatedAt: String(value.updated_at || value.updatedAt || ''),
+  };
+}
+
+export function subscribeToStudentMessages(studentUid: string, onMessages: (messages: ChatMessage[]) => void, onError?: (err: Error) => void): Unsubscribe {
+  return poll(async () => {
+    const list = await requestD1<{ items: Record<string, unknown>[] }>('/feedback');
+    const thread = (list.items || []).find((item) => String(item.firebase_uid || item.studentUid || '') === studentUid);
+    if (!thread) return [] as ChatMessage[];
+    const detail = await requestD1<{ messages: Record<string, unknown>[] }>(`/feedback/${encodeURIComponent(String(thread.id))}`);
+    return (detail.messages || []).map(mapMessage);
+  }, onMessages, onError);
+}
+
+export function subscribeToAllStudentThreads(onThreads: (threads: StudentThread[]) => void, onError?: (err: Error) => void): Unsubscribe {
+  return poll(async () => {
+    const res = await requestD1<{ items: Record<string, unknown>[] }>('/admin/feedback');
+    return (res.items || []).map(mapThread);
+  }, onThreads, onError);
+}
+
+export function subscribeToFeedbackMessages(threadId: string, onMessages: (messages: ChatMessage[]) => void, onError?: (err: Error) => void): Unsubscribe {
+  return poll(async () => {
+    const res = await requestD1<{ messages: Record<string, unknown>[] }>(`/admin/feedback/${encodeURIComponent(threadId)}`);
+    return (res.messages || []).map(mapMessage);
+  }, onMessages, onError);
+}
+
+export async function sendStudentMessage(studentUidOrThreadId: string, text: string, senderRole: 'student'|'admin' = 'student', senderUid: string): Promise<void> {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error('Feedback cannot be empty');
+  if (trimmed.length > 5000) throw new Error('Feedback must be 5000 characters or fewer.');
+  if (senderRole === 'admin') {
+    await requestD1(`/admin/feedback/${encodeURIComponent(studentUidOrThreadId)}/reply`, { method: 'POST', body: { message: trimmed } });
+  } else {
+    await requestD1('/feedback', { method: 'POST', body: { subject: 'Student feedback', category: 'general', message: trimmed } });
+  }
 }
 
 export async function markThreadReadForStudent(studentUid: string): Promise<void> {
-  const db = getFirestoreDb();
-  const threadRef = doc(db, 'studentThreads', studentUid);
-  await updateDoc(threadRef, { unreadByStudent: false }).catch(() => {});
+  const res = await requestD1<{ items: Record<string, unknown>[] }>('/feedback');
+  const thread = (res.items || []).find((x) => String(x.firebase_uid || x.studentUid || '') === studentUid);
+  if (thread?.id) await requestD1(`/feedback/${encodeURIComponent(String(thread.id))}`);
+}
+export async function markThreadReadForAdmin(threadId: string): Promise<void> {
+  await requestD1(`/admin/feedback/${encodeURIComponent(threadId)}`, { method: 'PATCH', body: { markRead: true } });
 }
 
-export async function markThreadReadForAdmin(studentUid: string): Promise<void> {
-  const db = getFirestoreDb();
-  const threadRef = doc(db, 'studentThreads', studentUid);
-  await updateDoc(threadRef, { unreadByAdmin: false }).catch(() => {});
-}
-
-export function subscribeToNotifications(
-  studentUid: string,
-  onNotifications: (items: AppNotification[]) => void,
-  onError?: (err: Error) => void
-): Unsubscribe {
-  const db = getFirestoreDb();
-  const ref = collection(db, 'users', studentUid, 'notifications');
-  const q = query(ref, orderBy('createdAt', 'desc'), limit(100));
-  return onSnapshot(
-    q,
-    (snap) => {
-      const list: AppNotification[] = snap.docs.map((d) => {
-        const data = d.data() as Record<string, unknown>;
-        return {
-          id: d.id,
-          title: String(data.title || ''),
-          body: String(data.body || data.message || ''),
-          deepLink: data.deepLink ? String(data.deepLink) : null,
-          createdAt: String(data.createdAt || data.created_at || new Date().toISOString()),
-          readAt: data.readAt ? String(data.readAt) : null,
-          isRead: Boolean(data.isRead || data.readAt),
-          type: (data.type as AppNotification['type']) || 'info',
-        };
-      });
-      onNotifications(list);
-    },
-    (err) => onError?.(err as Error)
-  );
+export function subscribeToNotifications(studentUid: string, onNotifications: (items: AppNotification[]) => void, onError?: (err: Error) => void): Unsubscribe {
+  return poll(async () => {
+    const res = await requestD1<{ items: Record<string, unknown>[] }>('/notifications');
+    return (res.items || []).map((item) => ({
+      id: String(item.id || ''),
+      title: String(item.title || ''),
+      body: String(item.body || ''),
+      deepLink: item.deepLink ? String(item.deepLink) : null,
+      createdAt: String(item.createdAt || item.created_at || new Date().toISOString()),
+      readAt: item.readAt ? String(item.readAt) : null,
+      isRead: Boolean(item.isRead || item.is_read || item.readAt),
+      type: (item.type as AppNotification['type']) || 'info',
+    }));
+  }, onNotifications, onError);
 }
 
 export async function markNotificationRead(studentUid: string, notificationId: string): Promise<void> {
-  const db = getFirestoreDb();
-  const ref = doc(db, 'users', studentUid, 'notifications', notificationId);
-  await updateDoc(ref, { isRead: true, readAt: new Date().toISOString() }).catch(() => {});
+  await requestD1(`/notifications/${encodeURIComponent(notificationId)}`, { method: 'PATCH', body: {} });
 }
 
-export function subscribeToBroadcasts(
-  onBroadcasts: (items: BroadcastNotice[]) => void,
-  onError?: (err: Error) => void
-): Unsubscribe {
-  const db = getFirestoreDb();
-  const ref = collection(db, 'broadcasts');
-  const q = query(ref, where('active', '==', true), limit(50));
-  return onSnapshot(
-    q,
-    (snap) => {
-      const list: BroadcastNotice[] = snap.docs.map((d) => {
-        const data = d.data() as Record<string, unknown>;
-        return {
-          id: d.id,
-          title: String(data.title || ''),
-          body: String(data.body || ''),
-          deepLink: data.deepLink ? String(data.deepLink) : null,
-          active: Boolean(data.active),
-          createdAt: String(data.createdAt || data.created_at || new Date().toISOString()),
-        };
-      });
-      onBroadcasts(list);
-    },
-    (err) => onError?.(err as Error)
-  );
+export function subscribeToBroadcasts(onBroadcasts: (items: BroadcastNotice[]) => void, onError?: (err: Error) => void): Unsubscribe {
+  return poll(async () => {
+    const res = await requestD1<{ items: Record<string, unknown>[] }>('/broadcasts');
+    return (res.items || []).map((item) => ({
+      id: String(item.id || ''),
+      title: String(item.title || ''),
+      body: String(item.body || ''),
+      deepLink: item.deepLink ? String(item.deepLink) : null,
+      exam: item.exam as BroadcastNotice['exam'],
+      classes: Array.isArray(item.classes) ? item.classes.map(String) as ClassLevel[] : undefined,
+      active: Boolean(item.active),
+      createdAt: String(item.createdAt || item.created_at || new Date().toISOString()),
+    }));
+  }, onBroadcasts, onError);
 }
 
-// FCM helpers (browser only, optional)
 export async function tryRegisterFCMToken(studentUid: string): Promise<string | null> {
   if (typeof window === 'undefined' || !('Notification' in window)) return null;
   try {
     const { getMessaging, getToken, isSupported } = await import('firebase/messaging');
-    const supported = await isSupported().catch(() => false);
-    if (!supported) return null;
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') return null;
-    const { APP_CONFIG } = await import('./config');
-    if (!APP_CONFIG.firebase.vapidKey) return null;
+    if (!await isSupported().catch(() => false)) return null;
+    if (await Notification.requestPermission() !== 'granted' || !APP_CONFIG.firebase.vapidKey) return null;
     const messaging = getMessaging();
     const token = await getToken(messaging, { vapidKey: APP_CONFIG.firebase.vapidKey });
     if (!token) return null;
-    const db = getFirestoreDb();
-    const tokenRef = doc(db, 'fcmTokens', studentUid, 'tokens', token.slice(0, 50));
-    await setDoc(tokenRef, { token, createdAt: new Date().toISOString(), platform: 'web' }, { merge: true });
+    await requestD1('/push-tokens', { method: 'POST', body: { token, platform: 'web' } });
     return token;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
-
-// ---------------------------------------------------------------------------
-// Admin notification delivery
-// ---------------------------------------------------------------------------
 
 export interface AdminNotificationInput {
   title: string;
@@ -289,62 +176,9 @@ export interface AdminNotificationInput {
   deepLink?: string | null;
   type?: AppNotification['type'];
 }
-
-/**
- * Writes an in-app notification document for one student. Firestore rules allow
- * this only for the verified admin account. The student notifications page
- * subscribes to this exact subcollection, so delivery is immediately visible.
- */
-export async function sendAdminNotification(
-  studentUid: string,
-  input: AdminNotificationInput
-): Promise<void> {
-  const db = getFirestoreDb();
-  await addDoc(collection(db, 'users', studentUid, 'notifications'), {
-    title: input.title.trim().slice(0, 160),
-    body: input.body.trim().slice(0, 2000),
-    deepLink: input.deepLink || null,
-    type: input.type || 'info',
-    isRead: false,
-    readAt: null,
-    createdAt: new Date().toISOString(),
-  });
+export async function sendAdminNotification(studentUid: string, input: AdminNotificationInput): Promise<void> {
+  await requestD1('/admin/notifications', { method: 'POST', body: { studentUids: [studentUid], input } });
 }
-
-/**
- * Fan-out delivery using batched writes (max 400 per batch to stay under the
- * 500-operation Firestore limit). Returns how many documents were written and
- * which student UIDs failed, so the admin UI can report real results.
- */
-export async function sendAdminNotificationBatch(
-  studentUids: string[],
-  input: AdminNotificationInput
-): Promise<{ sent: number; failed: string[] }> {
-  const db = getFirestoreDb();
-  let sent = 0;
-  const failed: string[] = [];
-  for (let index = 0; index < studentUids.length; index += 400) {
-    const chunk = studentUids.slice(index, index + 400);
-    const batch = writeBatch(db);
-    const createdAt = new Date().toISOString();
-    for (const uid of chunk) {
-      const ref = doc(collection(db, 'users', uid, 'notifications'));
-      batch.set(ref, {
-        title: input.title.trim().slice(0, 160),
-        body: input.body.trim().slice(0, 2000),
-        deepLink: input.deepLink || null,
-        type: input.type || 'info',
-        isRead: false,
-        readAt: null,
-        createdAt,
-      });
-    }
-    try {
-      await batch.commit();
-      sent += chunk.length;
-    } catch (err) {
-      failed.push(...chunk);
-    }
-  }
-  return { sent, failed };
+export async function sendAdminNotificationBatch(studentUids: string[], input: AdminNotificationInput): Promise<{ sent: number; failed: string[] }> {
+  return requestD1('/admin/notifications', { method: 'POST', body: { studentUids, input } });
 }
