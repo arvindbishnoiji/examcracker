@@ -919,7 +919,7 @@ export function AdminFeedbackTab(){
   useEffect(()=>{
     let cancelled = false;
     let unsub: (() => void) | undefined;
-    import('@/lib/firestore').then(({ subscribeToAllStudentThreads }) => {
+    import('@/lib/app-data').then(({ subscribeToAllStudentThreads }) => {
       if (!cancelled) unsub = subscribeToAllStudentThreads(setThreads);
     }).catch(() => {
       if (!cancelled) push('Unable to load student feedback', 'error');
@@ -931,7 +931,7 @@ export function AdminFeedbackTab(){
     if(!selected || !user) return;
     let cancelled = false;
     let unsub: (() => void) | undefined;
-    import('@/lib/firestore').then(({ subscribeToFeedbackMessages }) => {
+    import('@/lib/app-data').then(({ subscribeToFeedbackMessages }) => {
       if (!cancelled) unsub = subscribeToFeedbackMessages(selected, setMessages);
     }).catch(() => {
       if (!cancelled) push('Unable to load feedback details', 'error');
@@ -944,7 +944,7 @@ export function AdminFeedbackTab(){
     if(!selected || !user || !reply.trim()) return;
     if(reply.length>5000){ push('Message too long','error'); return; }
     setSending(true);
-    try{ const { sendStudentMessage } = await import('@/lib/firestore'); await sendStudentMessage(selected, reply.trim(), 'admin', user.uid); setReply(''); push('Replied','success'); }catch(err){ push(err instanceof Error? err.message:'Failed','error'); } finally{ setSending(false); }
+    try{ const { sendStudentMessage } = await import('@/lib/app-data'); await sendStudentMessage(selected, reply.trim(), 'admin', user.uid); setReply(''); push('Replied','success'); }catch(err){ push(err instanceof Error? err.message:'Failed','error'); } finally{ setSending(false); }
   }
 
   return (
