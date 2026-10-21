@@ -455,7 +455,7 @@ export const DEFAULT_FOOTER: FooterConfig = {
       title: 'Support',
       links: [
         { id: 'footer-notifications', label: 'Notifications', href: '/notifications' },
-        { id: 'footer-chat', label: 'Doubt chat', href: '/chat' },
+        { id: 'footer-feedback', label: 'Feedback', href: '/feedback' },
       ],
     },
   ],
