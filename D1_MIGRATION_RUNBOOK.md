@@ -22,6 +22,12 @@ only future D1 writes matter.
 The supplied database name and ID have not been independently verified from this
 repository. No claim is made that the remote schema has been applied.
 
+## Firestore cutover prerequisite (separate from Supabase)
+
+The statement above only confirms that **Supabase** had no source rows. It does **not** verify that the old Firebase **Firestore** collections are empty. The current `main` app uses Firestore for student chat threads/messages (`studentThreads/{uid}/messages`), per-student notifications (`users/{uid}/notifications`), broadcasts (`broadcasts`) and push-token records (`fcmTokens/{uid}/tokens`). This PR removes those Firestore-backed app flows and introduces D1-backed feedback, notifications, broadcasts and push-token tables, but it does not export or import existing Firestore documents.
+
+**Before production cutover:** verify the old collections contain no records that must be retained. If any are needed, take a Firestore export/backup and plan, implement and validate a migration into the matching D1 tables before switching traffic. Compare record counts and preserve message/notification IDs, timestamps, read/unread state and relevant student UIDs. Do not delete or disable the old Firestore data until the new app is verified and any required records are migrated. This repository cannot verify remote Firestore contents, so this check remains an owner-run prerequisite.
+
 ## Validate locally first (no Cloudflare account needed)
 
 ```bash
