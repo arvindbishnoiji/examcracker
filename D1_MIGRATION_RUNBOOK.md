@@ -1,20 +1,22 @@
-# Exam Cracker — Cloudflare D1 Setup and Cutover Runbook
+# Exam Cracker — D1 Setup and Safe Rollout
 
-## Target configuration
+## Target database
 
-- D1 database name: `exam-cracker-db`
-- D1 database ID supplied by the owner: `dbf2375d-a302-443f-83bf-df59e1d98177`
-- Wrangler configuration: root `wrangler.toml`
+- Database name: `exam-cracker-db`
+- Owner-provided database ID: `dbf2375d-a302-443f-83bf-df59e1d98177`
+- Worker: `exam-cracker-web`
 - D1 binding: `DB`
-- Migrations directory: `migrations/`
-- Firebase project: `darvo1`
+- Migration: `migrations/0001_initial_schema.sql`
+- Firebase Auth project: `darvo1`
 - Admin email: `arvinddarabishnoi@gmail.com`
 
-The name and ID are owner-provided. This document does not claim the remote schema or data migration has already been applied.
+The owner confirmed that Supabase has no data to migrate. **Do not export/import Supabase rows.** The goal is to use D1 for new application data and keep Firebase Authentication for identity.
 
-## Apply the schema
+The supplied database name and ID have not been independently verified by the Cloudflare connector in this session. No claim is made that the remote schema has already been applied.
 
-Run these commands in the repository on a machine authenticated to the correct Cloudflare account. Do not put the Cloudflare API token in source code or commit it.
+## Apply and verify schema
+
+From the repo, authenticate to the correct Cloudflare account and verify the database before applying anything:
 
 ```bash
 npm ci
@@ -25,20 +27,26 @@ npx wrangler d1 migrations apply exam-cracker-db --remote
 npx wrangler d1 execute exam-cracker-db --remote --command="SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
 ```
 
-If `npx wrangler d1 list` does not show the supplied database ID, stop and confirm the authenticated account instead of creating a duplicate database.
+Stop if the database list does not contain ID `dbf2375d-a302-443f-83bf-df59e1d98177`. Do not create a duplicate. Never commit a Cloudflare API token; use Wrangler's authenticated login or GitHub Actions secrets.
 
-## Important: not yet a production cutover
+## Intended runtime
 
-This branch sets the Worker binding and adds a D1-compatible schema baseline. Existing production API code still depends on Supabase Edge Functions for relational data, and some messaging/notification data still uses Firestore. Those live paths must be converted before the app can be said to run fully on D1.
+Browser Firebase Auth ID token → same-origin `/api/ec/*` → server token verification/admin authorization → D1 `DB`.
 
-Before cutover:
-1. Back up and inventory every Supabase table and every Firestore app-data collection.
-2. Add a repeatable, resumable importer using secrets kept outside Git.
-3. Preserve IDs, Firebase UIDs, JSON fields, timestamps and relationships.
-4. Compare source and D1 row counts and verify imported values.
-5. Replace Supabase Edge Function calls with authenticated server-side D1 repositories/APIs.
-6. Replace Firestore application-data access with D1, retaining Firebase Authentication.
-7. Run typecheck, tests, lint, production build and Cloudflare build.
-8. Deploy only after all migration-integrity checks pass.
+The Worker is only the compute/API layer; records must be persisted to D1. Firebase passwords stay in Firebase Auth. The separate `ec-content-api` Worker is retained only for video/playlist metadata.
 
-Never store passwords or private credentials in D1. Never delete source data during the first pass. Keep a backup and documented rollback until the new application is verified in production.
+The student Chat/Doubt feature is being replaced by Feedback. Feedback tickets, messages/replies and statuses are stored in `feedback_threads` and `feedback_messages` in D1. The compatibility file `src/lib/firestore.ts` now sends these and notification requests to the same-origin D1 API; it must not perform Firestore writes.
+
+## Current limitations and cutover gate
+
+A draft PR adds the D1 binding/schema, D1 API implementation and feedback UI, but this is not the same as proving the production app is cut over. Confirm:
+1. CI typecheck, unit tests, lint and both builds pass on the latest PR commit.
+2. `npx wrangler d1 migrations apply exam-cracker-db --local` applies cleanly in CI/local.
+3. The remote database ID, tables and D1 health endpoint are verified with Wrangler.
+4. Every student/admin client route used by the app has a matching D1 handler and correct response shape.
+5. Feedback privacy is tested (student A cannot fetch student B's feedback; only configured admin can list/reply).
+6. New profile/content/test/settings/notification writes are confirmed persisted to D1.
+7. The app has no active Supabase calls or Firestore application-data writes.
+8. Mobile/desktop pages and login/signup/onboarding are smoke-tested.
+
+No Supabase or Firestore application-data records are to be transferred. Keep old source directories only as clearly unused historical reference until the final cleanup is reviewed; don't deploy an incomplete cutover or delete any unrelated Firebase Auth configuration.
