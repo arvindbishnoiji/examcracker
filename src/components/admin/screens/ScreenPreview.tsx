@@ -608,6 +608,7 @@ export function ScreenPreview({
       </div>
       <div className="space-y-3 rounded-lg bg-[var(--ec-bg)]">
         <ScreenPageHeader
+          headingLevel="h2"
           showHeader={base.showHeader}
           eyebrow={base.eyebrow}
           title={base.pageTitle}

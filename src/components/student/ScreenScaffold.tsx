@@ -13,7 +13,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { ArrowRight, Info, Megaphone } from 'lucide-react';
 import type { ScreenAnnouncement, ScreenAnnouncementTone, ScreenHelp } from '@/types';
-import { isValidInternalDeepLink } from '@/lib/validation';
+import { isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
 
 const TONE_CLASSES: Record<ScreenAnnouncementTone, { wrap: string; icon: string }> = {
   brand: { wrap: 'border-brand-200 bg-brand-50 text-brand-900', icon: 'text-brand-700' },
@@ -29,6 +29,7 @@ export function ScreenPageHeader({
   meta,
   actions,
   showHeader = true,
+  headingLevel = 'h1',
 }: {
   eyebrow?: string;
   title: string;
@@ -36,8 +37,11 @@ export function ScreenPageHeader({
   meta?: ReactNode;
   actions?: ReactNode;
   showHeader?: boolean;
+  /** The admin preview renders at h2 so the page keeps a single h1. */
+  headingLevel?: 'h1' | 'h2';
 }) {
   if (!showHeader && !actions) return null;
+  const Heading = headingLevel;
   return (
     <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
@@ -48,7 +52,9 @@ export function ScreenPageHeader({
         ) : null}
         {showHeader && (
           <>
-            <h1 className="mt-1 text-[22px] font-extrabold leading-tight tracking-tight sm:text-3xl">{title}</h1>
+            <Heading className="mt-1 text-[22px] font-extrabold leading-tight tracking-tight sm:text-3xl">
+              {title}
+            </Heading>
             {description ? (
               <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-ink-500 sm:text-sm">{description}</p>
             ) : null}
@@ -67,7 +73,10 @@ export function ScreenAnnouncementBanner({ announcement }: { announcement?: Scre
   const body = announcement.body?.trim();
   if (!title && !body) return null;
   const tone = TONE_CLASSES[announcement.tone] || TONE_CLASSES.brand;
-  const hasLink = Boolean(announcement.ctaLabel?.trim() && isValidInternalDeepLink(announcement.ctaHref));
+  const ctaLabel = announcement.ctaLabel?.trim() || '';
+  const ctaHref = announcement.ctaHref?.trim() || '';
+  const internalLink = Boolean(ctaLabel && isValidInternalDeepLink(ctaHref));
+  const externalLink = Boolean(ctaLabel && !internalLink && isSafeHttpUrl(ctaHref));
   return (
     <div className={`flex items-start gap-2.5 rounded-[var(--ec-radius)] border px-3.5 py-3 ${tone.wrap}`} role="note">
       <Megaphone size={15} className={`mt-0.5 shrink-0 ${tone.icon}`} aria-hidden />
@@ -75,14 +84,24 @@ export function ScreenAnnouncementBanner({ announcement }: { announcement?: Scre
         {title ? <p className="text-[13px] font-bold leading-snug">{title}</p> : null}
         {body ? <p className="mt-0.5 text-[12px] leading-relaxed opacity-90">{body}</p> : null}
       </div>
-      {hasLink ? (
+      {internalLink ? (
         <Link
-          href={announcement.ctaHref}
+          href={ctaHref}
           className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/80 px-3 py-1.5 text-[11px] font-bold text-ink-800 hover:bg-white"
         >
-          {announcement.ctaLabel}
+          {ctaLabel}
           <ArrowRight size={11} />
         </Link>
+      ) : externalLink ? (
+        <a
+          href={ctaHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/80 px-3 py-1.5 text-[11px] font-bold text-ink-800 hover:bg-white"
+        >
+          {ctaLabel}
+          <ArrowRight size={11} />
+        </a>
       ) : null}
     </div>
   );
