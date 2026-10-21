@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 async function dispatch(request: Request): Promise<Response> {
   try {
     const { env } = await getCloudflareContext({ async: true });
-    return await handleApiRequest(request, env as unknown as { DB: D1Database });
+    return await handleApiRequest(request, env as unknown as { DB: any });
   } catch (error) {
     // Fail closed: never pretend a write succeeded when the D1 binding is absent.
     const message = error instanceof Error ? error.message : "D1 API is unavailable.";
