@@ -7,6 +7,14 @@ account_id = "93f8cbbe79e248f8d1db9fccc586f0c3"
 workers_dev = false
 upload_source_maps = true
 
+# Cloudflare D1 — Exam Cracker relational application data.
+# Database name and ID were supplied by the owner.
+[[d1_databases]]
+binding = "DB"
+database_name = "exam-cracker-db"
+database_id = "dbf2375d-a302-443f-83bf-df59e1d98177"
+migrations_dir = "migrations"
+
 # OpenNext/Next.js 15 can attempt a dynamic middleware-manifest require on Workers,
 # which can break every route. This app has no Next.js middleware.ts, so minimal
 # mode safely skips that unsupported code path.
