@@ -173,7 +173,7 @@ export default function FeedbackPage() {
                   <textarea value={message} onChange={(event) => setMessage(event.target.value)} className="ec-field min-h-36 w-full resize-y" maxLength={5000} placeholder="Describe your suggestion or issue…" required />
                   <span className="mt-1 block text-right text-[10px] text-ink-400">{message.length}/5000</span>
                 </label>
-                <Button type="submit" block loading={submitting} disabled={subject.trim().length < 3 || message.trim().length < 3}>
+                <Button type="submit" className="w-full" loading={submitting} disabled={subject.trim().length < 3 || message.trim().length < 3}>
                   <Send size={14} className="mr-2" /> Submit feedback
                 </Button>
               </form>
