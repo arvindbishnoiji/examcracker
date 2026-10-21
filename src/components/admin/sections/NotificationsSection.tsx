@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import type { StudentProfile } from '@/types';
 import { getAdminStudents } from '@/lib/api';
-import { sendAdminNotification, sendAdminNotificationBatch } from '@/lib/firestore';
+import { sendAdminNotification, sendAdminNotificationBatch } from '@/lib/app-data';
 import { isValidInternalDeepLink } from '@/lib/validation';
 import { useToast } from '@/hooks/useToast';
 import { AdminPageHeader, Banner, ConfirmDialog, Field, Panel, SearchInput, Spinner, StatCard, StatusPill } from '../ui';
