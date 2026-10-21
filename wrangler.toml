@@ -6,6 +6,12 @@ account_id = "93f8cbbe79e248f8d1db9fccc586f0c3"
 workers_dev = true
 upload_source_maps = true
 
+# OpenNext/Next.js 15 can attempt a dynamic middleware-manifest require on Workers,
+# which can break every route. This app has no Next.js middleware.ts, so minimal
+# mode safely skips that unsupported code path.
+[vars]
+NEXT_PRIVATE_MINIMAL_MODE = "1"
+
 # Next.js on Cloudflare via OpenNext
 # Build with: npx @opennextjs/cloudflare build
 # Deploy with: npx @opennextjs/cloudflare deploy
