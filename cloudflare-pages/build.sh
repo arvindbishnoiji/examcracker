@@ -21,7 +21,7 @@ export NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID="${NEXT_PUBLIC_FIREBASE_MEASUREMENT_I
 export NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL="${NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL:-https://ec-content-api.arvinddara0290.workers.dev}"
 export NEXT_PUBLIC_ADMIN_EMAIL="${NEXT_PUBLIC_ADMIN_EMAIL:-arvinddarabishnoi@gmail.com}"
 export NEXT_PUBLIC_GOOGLE_AUTH_ENABLED="${NEXT_PUBLIC_GOOGLE_AUTH_ENABLED:-true}"
-export NEXT_PUBLIC_SITE_URL="${NEXT_PUBLIC_SITE_URL:-https://examcracker.pages.dev}"
+export NEXT_PUBLIC_SITE_URL="${NEXT_PUBLIC_SITE_URL:-https://examcrack.pages.dev}"
 
 echo "Building Exam Cracker Next.js app and OpenNext assets from $REPO_ROOT"
 npm ci
