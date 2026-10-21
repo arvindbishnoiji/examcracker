@@ -725,3 +725,69 @@ export async function deleteStudentLibraryItem(
     { method: 'DELETE' }
   );
 }
+
+
+// ---------------------------------------------------------------------------
+// Student feedback inbox (stored in Cloudflare D1; Firebase Auth supplies identity)
+// ---------------------------------------------------------------------------
+export interface StudentFeedbackItem {
+  id: string;
+  firebase_uid: string;
+  category: string;
+  subject: string;
+  status: 'open' | 'in_progress' | 'resolved';
+  last_message_text?: string;
+  last_message_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+export interface FeedbackMessageItem {
+  id: string;
+  sender_uid: string;
+  sender_role: 'student' | 'admin';
+  text: string;
+  created_at: string;
+  read_at?: string | null;
+  is_read?: boolean;
+}
+
+export async function getStudentFeedback(): Promise<StudentFeedbackItem[]> {
+  const res = await requestEdgeFunction<{ items: StudentFeedbackItem[] }>('/feedback');
+  return res.items || [];
+}
+export async function submitFeedback(input: { subject: string; category: string; message: string }): Promise<StudentFeedbackItem> {
+  const res = await requestEdgeFunction<{ item: StudentFeedbackItem }>('/feedback', {
+    method: 'POST',
+    body: { subject: input.subject.trim(), category: input.category, message: input.message.trim() },
+  });
+  return res.item;
+}
+export async function getStudentFeedbackThread(id: string): Promise<{ item: StudentFeedbackItem; messages: FeedbackMessageItem[] }> {
+  return requestEdgeFunction(`/feedback/${encodeURIComponent(id)}`);
+}
+export async function addFeedbackMessage(id: string, message: string): Promise<FeedbackMessageItem[]> {
+  const res = await requestEdgeFunction<{ messages: FeedbackMessageItem[] }>(`/feedback/${encodeURIComponent(id)}/messages`, {
+    method: 'POST',
+    body: { message: message.trim() },
+  });
+  return res.messages || [];
+}
+export async function getAdminFeedback(): Promise<StudentFeedbackItem[]> {
+  const res = await requestEdgeFunction<{ items: StudentFeedbackItem[] }>('/admin/feedback');
+  return res.items || [];
+}
+export async function getAdminFeedbackThread(id: string): Promise<{ item: StudentFeedbackItem; messages: FeedbackMessageItem[] }> {
+  return requestEdgeFunction(`/admin/feedback/${encodeURIComponent(id)}`);
+}
+export async function replyToFeedback(id: string, message: string): Promise<void> {
+  await requestEdgeFunction(`/admin/feedback/${encodeURIComponent(id)}/reply`, {
+    method: 'POST',
+    body: { message: message.trim() },
+  });
+}
+export async function updateFeedbackStatus(id: string, status: 'open' | 'in_progress' | 'resolved'): Promise<void> {
+  await requestEdgeFunction(`/admin/feedback/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: { status },
+  });
+}
