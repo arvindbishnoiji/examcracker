@@ -147,12 +147,12 @@ export const ADMIN_SECTIONS: AdminSectionMeta[] = [
     keywords: ['notification', 'broadcast', 'push', 'inbox'],
   },
   {
-    slug: 'chat',
-    label: 'Doubt chat',
+    slug: 'feedback',
+    label: 'Student feedback',
     group: 'Communication',
     icon: '✉',
-    description: 'Read and reply to student doubt threads without leaving the console.',
-    keywords: ['chat', 'doubt', 'messages', 'mentor', 'reply', 'communication'],
+    description: 'Review student feedback and reply to reports, suggestions and issues.',
+    keywords: ['feedback', 'suggestion', 'issue', 'student response', 'reply', 'communication'],
   },
   {
     slug: 'appearance',
