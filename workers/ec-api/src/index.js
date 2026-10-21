@@ -15,6 +15,7 @@ import {
   downloadDriveFile,
   uploadDriveFile,
 } from "./drive.js";
+import { RUNTIME_MIGRATIONS } from "./runtime-migrations.js";
 
 const FIREBASE_PROJECT_ID = "darvo1";
 const ADMIN_EMAIL = "arvinddarabishnoi@gmail.com";
@@ -1156,6 +1157,123 @@ function subjectPayload(body, current = null) {
 }
 
 // ---------------------------------------------------------------------------
+// Guarded runtime schema bootstrap
+// ---------------------------------------------------------------------------
+// Wrangler migrations remain the normal deployment path. This repairs the
+// specific recoverable case where a new/empty D1 database is already bound to
+// the API but the GitHub deployment token cannot manage D1 migrations. It will
+// never run over existing application tables or partially migrate user data.
+const RUNTIME_REQUIRED_TABLES = [
+  "student_profiles",
+  "course_catalog",
+  "lesson_progress",
+  "exam_attempts",
+  "enrollments",
+  "enrollment_events",
+  "enrollment_rules",
+  "announcements",
+  "site_settings",
+  "admin_activity",
+  "student_library",
+  "feedback_threads",
+  "feedback_messages",
+  "notifications",
+  "push_tokens",
+  "broadcasts",
+  "subjects",
+  "course_subjects",
+  "drive_files",
+];
+
+const runtimeSchemaPromises = new WeakMap();
+
+function migrationStatements(sql) {
+  // The checked-in migration files use ordinary SQLite statements and line
+  // comments (no trigger bodies or semicolons embedded in quoted values).
+  return sql
+    .replace(/^[ \\t]*--.*$/gm, "")
+    .split(";")
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+}
+
+async function initializeRuntimeSchemaIfNeeded(db) {
+  const tableRows = await all(
+    db,
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+  );
+  let tableNames = new Set(tableRows.map((row) => String(row.name)));
+  const appTables = [...tableNames].filter((name) => name !== "d1_migrations");
+  const missing = RUNTIME_REQUIRED_TABLES.filter((name) => !tableNames.has(name));
+
+  if (missing.length === 0) return;
+
+  // Empty database only. If any application table exists, don't risk rerunning
+  // non-idempotent ALTER TABLE statements against real or partial user data.
+  if (appTables.length > 0) {
+    throw httpError(
+      "Exam Cracker database schema is incomplete.",
+      503
+    );
+  }
+  if (typeof db.batch !== "function") {
+    throw httpError("Exam Cracker database cannot run schema bootstrap batches.", 503);
+  }
+
+  if (!tableNames.has("d1_migrations")) {
+    await run(
+      db,
+      "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    );
+  } else {
+    const columns = await all(db, "PRAGMA table_info('d1_migrations')");
+    if (!columns.some((column) => column.name === "name")) {
+      throw httpError("Exam Cracker D1 migration history table has an unsupported schema.", 503);
+    }
+    // With no application tables, any old ledger rows cannot describe the
+    // missing schema; reset only this metadata table before safely bootstrapping.
+    await run(db, "DELETE FROM d1_migrations");
+  }
+
+  for (const migration of RUNTIME_MIGRATIONS) {
+    const statements = migrationStatements(migration.sql);
+    if (!statements.length) continue;
+    const prepared = statements.map((sql) => db.prepare(sql));
+    prepared.push(db.prepare("INSERT INTO d1_migrations (name) VALUES (?)").bind(migration.name));
+    const results = await db.batch(prepared);
+    if (Array.isArray(results) && results.some((result) => result && result.success === false)) {
+      throw httpError(`Failed to apply D1 schema migration ${migration.name}.`, 503);
+    }
+  }
+
+  tableNames = new Set(
+    (await all(
+      db,
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    )).map((row) => String(row.name))
+  );
+  const missingAfterBootstrap = RUNTIME_REQUIRED_TABLES.filter((name) => !tableNames.has(name));
+  if (missingAfterBootstrap.length) {
+    throw httpError(
+      `Exam Cracker database bootstrap is incomplete: ${missingAfterBootstrap.join(", ")}.`,
+      503
+    );
+  }
+}
+
+function ensureRuntimeSchema(db) {
+  let promise = runtimeSchemaPromises.get(db);
+  if (!promise) {
+    promise = initializeRuntimeSchemaIfNeeded(db).catch((error) => {
+      runtimeSchemaPromises.delete(db);
+      throw error;
+    });
+    runtimeSchemaPromises.set(db, promise);
+  }
+  return promise;
+}
+
+// ---------------------------------------------------------------------------
 // API handler
 // ---------------------------------------------------------------------------
 
@@ -1203,6 +1321,7 @@ export async function handleApiRequest(request, env) {
 
   try {
     const db = assertDb(env);
+    await ensureRuntimeSchema(db);
 
     // Public endpoints -----------------------------------------------------
     if (path === "/health" && method === "GET") {
