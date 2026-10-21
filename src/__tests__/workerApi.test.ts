@@ -266,6 +266,25 @@ describe('public Worker routes', () => {
     expect(tables).toContain('feedback_threads');
   });
 
+  it('bootstraps a fresh D1 database that contains Cloudflare internal _cf_KV', async () => {
+    const emptyDb = new DatabaseSync(':memory:');
+    emptyDb.exec(
+      "CREATE TABLE \"_cf_KV\" (key TEXT PRIMARY KEY, value TEXT); INSERT INTO \"_cf_KV\" (key, value) VALUES ('sentinel', 'preserve-me');"
+    );
+    const emptyEnv = { DB: d1(emptyDb) };
+    const response = await onPagesApiRequest({ request: request('/health'), env: emptyEnv });
+    expect(response.status).toBe(200);
+    const payload = await body(response);
+    expect(payload).toMatchObject({ ok: true, storage: 'cloudflare-d1' });
+    expect(Number(payload.tables)).toBeGreaterThanOrEqual(20);
+    expect(
+      emptyDb.prepare('SELECT value FROM "_cf_KV" WHERE key=?').get('sentinel')?.value
+    ).toBe('preserve-me');
+    expect(
+      emptyDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='student_profiles'").get()
+    ).toBeTruthy();
+  });
+
   it('serves only published settings from /public/site', async () => {
     const response = await handleApiRequest(request('/public/site'), env);
     const payload = await body(response);
