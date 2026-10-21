@@ -94,6 +94,8 @@ Browser (NEXT_PUBLIC_*) ─Firebase Auth (ID token)─► Supabase Edge Function
 - **Origin allowlist:** both Edge Functions reject unknown browser origins before reading data. Set the `ALLOWED_ORIGINS` secret (comma-separated) when adding a custom domain; requests without an `Origin` header (server jobs) are unaffected.
 - **Worker:** `workers/ec-content-api/src/index.js` + `workers/ec-content-api/wrangler.toml` **must stay** `ec-content-api`. Website is **separate** `wrangler.toml` → `exam-cracker-web`.
 
+- **Workers runtime compatibility:** the website Worker sets `NEXT_PRIVATE_MINIMAL_MODE=1`. This app has no `middleware.ts`; the flag avoids a known Next/OpenNext runtime path that can attempt a dynamic middleware-manifest require on Workers. If Next.js middleware is added later, revisit this workaround and test its effects before removing/changing it.
+
 ---
 
 ## Cloudflare deployment
