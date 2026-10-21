@@ -110,6 +110,53 @@ jobs:
           test -n "$HEALTH_URL" || { echo "Set CLOUDFLARE_WEB_HEALTH_URL to the deployed /login URL" >&2; exit 1; }
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 "$HEALTH_URL"
 
+      - name: Verify rendered app shell and JavaScript assets
+        env:
+          HEALTH_URL: ${{ vars.CLOUDFLARE_WEB_HEALTH_URL || 'https://exam-cracker-web.arvinddara0290.workers.dev/login' }}
+        run: |
+          node --input-type=module <<'NODE'
+          const configured = process.env.HEALTH_URL;
+          if (!configured) throw new Error('HEALTH_URL is required');
+          const loginUrl = new URL(configured);
+          const rootUrl = new URL('/', loginUrl);
+          const targets = [loginUrl.href, rootUrl.href];
+          const fatalText = [
+            'Exam Cracker needs a refresh',
+            'The app shell failed to start',
+          ];
+          const assets = new Set();
+
+          for (const target of targets) {
+            const response = await fetch(target, { redirect: 'follow' });
+            const html = await response.text();
+            if (!response.ok) {
+              throw new Error(`App route ${new URL(target).pathname} returned HTTP ${response.status}`);
+            }
+            const fatal = fatalText.find((marker) => html.includes(marker));
+            if (fatal) {
+              throw new Error(`Deployed HTML contains root error fallback on ${new URL(target).pathname}: ${fatal}`);
+            }
+            if (!html.includes('/_next/static/')) {
+              throw new Error(`App route ${new URL(target).pathname} has no Next.js client assets`);
+            }
+            for (const match of html.matchAll(/(?:src|href)=["']([^"']*\/_next\/static\/[^"']+\.js(?:\?[^"']*)?)["']/g)) {
+              assets.add(match[1].replaceAll('&amp;', '&'));
+            }
+          }
+
+          if (assets.size === 0) throw new Error('No Next.js JavaScript bundles were found in rendered HTML');
+          for (const path of [...assets].slice(0, 20)) {
+            const assetUrl = new URL(path, loginUrl);
+            const response = await fetch(assetUrl);
+            if (!response.ok) {
+              throw new Error(`Next.js JavaScript asset returned HTTP ${response.status}: ${assetUrl.pathname}`);
+            }
+            const body = await response.arrayBuffer();
+            if (body.byteLength === 0) throw new Error(`Next.js JavaScript asset is empty: ${assetUrl.pathname}`);
+          }
+          console.log(`App shell smoke test passed: ${targets.length} routes and ${Math.min(assets.size, 20)} JavaScript assets`);
+          NODE
+
       - name: Verify deployed media proxy health
         env:
           MEDIA_PROXY_URL: ${{ vars.NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL || 'https://ec-content-api.arvinddara0290.workers.dev' }}
