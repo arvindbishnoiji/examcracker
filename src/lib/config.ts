@@ -1,7 +1,7 @@
 /**
  * Centralized public configuration for Exam Cracker.
  * All NEXT_PUBLIC_* values are browser-visible by design.
- * Never add Supabase service-role, Firebase Admin JSON or Cloudflare API tokens here.
+ * Never add Firebase Admin JSON or Cloudflare API tokens here.
  */
 
 /**
@@ -20,10 +20,6 @@ const PUBLIC_ENV: Record<string, string | undefined> = {
   NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
   NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
   NEXT_PUBLIC_FIREBASE_VAPID_KEY: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-  NEXT_PUBLIC_SUPABASE_FUNCTION_URL: process.env.NEXT_PUBLIC_SUPABASE_FUNCTION_URL,
-  NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL: process.env.NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL,
   NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL: process.env.NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL,
   NEXT_PUBLIC_ADMIN_EMAIL: process.env.NEXT_PUBLIC_ADMIN_EMAIL,
   NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED,
@@ -58,12 +54,7 @@ export const APP_CONFIG = {
     measurementId: env('NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID', ''),
     vapidKey: env('NEXT_PUBLIC_FIREBASE_VAPID_KEY', ''),
   },
-  supabase: {
-    url: envRequired('NEXT_PUBLIC_SUPABASE_URL', '').replace(/\/+$/, ''),
-    publishableKey: envRequired('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', ''),
-    functionUrl: envRequired('NEXT_PUBLIC_SUPABASE_FUNCTION_URL', '').replace(/\/+$/, ''),
-    siteFunctionUrl: env('NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL', '').replace(/\/+$/, ''),
-  },
+  apiBaseUrl: '/api/ec',
   cloudflare: {
     mediaProxyUrl: envRequired('NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL', '').replace(/\/+$/, ''),
   },
@@ -86,10 +77,6 @@ export function validatePublicConfig(): { ok: boolean; missing: string[] } {
   if (!APP_CONFIG.firebase.apiKey) missing.push('NEXT_PUBLIC_FIREBASE_API_KEY');
   if (!APP_CONFIG.firebase.authDomain) missing.push('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN');
   if (!APP_CONFIG.firebase.projectId) missing.push('NEXT_PUBLIC_FIREBASE_PROJECT_ID');
-  if (!APP_CONFIG.supabase.url) missing.push('NEXT_PUBLIC_SUPABASE_URL');
-  if (!APP_CONFIG.supabase.publishableKey) missing.push('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY');
-  if (!APP_CONFIG.supabase.functionUrl) missing.push('NEXT_PUBLIC_SUPABASE_FUNCTION_URL');
-  if (!APP_CONFIG.supabase.siteFunctionUrl) missing.push('NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL');
   if (!APP_CONFIG.cloudflare.mediaProxyUrl) missing.push('NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL');
   return { ok: missing.length === 0, missing };
 }
