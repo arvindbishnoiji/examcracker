@@ -6,7 +6,8 @@
 - **Firebase project:** `darvo1` (configure `NEXT_PUBLIC_FIREBASE_API_KEY` with the Web app key from Firebase Console → Project settings → Your apps; the deploy workflow temporarily falls back to the project key bundled in `google-services.json` if the repository variable is unset.)
 - **Supabase project ref:** `kncbvcozpcrfvxdbkbtf` — Edge Function `exam-cracker-api`
 - **Cloudflare Worker (media proxy):** `https://ec-content-api.arvinddara0290.workers.dev` (separate from website Worker)
-- **Website Worker:** `exam-cracker-web` (see `wrangler.toml` @ root)
+- **Pages website:** `https://examcrack.pages.dev` (Cloudflare Pages project `examcrack`)
+- **Internal OpenNext Worker:** `exam-cracker-web` (service-binding target only; `workers_dev = false` in root `wrangler.toml`)
 - **Admin email (server-verified):** `arvinddarabishnoi@gmail.com`
 - **Android appId (preserved for future wrapper):** `com.darvo.ec` (no Capacitor build in this web deliverable)
 
@@ -109,7 +110,7 @@ Browser (NEXT_PUBLIC_*) ─Firebase Auth (ID token)─► Supabase Edge Function
 
 1. **Cloudflare account:** configure the account used by the project. Website and media proxy are separate Workers.
 2. **GitHub Actions secrets:** `CLOUDFLARE_API_TOKEN` (Workers deploy permission) and `CLOUDFLARE_ACCOUNT_ID`. Optional secret: `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (web push only).
-3. **Public build configuration:** the deploy workflow includes fallback values for the existing Firebase `darvo1`, Supabase project, and media Worker so first deployment does not require entering 11 public variables by hand. Repository variables such as `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL`, `NEXT_PUBLIC_SITE_URL`, and `CLOUDFLARE_WEB_HEALTH_URL` may override those defaults when intentionally changing projects/domains. These are browser-visible public configuration, not privileged credentials. The default health check targets the existing `exam-cracker-web` Worker until the Pages front door is deployed.
+3. **Public build configuration:** the deploy workflow includes fallback values for the existing Firebase `darvo1`, Supabase project, and media Worker so first deployment does not require entering 11 public variables by hand. Repository variables such as `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL`, `NEXT_PUBLIC_SITE_URL`, and `CLOUDFLARE_WEB_HEALTH_URL` may override those defaults when intentionally changing projects/domains. These are browser-visible public configuration, not privileged credentials. The health check targets `https://examcrack.pages.dev/login`, the only public website destination.
 3. **Firebase Console (darvo1):**
    - Authentication → Sign-in method: enable **Email/Password** + **Google**.
    - Create user `arvinddarabishnoi@gmail.com` (admin must pre-exist).
@@ -130,7 +131,7 @@ npx wrangler deploy --dry-run     # validate wrangler.toml
 ### CI vs Deploy
 
 - **`ci.yml`** runs on every push/PR: `npm ci` → typecheck → lint → `vitest` → `next build` → secret-scan → worker-config check.
-- **`deploy.yml`** runs only on `main` push or manual dispatch on `main`; it validates required client configuration, builds Next.js and the OpenNext Worker, deploys website and media proxy separately, then health-checks both. It requires the settings above and is intentionally not triggered from feature branches.
+- **`deploy.yml`** is manual-dispatch only. It may update the internal `exam-cracker-web` service Worker when intentionally run on `main`; it never deploys `ec-content-api` and never runs automatically on push/merge. The public website remains `https://examcrack.pages.dev`, served by the Pages project through its `EXAM_CRACKER_WEB` service binding. Do not run this workflow during a code-only fix.
 
 > Deployment is only claimed complete when `deploy.yml` succeeds and URL is verified. No fake “live” claim.
 
