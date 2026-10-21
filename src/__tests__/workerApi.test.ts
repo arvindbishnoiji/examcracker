@@ -268,6 +268,23 @@ describe('public Worker routes', () => {
     expect(await body(response)).toMatchObject({ ok: true });
   });
 
+  it.each([
+    'https://77ba89a9.examcrack.pages.dev',
+    'https://feat-pages-direct-d1-api.examcrack.pages.dev',
+  ])('allows trusted Exam Cracker Pages preview origin %s', async (origin) => {
+    const response = await handleApiRequest(request('/health', { headers: { Origin: origin } }), env);
+    expect(response.status).toBe(200);
+    expect(await body(response)).toMatchObject({ ok: true });
+  });
+
+  it('rejects a Pages-looking origin outside the Exam Cracker project', async () => {
+    const response = await handleApiRequest(
+      request('/health', { headers: { Origin: 'https://examcrack.pages.dev.evil.example' } }),
+      env
+    );
+    expect(response.status).toBe(403);
+  });
+
   it('fails closed when the D1 binding is missing', async () => {
     const response = await handleApiRequest(request('/health'), {} as never);
     expect(response.status).toBe(503);

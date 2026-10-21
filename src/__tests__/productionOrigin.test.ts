@@ -11,6 +11,13 @@ describe('production Pages origin and deployment guardrails', () => {
     expect(match?.[1]).toContain('"https://examcrack.pages.dev"');
   });
 
+  it('accepts HTTPS deployment and branch previews for the Exam Cracker Pages project', () => {
+    const source = readRepoFile('workers/ec-api/src/index.js');
+    expect(source).toContain('hostname.endsWith(".examcrack.pages.dev")');
+    expect(source).toContain('parsed.protocol === "https:"');
+    expect(source).toContain('return fail("Origin not allowed.", 403)');
+  });
+
   it('does not expose the upstream website Worker through workers.dev', () => {
     expect(readRepoFile('wrangler.toml')).toMatch(/^workers_dev = false$/m);
   });
