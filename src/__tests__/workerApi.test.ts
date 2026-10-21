@@ -245,6 +245,27 @@ describe('public Worker routes', () => {
     expect(Number(payload.tables)).toBeGreaterThanOrEqual(19);
   });
 
+  it('bootstraps the schema when the bound D1 database contains only migration history', async () => {
+    const emptyDb = new DatabaseSync(':memory:');
+    emptyDb.exec(
+      'CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)'
+    );
+    const emptyEnv = { DB: d1(emptyDb) };
+    const response = await onPagesApiRequest({ request: request('/health'), env: emptyEnv });
+    expect(response.status).toBe(200);
+    const payload = await body(response);
+    expect(payload).toMatchObject({ ok: true, storage: 'cloudflare-d1' });
+    expect(Number(payload.tables)).toBeGreaterThanOrEqual(20);
+    const tables = emptyDb
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+      .all()
+      .map((row) => row.name);
+    expect(tables).toContain('student_profiles');
+    expect(tables).toContain('subjects');
+    expect(tables).toContain('drive_files');
+    expect(tables).toContain('feedback_threads');
+  });
+
   it('serves only published settings from /public/site', async () => {
     const response = await handleApiRequest(request('/public/site'), env);
     const payload = await body(response);
