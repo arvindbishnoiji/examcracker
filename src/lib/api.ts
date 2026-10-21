@@ -772,11 +772,17 @@ export async function addFeedbackMessage(id: string, message: string): Promise<F
   });
   return res.messages || [];
 }
-export async function getAdminFeedback(): Promise<StudentFeedbackItem[]> {
-  const res = await requestEdgeFunction<{ items: StudentFeedbackItem[] }>('/admin/feedback');
+export interface AdminFeedbackItem extends StudentFeedbackItem {
+  display_name?: string | null;
+  email?: string | null;
+  exam?: ExamTrack | null;
+  class_level?: ClassLevel | null;
+}
+export async function getAdminFeedback(): Promise<AdminFeedbackItem[]> {
+  const res = await requestEdgeFunction<{ items: AdminFeedbackItem[] }>('/admin/feedback');
   return res.items || [];
 }
-export async function getAdminFeedbackThread(id: string): Promise<{ item: StudentFeedbackItem; messages: FeedbackMessageItem[] }> {
+export async function getAdminFeedbackThread(id: string): Promise<{ item: AdminFeedbackItem; messages: FeedbackMessageItem[] }> {
   return requestEdgeFunction(`/admin/feedback/${encodeURIComponent(id)}`);
 }
 export async function replyToFeedback(id: string, message: string): Promise<void> {
