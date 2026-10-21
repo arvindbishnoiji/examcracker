@@ -110,6 +110,14 @@ jobs:
           test -n "$HEALTH_URL" || { echo "Set CLOUDFLARE_WEB_HEALTH_URL to the deployed /login URL" >&2; exit 1; }
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 "$HEALTH_URL"
 
+      - name: Install browser for client runtime verification
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Verify client hydration and app interaction in a real browser
+        run: node .github/scripts/browser-smoke.mjs
+
       - name: Verify rendered app shell and JavaScript assets
         env:
           HEALTH_URL: ${{ vars.CLOUDFLARE_WEB_HEALTH_URL || 'https://exam-cracker-web.arvinddara0290.workers.dev/login' }}

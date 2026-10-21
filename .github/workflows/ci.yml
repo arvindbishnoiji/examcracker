@@ -27,6 +27,9 @@ jobs:
       - name: Validate Cloudflare media proxy JavaScript
         run: node --check workers/ec-content-api/src/index.js
 
+      - name: Validate browser smoke test JavaScript
+        run: node --check .github/scripts/browser-smoke.mjs
+
       - name: Validate Cloudflare Pages proxy
         run: |
           node --check 'cloudflare-pages/functions/[[path]].js'
