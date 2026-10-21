@@ -142,6 +142,8 @@ const CORS_HEADERS = {
  * add custom domains through the ALLOWED_ORIGINS secret.
  */
 const DEFAULT_ALLOWED_ORIGINS = [
+  // Production Pages front door: preserve the browser Origin through the service binding.
+  "https://examcrack.pages.dev",
   "https://exam-cracker-web.arvinddara0290.workers.dev",
   "http://localhost:3000",
   "http://localhost:8787",
