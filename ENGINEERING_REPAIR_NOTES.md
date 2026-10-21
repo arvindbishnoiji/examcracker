@@ -4,8 +4,10 @@
 
 - **Pages API routing:** the existing Pages catch-all was forwarding API requests through `EXAM_CRACKER_WEB`. Added a more-specific `/api/ec/*` Pages Function that invokes the canonical authenticated worker handler against the Pages `DB` binding. The build now bundles that handler into a self-contained Pages Function. Non-API dynamic page rendering still uses the Worker service binding; static assets stay excluded from Function routing.
 - **Subject hierarchy visibility:** server validation accepted a lecture/resource with a parent batch/series and no `subject_id`; the admin form even offered “Unassigned”. Those rows were persisted in D1 but grouped under the student tree’s General bucket instead of the subject the admin expected. A parent-scoped lecture/resource now requires a subject assigned to that exact parent. Manual entry and playlist import both require a subject, and playlist items retain the selected parent, subject and order.
-- **Admin lifecycle and hierarchy workspace:** disabled entries were fetched in the admin catalog, but the content browser exposed only a Disable action. Added explicit Restore actions and state, exam, class and search filters for batch/series and lecture lists. Batch/series now have an in-place management workspace to assign existing subjects or create-and-assign a real subject; each subject opens the lecture editor pre-scoped to that parent and subject. Successful writes await the server reload rather than relying on optimistic UI state.
-- **Profile editing:** the existing private Drive upload flow already verified image contents server-side, persisted file references in D1, and supported progress/cancel/retry. Added a square crop preview with zoom, rotation, reset/cancel and confirmation before the edited JPEG is uploaded. Private-file authorization and object-URL cleanup remain in place.
+- **Admin lifecycle and hierarchy workspace:** disabled entries were fetched in the admin catalog, but the content browser exposed only a Disable action. Added explicit Restore actions, guarded permanent deletion, and exam/class/state/search filters. Batch/series now have an in-place workspace to assign existing subjects or create-and-assign a real subject; each subject opens the lecture editor pre-scoped to that parent and subject. API deletion refuses active items and reports dependent lectures, subject assignments, enrollments, progress, saved references, attempts or files instead of orphaning them. Successful writes await the D1-backed reload.
+- **Profile editing and student shell:** the existing private Drive upload flow verifies image contents server-side, persists file references in D1, and supports progress/cancel/retry. The profile editor provides a draggable square-crop preview, zoom, rotation, reset/cancel and confirmation before the edited JPEG is uploaded; the signed-in header reads the private image through the authenticated API with initials fallback. Student defaults now use a violet palette and make the batch/series → subject → lecture/resource route explicit; the learning catalogue opens on Batches and labels the all-lecture view as secondary. Crop/upload persistence still needs a real browser/account acceptance pass.
+- **Safe parent lifecycle:** disabling a batch/series now also blocks its descendants, previews and direct lesson links for students without deleting their content or enrollments. Restore returns access under the normal enrollment/preview rules. Permanent deletion is opt-in, requires prior disable, checks child/subject/enrollment/progress/test attempt/student-library/Drive dependencies, and returns conflict details rather than orphaning records.
+- **Reusable agent brief:** updated `MASTER_PROMPT.md` with the current Pages Function → direct D1 architecture, original PW.live-inspired mobile learning goals, photo editing acceptance, lifecycle rules, verification checklist and production-safety limits.
 
 No schema changes were needed; no migration was added.
 
@@ -18,12 +20,15 @@ The earlier CI run `39645159183` failed before typecheck/tests/build, at **Valid
 ## Verification performed in this workspace
 
 - `npm ci` — passed (npm reported 36 existing dependency audit findings: 14 moderate, 20 high, 2 critical).
+Latest local validation after the student/admin lifecycle edits:
+
 - `npm run typecheck` — passed.
-- `npm run lint` — passed with existing `<img>`/hook warnings and the existing Next.js lint deprecation notice.
-- `npm test -- --reporter=dot` — passed: 176 tests across 12 files, including D1-backed SQLite integration tests for direct Pages routing, Firebase administrator authorization, mandatory parent/subject association, persisted edit/order, student visibility, disable and restore.
+- `npm run lint` — passed with the existing raw `<img>` and EnrollmentConsole hook warnings, plus Next.js lint deprecation notice.
+- `npm test -- --reporter=dot` — passed: 179 tests across 12 files. Added SQLite-backed checks for disabled-parent descendant visibility, direct-link denial, restore, active-delete rejection, dependency-blocked permanent deletion, non-admin rejection, removing an empty disabled series, and the batch-first homepage section order.
 - `npm run build` — passed.
-- `npm run build:cloudflare` — passed.
-- `bash cloudflare-pages/build.sh` — passed; produced a self-contained Pages API bundle and staged static files with 26 route exclusions. Generated output was removed from the working tree afterward.
+- `bash cloudflare-pages/build.sh` — passed; bundled the direct-D1 Pages Function and staged 63 static files with 26 static route exclusions. Generated output was removed from the working tree afterward.
+
+Earlier baseline validation also passed `npm run build:cloudflare`.
 
 The integration suite applies the checked-in migrations to an in-memory SQLite database and exercises the real API handler. It does not mutate production D1. A real administrator/student production end-to-end session and photo upload were not performed because no test accounts or safe remote D1 environment are available here.
 

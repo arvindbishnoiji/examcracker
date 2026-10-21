@@ -14,8 +14,8 @@
   --ec-text: #0f172a;
   --ec-muted: #7a7e8b;
   --ec-border: #ececee;
-  --ec-brand: #2563eb;
-  --ec-secondary: #0f172a;
+  --ec-brand: #6d28d9;
+  --ec-secondary: #4c1d95;
   --ec-accent: #f59e0b;
   --ec-on-brand: #ffffff;
   --ec-radius: 18px;
@@ -36,16 +36,16 @@
   --ec-header-border: #ececee;
   --ec-nav-bg: rgba(255, 255, 255, 0.96);
 
-  --ec-brand-50: 240 244 254;
-  --ec-brand-100: 224 233 252;
-  --ec-brand-200: 190 208 249;
-  --ec-brand-300: 142 174 245;
-  --ec-brand-400: 85 133 239;
-  --ec-brand-500: 37 99 235;
-  --ec-brand-600: 37 99 235;
-  --ec-brand-700: 31 83 197;
-  --ec-brand-800: 26 69 164;
-  --ec-brand-900: 21 55 132;
+  --ec-brand-50: 245 243 255;
+  --ec-brand-100: 237 233 254;
+  --ec-brand-200: 221 214 254;
+  --ec-brand-300: 196 181 253;
+  --ec-brand-400: 167 139 250;
+  --ec-brand-500: 139 92 246;
+  --ec-brand-600: 109 40 217;
+  --ec-brand-700: 91 33 182;
+  --ec-brand-800: 76 29 149;
+  --ec-brand-900: 59 7 100;
 
   --ec-ink-50: 251 252 254;
   --ec-ink-100: 236 236 238;

@@ -151,8 +151,8 @@ export function buildThemeVars(
   const bg = normalizeHex(theme.backgroundColor, dark ? '#0b1120' : '#f7f8fc');
   const surface = normalizeHex(theme.surfaceColor, dark ? '#111a2e' : '#ffffff');
   const text = normalizeHex(theme.textColor, dark ? '#e8eefc' : '#0f172a');
-  const primary = normalizeHex(theme.primaryColor, '#2563eb');
-  const secondary = normalizeHex(theme.secondaryColor, '#0f172a');
+  const primary = normalizeHex(theme.primaryColor, '#6d28d9');
+  const secondary = normalizeHex(theme.secondaryColor, '#4c1d95');
   const accent = normalizeHex(theme.accentColor, '#f59e0b');
 
   const brand: Record<string, string> = dark

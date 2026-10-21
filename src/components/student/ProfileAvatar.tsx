@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/useToast';
 import { fetchAuthorizedBlob, uploadProfilePhoto, ApiError } from '@/lib/api';
 import type { StudentProfile } from '@/types';
 
-async function renderCrop(file: File, zoom: number, rotation: number, size: number): Promise<Blob> {
+async function renderCrop(file: File, zoom: number, rotation: number, size: number, panX = 0, panY = 0): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -21,9 +21,13 @@ async function renderCrop(file: File, zoom: number, rotation: number, size: numb
   const rotatedWidth = Math.abs(bitmap.width * Math.cos(radians)) + Math.abs(bitmap.height * Math.sin(radians));
   const rotatedHeight = Math.abs(bitmap.width * Math.sin(radians)) + Math.abs(bitmap.height * Math.cos(radians));
   const scale = Math.max(size / rotatedWidth, size / rotatedHeight) * zoom;
+  const maxPanX = Math.max(0, (rotatedWidth * scale - size) / (2 * size));
+  const maxPanY = Math.max(0, (rotatedHeight * scale - size) / (2 * size));
+  const boundedPanX = Math.max(-maxPanX, Math.min(maxPanX, panX));
+  const boundedPanY = Math.max(-maxPanY, Math.min(maxPanY, panY));
   context.fillStyle = '#ffffff';
   context.fillRect(0, 0, size, size);
-  context.translate(size / 2, size / 2);
+  context.translate(size / 2 + boundedPanX * size, size / 2 + boundedPanY * size);
   context.rotate(radians);
   context.drawImage(bitmap, -(bitmap.width * scale) / 2, -(bitmap.height * scale) / 2, bitmap.width * scale, bitmap.height * scale);
   bitmap.close();
@@ -71,6 +75,8 @@ export function ProfileAvatar({
   const [cropPreviewUrl, setCropPreviewUrl] = useState<string | null>(null);
   const [cropZoom, setCropZoom] = useState(1);
   const [cropRotation, setCropRotation] = useState(0);
+  const [cropPan, setCropPan] = useState({ x: 0, y: 0 });
+  const cropDragRef = useRef<{ pointerId: number; startX: number; startY: number; panX: number; panY: number } | null>(null);
   const [preparingCrop, setPreparingCrop] = useState(false);
   const cropPreviewRef = useRef<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -136,7 +142,7 @@ export function ProfileAvatar({
       return;
     }
     setPreparingCrop(true);
-    renderCrop(cropFile, cropZoom, cropRotation, 320)
+    renderCrop(cropFile, cropZoom, cropRotation, 320, cropPan.x, cropPan.y)
       .then((blob) => {
         if (cancelled) return;
         const next = URL.createObjectURL(blob);
@@ -149,7 +155,7 @@ export function ProfileAvatar({
       })
       .finally(() => { if (!cancelled) setPreparingCrop(false); });
     return () => { cancelled = true; };
-  }, [cropFile, cropZoom, cropRotation]);
+  }, [cropFile, cropZoom, cropRotation, cropPan]);
 
   useEffect(() => {
     if (!justSaved) return;
@@ -215,23 +221,68 @@ export function ProfileAvatar({
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       setError('Choose a JPEG, PNG or WebP photo.');
+      event.target.value = '';
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
       setError('Profile photos must be 5 MB or smaller.');
+      event.target.value = '';
       return;
     }
     setError(null);
+    resetCrop();
+    setCropFile(file);
+  }
+
+  function handleCropPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    cropDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      panX: cropPan.x,
+      panY: cropPan.y,
+    };
+  }
+
+  function handleCropPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = cropDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    setCropPan({
+      x: drag.panX + (event.clientX - drag.startX) / bounds.width,
+      y: drag.panY + (event.clientY - drag.startY) / bounds.height,
+    });
+  }
+
+  function handleCropPointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    if (cropDragRef.current?.pointerId === event.pointerId) cropDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
+  function handleCropKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const steps: Record<string, { x: number; y: number }> = {
+      ArrowLeft: { x: 0.04, y: 0 }, ArrowRight: { x: -0.04, y: 0 },
+      ArrowUp: { x: 0, y: 0.04 }, ArrowDown: { x: 0, y: -0.04 },
+    };
+    const step = steps[event.key];
+    if (!step) return;
+    event.preventDefault();
+    setCropPan((current) => ({ x: current.x + step.x, y: current.y + step.y }));
+  }
+
+  function resetCrop() {
     setCropZoom(1);
     setCropRotation(0);
-    setCropFile(file);
+    setCropPan({ x: 0, y: 0 });
   }
 
   async function confirmCrop() {
     if (!cropFile) return;
     setPreparingCrop(true);
     try {
-      const blob = await renderCrop(cropFile, cropZoom, cropRotation, 512);
+      const blob = await renderCrop(cropFile, cropZoom, cropRotation, 512, cropPan.x, cropPan.y);
       setCropFile(null);
       await startUpload(new File([blob], 'profile-photo.jpg', { type: 'image/jpeg', lastModified: Date.now() }));
     } catch (cropError) {
@@ -242,8 +293,7 @@ export function ProfileAvatar({
 
   function cancelCrop() {
     setCropFile(null);
-    setCropZoom(1);
-    setCropRotation(0);
+    resetCrop();
     if (inputRef.current) inputRef.current.value = '';
   }
 
@@ -295,20 +345,31 @@ export function ProfileAvatar({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 id="photo-editor-title" className="text-lg font-extrabold text-ink-900">Edit profile photo</h2>
-                <p className="mt-1 text-xs text-ink-500">Adjust the square crop with zoom, then rotate if needed.</p>
+                <p className="mt-1 text-xs text-ink-500">Drag to frame the square crop, zoom, and rotate before saving.</p>
               </div>
               <button type="button" aria-label="Cancel photo editing" onClick={cancelCrop} className="rounded-full p-2 text-ink-500 hover:bg-ink-100"><X size={18} /></button>
             </div>
-            <div className="mx-auto mt-4 grid h-64 w-64 place-items-center overflow-hidden rounded-2xl bg-ink-100 ring-4 ring-brand-100">
-              {cropPreviewUrl ? <img src={cropPreviewUrl} alt="Cropped photo preview" className="h-full w-full object-cover" /> : <span className="text-xs text-ink-500">Preparing preview…</span>}
+            <div
+              className="mx-auto mt-4 grid h-64 w-64 touch-none cursor-grab place-items-center overflow-hidden rounded-2xl bg-ink-100 ring-4 ring-brand-100 active:cursor-grabbing"
+              role="group"
+              aria-label="Photo crop preview. Drag to reposition or focus and use the arrow keys."
+              tabIndex={0}
+              onPointerDown={handleCropPointerDown}
+              onPointerMove={handleCropPointerMove}
+              onPointerUp={handleCropPointerUp}
+              onPointerCancel={handleCropPointerUp}
+              onKeyDown={handleCropKeyDown}
+            >
+              {cropPreviewUrl ? <img src={cropPreviewUrl} alt="" draggable={false} className="pointer-events-none h-full w-full select-none object-cover" /> : <span className="text-xs text-ink-500">Preparing preview…</span>}
             </div>
+            {error && <p role="alert" className="mt-2 text-xs text-red-700">{error}</p>}
             <label className="mt-4 block text-xs font-semibold text-ink-700" htmlFor="photo-zoom"><span className="flex items-center gap-1.5"><ZoomIn size={14} /> Zoom</span></label>
             <input id="photo-zoom" type="range" min="1" max="2.5" step="0.05" value={cropZoom} onChange={(event) => setCropZoom(Number(event.target.value))} className="mt-2 w-full accent-violet-600" />
             <div className="mt-3 flex items-center justify-between gap-2">
               <div className="flex gap-2">
                 <Button type="button" size="sm" variant="outline" onClick={() => setCropRotation((value) => (value + 270) % 360)} aria-label="Rotate counterclockwise"><RotateCcw size={14} /></Button>
                 <Button type="button" size="sm" variant="outline" onClick={() => setCropRotation((value) => (value + 90) % 360)} aria-label="Rotate clockwise"><RotateCw size={14} /></Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => { setCropZoom(1); setCropRotation(0); }}>Reset</Button>
+                <Button type="button" size="sm" variant="outline" onClick={resetCrop}>Reset</Button>
               </div>
               <div className="flex gap-2">
                 <Button type="button" size="sm" variant="outline" onClick={cancelCrop}>Cancel</Button>

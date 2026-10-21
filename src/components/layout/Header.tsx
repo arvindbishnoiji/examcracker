@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { isActivePath, isRouteEnabled } from '@/lib/navigation';
 import { isSafeHttpUrl } from '@/lib/validation';
 import { NavIcon } from '@/components/ui/AppIcon';
-import { Bell, LogOut, Search, UserRound } from 'lucide-react';
+import { Bell, LogOut, Search } from 'lucide-react';
+import { ProfileImage } from '@/components/student/ProfileImage';
 
 export function Header({ showNav = true }: { showNav?: boolean }) {
   const { user, profile, signOut, isAdmin } = useAuth();
@@ -108,7 +109,12 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
                 }`}
                 aria-label="Profile"
               >
-                <UserRound size={20} />
+                <ProfileImage
+                  src={profile?.avatar_url}
+                  name={profile?.display_name || user.displayName || 'Student'}
+                  className="h-8 w-8 border border-white/70 shadow-sm"
+                  textClassName="text-[10px]"
+                />
               </Link>
             )}
             {user && (

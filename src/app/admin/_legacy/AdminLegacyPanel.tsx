@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input, Textarea, Select } from '@/components/ui/Input';
 import { useToast } from '@/hooks/useToast';
 import {
-  getAdminOverview, getAdminContentList, createAdminContent, updateAdminContent, disableAdminContent,
+  getAdminOverview, getAdminContentList, createAdminContent, updateAdminContent, disableAdminContent, permanentlyDeleteAdminContent,
   getAdminAnnouncements, createAdminAnnouncement, updateAdminAnnouncement, getAdminStudents,
   getAdminSubjects, createAdminSubject, setCourseSubjects, uploadAdminPdf, getCourseFiles, invalidateAuthorizedBlobCache,
 } from '@/lib/api';
@@ -19,6 +19,27 @@ import YoutubeThumbnail from '@/components/YoutubeThumbnail';
 import { ProfileImage } from '@/components/student/ProfileImage';
 
 export type AdminTab = 'overview'|'goals'|'batches'|'lectures'|'series'|'tests'|'events'|'announcements'|'students'|'feedback';
+
+function describeContentDeleteError(error: unknown): string {
+  const message = error instanceof Error ? error.message : 'Deletion was blocked or failed.';
+  if (!error || typeof error !== 'object' || !('payload' in error)) return message;
+  const payload = (error as { payload?: Record<string, unknown> }).payload;
+  const detail = typeof payload?.detail === 'string' ? payload.detail : '';
+  if (message !== 'CONTENT_HAS_DEPENDENCIES') return detail ? `${message}: ${detail}` : message;
+
+  const dependencies = payload?.dependencies && typeof payload.dependencies === 'object'
+    ? payload.dependencies as Record<string, unknown>
+    : {};
+  const labels: Record<string, string> = {
+    childContent: 'child content', enrollments: 'enrollments', lessonProgress: 'lesson progress',
+    subjectAssignments: 'subject assignments', studentReferences: 'saved student references',
+    storedFiles: 'stored files', testAttempts: 'test attempts',
+  };
+  const counts = Object.entries(dependencies)
+    .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] > 0)
+    .map(([key, count]) => `${count} ${labels[key] || key}`);
+  return `Delete blocked${counts.length ? ` by ${counts.join(', ')}` : ''}.${detail ? ` ${detail}` : ''}`;
+}
 
 export default function AdminPage({ embedded = false, initialTab }: { embedded?: boolean; initialTab?: AdminTab } = {}){
   const { user, isAdmin, initializing } = useAuth();
@@ -62,8 +83,7 @@ export default function AdminPage({ embedded = false, initialTab }: { embedded?:
         <div className="mb-4 rounded-xl border border-ink-200 bg-ink-50/70 px-4 py-3">
           <p className="text-sm font-semibold">Original content console</p>
           <p className="text-[11px] text-ink-500 mt-0.5">
-            These are the original Exam Cracker tools, preserved as-is — including the YouTube playlist importer, which
-            has not been modified here and keeps the latest upstream fixes.
+            The existing Exam Cracker tools remain available here, including the YouTube playlist importer, with D1-backed hierarchy, reload and safe content-lifecycle improvements.
           </p>
         </div>
       ) : (
@@ -283,8 +303,9 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
         await updateAdminContent(editing.id, payload);
         push('Updated','success');
       } else {
-        await createAdminContent(payload);
-        push('Created','success');
+        const created = await createAdminContent(payload);
+        if (kind === 'batch' || kind === 'series') setWorkspaceId(created.id);
+        push('Created in D1. Open its management workspace below.','success');
       }
       setShowForm(false);
       await load();
@@ -316,6 +337,20 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
       }
       await load();
     }catch(err){ push(err instanceof Error? err.message:'Could not update content state.','error'); }
+  }
+
+  async function handlePermanentDelete(item: CourseCatalogItem) {
+    if (item.active) return;
+    const confirmed = confirm(`Permanently delete “${item.title}”? This cannot be undone. The API will block deletion while dependent lessons, enrollments, assignments, progress or files exist.`);
+    if (!confirmed) return;
+    try {
+      await permanentlyDeleteAdminContent(item.id);
+      if (workspaceId === item.id) setWorkspaceId('');
+      push('Item permanently deleted.','success');
+      await load();
+    } catch (error) {
+      push(describeContentDeleteError(error),'error');
+    }
   }
 
   return (
@@ -359,6 +394,7 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
                   {(kind === 'batch' || kind === 'series') && <Button size="sm" onClick={() => setWorkspaceId(it.id)} aria-expanded={workspaceId === it.id}>Manage</Button>}
                   <Button size="sm" variant="outline" onClick={()=> openEdit(it)}>Edit</Button>
                   <Button size="sm" variant={it.active ? 'danger' : 'outline'} onClick={()=> handleToggleActive(it)}>{it.active ? 'Disable' : 'Restore'}</Button>
+                  <Button size="sm" variant="danger" disabled={it.active} title={it.active ? 'Disable this item first' : 'Permanently delete if it has no dependencies'} onClick={() => void handlePermanentDelete(it)}>Delete</Button>
                 </div>
               </div>
             </Card>
@@ -720,7 +756,19 @@ function AdminLecturesTab(){
     }catch(err){ push(err instanceof Error? err.message:'Could not update lecture state.','error'); }
   }
 
-  async function handlePlaylistImport(){
+  async function handlePermanentDeleteLecture(item: CourseCatalogItem) {
+    if (item.active) return;
+    if (!confirm(`Permanently delete “${item.title}”? This cannot be undone. The API will block deletion while student progress or stored files refer to it.`)) return;
+    try {
+      await permanentlyDeleteAdminContent(item.id);
+      push('Content permanently deleted.','success');
+      await load();
+    } catch (error) {
+      push(describeContentDeleteError(error),'error');
+    }
+  }
+
+  async function handlePlaylistImport() {
     if(!playlistUrl.trim()){ push('Paste YouTube playlist URL','error'); return; }
     const pid = extractYoutubePlaylistId(playlistUrl);
     if(!pid){ push('Invalid playlist URL (needs list= param)','error'); return; }
@@ -934,6 +982,7 @@ function AdminLecturesTab(){
                 <div className="flex flex-col gap-1 shrink-0">
                   <Button size="sm" variant="outline" onClick={()=> openEdit(it)}>Edit</Button>
                   <Button size="sm" variant={it.active ? 'danger' : 'outline'} onClick={()=> handleToggleActive(it)}>{it.active ? 'Disable' : 'Restore'}</Button>
+                  <Button size="sm" variant="danger" disabled={it.active} title={it.active ? 'Disable this lecture first' : 'Permanently delete if no progress/files refer to it'} onClick={() => void handlePermanentDeleteLecture(it)}>Delete</Button>
                 </div>
               </div>
             </Card>

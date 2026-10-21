@@ -565,6 +565,9 @@ async function canAccessCourse(db, user, row, profile, admin = false) {
   const course = mapCourse(row, false);
   if (!profileMatchesCourse(course, profile)) return false;
   if (!course.parentId) return true;
+  const parent = await courseRow(db, course.parentId);
+  if (!parent || !asBool(parent.active) || !["batch", "series"].includes(parent.kind)) return false;
+  if (!profileMatchesCourse(mapCourse(parent, false), profile)) return false;
   if (isPreviewContent(course)) return true;
   return hasEnrollment(db, user.uid, course.parentId);
 }
@@ -1284,18 +1287,22 @@ export async function handleApiRequest(request, env) {
       );
       const enrolledIds = new Set(enrollmentRows.map((row) => row.item_id));
       // Bootstrap is the home-screen feed. It must never contain a paid
-      // lecture's title just because the item exists in D1.
-      const content = (
-        await contentRows(db, {
-          activeOnly: true,
-          exam: profile.exam,
-          classLevel: profile.class_level,
-        })
-      )
+      // lecture's title just because the item exists in D1, and children of a
+      // disabled parent are unavailable even if an old enrollment remains.
+      const allVisibleRows = await contentRows(db, {
+        activeOnly: true,
+        exam: profile.exam,
+        classLevel: profile.class_level,
+      });
+      const activeParentIds = new Set(
+        allVisibleRows.filter((item) => ["batch", "series"].includes(item.kind)).map((item) => item.id)
+      );
+      const content = allVisibleRows
         .filter(visibleBySchedule)
         .filter((item) => {
           if (!["lecture", "resource"].includes(item.kind)) return true;
           if (!item.parentId) return true;
+          if (!activeParentIds.has(item.parentId)) return false;
           return isPreviewContent(item) || enrolledIds.has(item.parentId);
         });
       const announcements = (
@@ -1466,6 +1473,14 @@ export async function handleApiRequest(request, env) {
         classLevel: profile.class_level,
       });
       items = items.filter(visibleBySchedule);
+      if (!parentId) {
+        const activeParents = await all(
+          db,
+          "SELECT id FROM course_catalog WHERE kind IN ('batch','series') AND active=1"
+        );
+        const activeParentIds = new Set(activeParents.map((row) => String(row.id)));
+        items = items.filter((item) => !item.parentId || activeParentIds.has(item.parentId));
+      }
       if (["lecture", "resource"].includes(kind) || !kind) {
         const enrollmentRows = await all(
           db,
@@ -2463,6 +2478,130 @@ export async function handleApiRequest(request, env) {
         const currentRow = await courseRow(db, id);
         if (!currentRow) return fail("Content not found.", 404);
         if (method === "DELETE") {
+          if (url.searchParams.get("permanent") === "1") {
+            if (asBool(currentRow.active)) {
+              return fail("Disable this item before permanently deleting it.", 409);
+            }
+            const dependencies = {};
+            const addCount = async (key, sql, ...values) => {
+              const result = await first(db, sql, ...values);
+              const count = Number(result?.n) || 0;
+              if (count > 0) dependencies[key] = count;
+            };
+            if (["batch", "series"].includes(currentRow.kind)) {
+              await addCount(
+                "childContent",
+                `SELECT COUNT(*) AS n FROM course_catalog c
+                  WHERE c.parent_id=? OR
+                    (json_valid(c.metadata) AND COALESCE(
+                      json_extract(c.metadata,'$.parentId'),
+                      json_extract(c.metadata,'$.parent_id'),
+                      json_extract(c.metadata,'$.batchId'),
+                      json_extract(c.metadata,'$.seriesId')
+                    )=?)`,
+                id,
+                id
+              );
+              await addCount("enrollments", "SELECT COUNT(*) AS n FROM enrollments WHERE item_id=?", id);
+              await addCount(
+                "lessonProgress",
+                `SELECT COUNT(*) AS n FROM lesson_progress p
+                   JOIN course_catalog c ON c.id=p.lecture_id
+                  WHERE c.parent_id=? OR (json_valid(c.metadata) AND COALESCE(
+                    json_extract(c.metadata,'$.parentId'), json_extract(c.metadata,'$.parent_id'),
+                    json_extract(c.metadata,'$.batchId'), json_extract(c.metadata,'$.seriesId')
+                  )=?)`,
+                id,
+                id
+              );
+              await addCount("subjectAssignments", "SELECT COUNT(*) AS n FROM course_subjects WHERE course_id=?", id);
+              await addCount("studentReferences", "SELECT COUNT(*) AS n FROM student_library WHERE item_id=?", id);
+              await addCount("storedFiles", "SELECT COUNT(*) AS n FROM drive_files WHERE course_id=? AND status!='deleted'", id);
+            } else {
+              if (currentRow.kind === "lecture" || currentRow.kind === "resource") {
+                await addCount("lessonProgress", "SELECT COUNT(*) AS n FROM lesson_progress WHERE lecture_id=?", id);
+              }
+              if (currentRow.kind === "test") {
+                await addCount("testAttempts", "SELECT COUNT(*) AS n FROM exam_attempts WHERE test_id=?", id);
+              }
+              await addCount("studentReferences", "SELECT COUNT(*) AS n FROM student_library WHERE item_id=?", id);
+              const metadata = readJson(currentRow.metadata, {});
+              await addCount(
+                "storedFiles",
+                "SELECT COUNT(*) AS n FROM drive_files WHERE status!='deleted' AND (course_id=? OR id=?)",
+                id,
+                String(metadata.notesFileId || "__no_file__")
+              );
+            }
+            if (Object.keys(dependencies).length) {
+              return json({
+                error: "CONTENT_HAS_DEPENDENCIES",
+                detail: "This item has saved relationships or student records. Remove or safely reassign them before permanent deletion.",
+                dependencies,
+              }, 409);
+            }
+            // Recheck dependencies in the DELETE predicate itself. If a student
+            // record or child arrives after the diagnostic reads above, do not
+            // race into deleting the parent and orphaning that record.
+            const safeDeleteChecks = ["active=0"];
+            const safeDeleteValues = [];
+            const addSafeDeleteCheck = (sql, ...values) => {
+              safeDeleteChecks.push(`NOT EXISTS (${sql})`);
+              safeDeleteValues.push(...values);
+            };
+            if (["batch", "series"].includes(currentRow.kind)) {
+              addSafeDeleteCheck(
+                `SELECT 1 FROM course_catalog c WHERE c.parent_id=? OR
+                  (json_valid(c.metadata) AND COALESCE(
+                    json_extract(c.metadata,'$.parentId'), json_extract(c.metadata,'$.parent_id'),
+                    json_extract(c.metadata,'$.batchId'), json_extract(c.metadata,'$.seriesId')
+                  )=?)`,
+                id,
+                id
+              );
+              addSafeDeleteCheck("SELECT 1 FROM enrollments WHERE item_id=?", id);
+              addSafeDeleteCheck(
+                `SELECT 1 FROM lesson_progress p JOIN course_catalog c ON c.id=p.lecture_id
+                  WHERE c.parent_id=? OR (json_valid(c.metadata) AND COALESCE(
+                    json_extract(c.metadata,'$.parentId'), json_extract(c.metadata,'$.parent_id'),
+                    json_extract(c.metadata,'$.batchId'), json_extract(c.metadata,'$.seriesId')
+                  )=?)`,
+                id,
+                id
+              );
+              addSafeDeleteCheck("SELECT 1 FROM course_subjects WHERE course_id=?", id);
+              addSafeDeleteCheck("SELECT 1 FROM student_library WHERE item_id=?", id);
+              addSafeDeleteCheck("SELECT 1 FROM drive_files WHERE course_id=? AND status!='deleted'", id);
+            } else {
+              if (currentRow.kind === "lecture" || currentRow.kind === "resource") {
+                addSafeDeleteCheck("SELECT 1 FROM lesson_progress WHERE lecture_id=?", id);
+              }
+              if (currentRow.kind === "test") {
+                addSafeDeleteCheck("SELECT 1 FROM exam_attempts WHERE test_id=?", id);
+              }
+              addSafeDeleteCheck("SELECT 1 FROM student_library WHERE item_id=?", id);
+              const metadata = readJson(currentRow.metadata, {});
+              addSafeDeleteCheck(
+                "SELECT 1 FROM drive_files WHERE status!='deleted' AND (course_id=? OR id=?)",
+                id,
+                String(metadata.notesFileId || "__no_file__")
+              );
+            }
+            await run(
+              db,
+              `DELETE FROM course_catalog WHERE id=? AND ${safeDeleteChecks.join(" AND ")}`,
+              id,
+              ...safeDeleteValues
+            );
+            if (await courseRow(db, id)) {
+              return json({
+                error: "CONTENT_HAS_DEPENDENCIES",
+                detail: "Dependencies changed while deleting this item. Reload the content and review its relationships before retrying.",
+              }, 409);
+            }
+            await activity(db, user, "content.delete", currentRow.kind, id, currentRow.title, { permanent: true });
+            return json({ deleted: true, id, kind: currentRow.kind, title: currentRow.title });
+          }
           await run(db, "UPDATE course_catalog SET active=0,updated_at=? WHERE id=?", now(), id);
           await activity(db, user, "content.disable", currentRow.kind, id, currentRow.title);
           return json({

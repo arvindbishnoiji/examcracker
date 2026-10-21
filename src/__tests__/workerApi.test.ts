@@ -406,6 +406,40 @@ describe('subject hierarchy and access control', () => {
     expect((subjects[0].lectures as unknown[]).length).toBe(2);
   });
 
+  it('hides descendants when their parent batch is disabled, including previews and direct links', async () => {
+    const admin = await tokenFor({ sub: 'admin-1', email: 'arvinddarabishnoi@gmail.com' });
+    const student = await tokenFor({ sub: 'student-1', email: 'asha@example.com' });
+    db.prepare(
+      `INSERT INTO enrollments (id,firebase_uid,item_type,item_id,active,status,source,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?)`
+    ).run('enr-disabled-parent', 'student-1', 'batch', 'batch-1', 1, 'active', 'self_service', 'now', 'now');
+
+    const before = await handleApiRequest(request('/content?kind=lecture', { token: student }), env);
+    expect(JSON.stringify(await body(before))).toContain('Preview: Kinematics');
+
+    const disabled = await handleApiRequest(request('/admin/content/batch-1', { method: 'DELETE', token: admin }), env);
+    expect(disabled.status).toBe(200);
+    expect((await body(disabled)).disabled).toBe(true);
+
+    const tree = await handleApiRequest(request('/catalog/tree?parentId=batch-1', { token: student }), env);
+    expect(tree.status).toBe(404);
+    const catalogue = await handleApiRequest(request('/content?kind=lecture', { token: student }), env);
+    expect(JSON.stringify(await body(catalogue))).not.toContain('Preview: Kinematics');
+    const direct = await handleApiRequest(request('/content/lecture-preview', { token: student }), env);
+    expect(direct.status).toBe(403);
+
+    const restored = await handleApiRequest(
+      request('/admin/content/batch-1', {
+        method: 'PATCH', token: admin,
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: true }),
+      }),
+      env
+    );
+    expect(restored.status).toBe(200);
+    const after = await handleApiRequest(request('/catalog/tree?parentId=batch-1', { token: student }), env);
+    expect(JSON.stringify(await body(after))).toContain('Preview: Kinematics');
+  });
+
   it('denies a Drive PDF belonging to a course the student is not enrolled in', async () => {
     const token = await tokenFor({ sub: 'student-1', email: 'asha@example.com' });
     const response = await handleApiRequest(request('/files/file-private', { token }), env);
@@ -668,6 +702,48 @@ describe('admin subject and hierarchy validation', () => {
     const payload = await body(response);
     expect(payload.error).toBe('SUBJECT_IN_USE');
     expect(Array.isArray(payload.usage)).toBe(true);
+  });
+
+  it('guards permanent course deletion and permits an empty disabled course to be removed', async () => {
+    const admin = await adminToken();
+    db.prepare("UPDATE course_catalog SET active=0 WHERE id='batch-1'").run();
+    const blocked = await handleApiRequest(
+      request('/admin/content/batch-1?permanent=1', { method: 'DELETE', token: admin }), env
+    );
+    expect(blocked.status).toBe(409);
+    const blockedPayload = await body(blocked);
+    expect(blockedPayload.error).toBe('CONTENT_HAS_DEPENDENCIES');
+    expect(blockedPayload.dependencies).toMatchObject({ childContent: 2, subjectAssignments: 1 });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM course_catalog WHERE id='batch-1'").get()).toMatchObject({ n: 1 });
+
+    const student = await tokenFor({ sub: 'student-1', email: 'asha@example.com' });
+    const forbidden = await handleApiRequest(
+      request('/admin/content/batch-1?permanent=1', { method: 'DELETE', token: student }), env
+    );
+    expect(forbidden.status).toBe(403);
+
+    const created = await handleApiRequest(
+      request('/admin/content', {
+        method: 'POST', token: admin, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'series', title: 'Empty test series', exam: 'JEE', classes: ['11'], active: true, metadata: {} }),
+      }), env
+    );
+    expect(created.status).toBe(201);
+    const id = String(((await body(created)).item as Row).id);
+    const cannotDeleteWhileActive = await handleApiRequest(
+      request(`/admin/content/${id}?permanent=1`, { method: 'DELETE', token: admin }), env
+    );
+    expect(cannotDeleteWhileActive.status).toBe(409);
+    const disabled = await handleApiRequest(
+      request(`/admin/content/${id}`, { method: 'DELETE', token: admin }), env
+    );
+    expect(disabled.status).toBe(200);
+    const deleted = await handleApiRequest(
+      request(`/admin/content/${id}?permanent=1`, { method: 'DELETE', token: admin }), env
+    );
+    expect(deleted.status).toBe(200);
+    expect(await body(deleted)).toMatchObject({ deleted: true, id, title: 'Empty test series' });
+    expect(db.prepare('SELECT id FROM course_catalog WHERE id=?').get(id)).toBeUndefined();
   });
 
   it('creates a lecture with a valid parent/subject pair and lists it in the tree', async () => {

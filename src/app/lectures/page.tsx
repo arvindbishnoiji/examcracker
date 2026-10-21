@@ -146,20 +146,20 @@ function LecturesHubPageInner() {
     const q = filter.trim().toLowerCase();
     const list = items.filter((item) => {
       if (onlyMine && !isEnrolled(item)) return false;
-      if (subjectFilter) {
+      if (subjectFilter && (tab === 'lectures' || tab === 'resources')) {
         const itemSubject = item.subjectId || String(((item.metadata || {}) as Record<string, unknown>).subjectId || '');
         if (itemSubject !== subjectFilter) return false;
       }
       if (!q) return true;
       const meta = (item.metadata || {}) as Record<string, unknown>;
-      return `${item.title} ${item.description} ${meta.subject || ''} ${meta.topic || ''}`.toLowerCase().includes(q);
+      return `${item.title} ${item.description} ${item.subjectName || ''} ${meta.subject || ''} ${meta.topic || ''}`.toLowerCase().includes(q);
     });
     const sorted = sort === 'title'
       ? [...list].sort((a, b) => a.title.localeCompare(b.title))
       : [...list].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
     return screen.itemLimit > 0 ? sorted.slice(0, screen.itemLimit) : sorted;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, filter, sort, onlyMine, subjectFilter, activeKeys, justEnrolled, screen.itemLimit]);
+  }, [items, filter, sort, tab, onlyMine, subjectFilter, activeKeys, justEnrolled, screen.itemLimit]);
 
   const canFilterMine = tab === 'batches' || tab === 'series';
   const sections = visibleSectionIds('lectures', screen);
@@ -420,7 +420,7 @@ function LecturesHubPageInner() {
               </div>
             </div>
           ) : null}
-          {subjects.length > 0 ? (
+          {subjects.length > 0 && (tab === 'lectures' || tab === 'resources') ? (
             <select
               className="ec-field !w-auto !py-2 !text-xs"
               value={subjectFilter}
