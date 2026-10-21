@@ -24,6 +24,14 @@ describe('final architecture', () => {
     expect(worker()).toContain('Google Drive');
   });
 
+  it('bootstraps schema only when D1 is completely empty', () => {
+    const source = worker();
+    expect(source).toContain('RUNTIME_MIGRATIONS');
+    expect(source).toContain('RUNTIME_REQUIRED_TABLES');
+    expect(source).toContain('if (appTables.length > 0)');
+    expect(source).toContain('DELETE FROM d1_migrations');
+  });
+
   it('keeps Firebase Authentication as the identity source', () => {
     expect(worker()).toContain('FIREBASE_PROJECT_ID');
     expect(worker()).toContain('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com');
