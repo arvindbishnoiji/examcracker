@@ -59,7 +59,7 @@ export function onSessionExpired(handler: () => void): () => void {
   };
 }
 
-async function requestEdgeFunction<T>(
+async function requestApi<T>(
   route: string,
   options: {
     method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -184,11 +184,11 @@ export async function checkApiHealth(): Promise<{
   service: string;
   firebaseProjectId: string;
 }> {
-  return requestEdgeFunction('/health', { publicRoute: true });
+  return requestApi('/health', { publicRoute: true });
 }
 
 export async function getStudentProfile(): Promise<StudentProfile | null> {
-  const res = await requestEdgeFunction<{ profile: StudentProfile | null }>('/profile');
+  const res = await requestApi<{ profile: StudentProfile | null }>('/profile');
   return res.profile || null;
 }
 
@@ -198,7 +198,7 @@ export async function saveStudentProfile(input: {
   classLevel: ClassLevel;
   avatarUrl?: string | null;
 }): Promise<StudentProfile> {
-  const res = await requestEdgeFunction<{ profile: StudentProfile }>('/profile', {
+  const res = await requestApi<{ profile: StudentProfile }>('/profile', {
     method: 'POST',
     body: {
       displayName: input.displayName.trim(),
@@ -211,7 +211,7 @@ export async function saveStudentProfile(input: {
 }
 
 export async function getBootstrapData(): Promise<BootstrapResponse> {
-  const res = await requestEdgeFunction<BootstrapResponse>('/bootstrap');
+  const res = await requestApi<BootstrapResponse>('/bootstrap');
   return {
     needsOnboarding: Boolean(res.needsOnboarding),
     profile: res.profile || null,
@@ -233,7 +233,7 @@ export async function getCatalogContent(params: {
   if (params.classLevel) query.set('class', params.classLevel);
   if (params.parentId) query.set('parentId', params.parentId);
   const qs = query.toString();
-  const res = await requestEdgeFunction<{ items: CourseCatalogItem[] }>(
+  const res = await requestApi<{ items: CourseCatalogItem[] }>(
     `/content${qs ? `?${qs}` : ''}`
   );
   return redactCourseCatalogList(res.items || []);
@@ -265,7 +265,7 @@ export async function enrollInBatchOrSeries(input: {
   if (input.accessCode !== undefined && input.accessCode.trim() !== '') {
     body.accessCode = input.accessCode.trim();
   }
-  const res = await requestEdgeFunction<{ enrolled?: boolean; enrollment: Enrollment }>(
+  const res = await requestApi<{ enrolled?: boolean; enrollment: Enrollment }>(
     '/enrollments',
     {
       method: 'POST',
@@ -283,7 +283,7 @@ export async function saveLessonProgress(input: {
   watchedSeconds: number;
   completed: boolean;
 }): Promise<LessonProgress> {
-  const res = await requestEdgeFunction<{ progress: LessonProgress }>('/progress', {
+  const res = await requestApi<{ progress: LessonProgress }>('/progress', {
     method: 'POST',
     body: {
       lectureId: input.lectureId,
@@ -295,7 +295,7 @@ export async function saveLessonProgress(input: {
 }
 
 export async function getStudentTests(): Promise<TestCardItem[]> {
-  const res = await requestEdgeFunction<{ items: TestCardItem[] }>('/tests');
+  const res = await requestApi<{ items: TestCardItem[] }>('/tests');
   return res.items || [];
 }
 
@@ -303,7 +303,7 @@ export async function getTestForAttempt(testId: string): Promise<{
   test: TestCardItem;
   questions: TestQuestion[];
 }> {
-  const res = await requestEdgeFunction<{
+  const res = await requestApi<{
     test: TestCardItem;
     questions: TestQuestion[];
   }>(`/tests/${encodeURIComponent(testId)}`);
@@ -321,7 +321,7 @@ export async function submitTestAttempt(
   result: TestResultSummary;
   review: QuestionReviewItem[];
 }> {
-  return requestEdgeFunction(`/tests/${encodeURIComponent(testId)}/submit`, {
+  return requestApi(`/tests/${encodeURIComponent(testId)}/submit`, {
     method: 'POST',
     body: { answers },
   });
@@ -332,7 +332,7 @@ export async function getSubmittedTestResult(testId: string): Promise<{
   result: TestResultSummary;
   review: QuestionReviewItem[];
 }> {
-  return requestEdgeFunction(`/tests/${encodeURIComponent(testId)}/result`);
+  return requestApi(`/tests/${encodeURIComponent(testId)}/result`);
 }
 
 export async function getTestLeaderboard(testId: string): Promise<{
@@ -342,11 +342,11 @@ export async function getTestLeaderboard(testId: string): Promise<{
   const query = new URLSearchParams();
   if (testId) query.set('testId', testId);
   const qs = query.toString();
-  return requestEdgeFunction(`/leaderboard${qs ? `?${qs}` : ''}`);
+  return requestApi(`/leaderboard${qs ? `?${qs}` : ''}`);
 }
 
 export async function getStudentAnalysis(): Promise<AnalysisResponse> {
-  return requestEdgeFunction<AnalysisResponse>('/analysis');
+  return requestApi<AnalysisResponse>('/analysis');
 }
 
 // ---------------------------------------------------------------------------
@@ -354,11 +354,11 @@ export async function getStudentAnalysis(): Promise<AnalysisResponse> {
 // ---------------------------------------------------------------------------
 
 export async function getAdminOverview(): Promise<AdminOverviewResponse> {
-  return requestEdgeFunction<AdminOverviewResponse>('/admin/overview');
+  return requestApi<AdminOverviewResponse>('/admin/overview');
 }
 
 export async function getAdminStudents(): Promise<StudentProfile[]> {
-  const res = await requestEdgeFunction<{ items: StudentProfile[] }>('/admin/students');
+  const res = await requestApi<{ items: StudentProfile[] }>('/admin/students');
   return res.items || [];
 }
 
@@ -372,7 +372,7 @@ export async function getAdminContentList(params?: {
   if (params?.exam) query.set('exam', params.exam);
   if (params?.classLevel) query.set('class', params.classLevel);
   const qs = query.toString();
-  const res = await requestEdgeFunction<{ items: CourseCatalogItem[] }>(
+  const res = await requestApi<{ items: CourseCatalogItem[] }>(
     `/admin/content${qs ? `?${qs}` : ''}`
   );
   return res.items || [];
@@ -392,7 +392,7 @@ export interface AdminContentPayload {
 export async function createAdminContent(
   payload: AdminContentPayload
 ): Promise<CourseCatalogItem> {
-  const res = await requestEdgeFunction<{ item: CourseCatalogItem }>('/admin/content', {
+  const res = await requestApi<{ item: CourseCatalogItem }>('/admin/content', {
     method: 'POST',
     body: payload,
   });
@@ -403,7 +403,7 @@ export async function updateAdminContent(
   id: string,
   payload: AdminContentPayload
 ): Promise<CourseCatalogItem> {
-  const res = await requestEdgeFunction<{ item: CourseCatalogItem }>(
+  const res = await requestApi<{ item: CourseCatalogItem }>(
     `/admin/content/${encodeURIComponent(id)}`,
     {
       method: 'PATCH',
@@ -417,13 +417,13 @@ export async function disableAdminContent(id: string): Promise<{
   item: { id: string; kind: ContentKind; title: string; active: boolean };
   disabled: boolean;
 }> {
-  return requestEdgeFunction(`/admin/content/${encodeURIComponent(id)}`, {
+  return requestApi(`/admin/content/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
 }
 
 export async function getAdminAnnouncements(): Promise<Announcement[]> {
-  const res = await requestEdgeFunction<{ items: Announcement[] }>('/admin/announcements');
+  const res = await requestApi<{ items: Announcement[] }>('/admin/announcements');
   return res.items || [];
 }
 
@@ -438,7 +438,7 @@ export interface AdminAnnouncementPayload {
 export async function createAdminAnnouncement(
   payload: AdminAnnouncementPayload
 ): Promise<Announcement> {
-  const res = await requestEdgeFunction<{ item: Announcement }>('/admin/announcements', {
+  const res = await requestApi<{ item: Announcement }>('/admin/announcements', {
     method: 'POST',
     body: {
       title: payload.title.trim(),
@@ -455,7 +455,7 @@ export async function updateAdminAnnouncement(
   id: string,
   payload: AdminAnnouncementPayload
 ): Promise<Announcement> {
-  const res = await requestEdgeFunction<{ item: Announcement }>(
+  const res = await requestApi<{ item: Announcement }>(
     `/admin/announcements/${encodeURIComponent(id)}`,
     {
       method: 'PATCH',
@@ -477,7 +477,7 @@ export async function updateAdminAnnouncement(
 
 export async function getPublicSiteConfig(): Promise<PublicSiteConfigResponse> {
   try {
-    return await requestEdgeFunction<PublicSiteConfigResponse>('/public/site', {
+    return await requestApi<PublicSiteConfigResponse>('/public/site', {
       publicRoute: true,
       retryOn401: false,
     });
@@ -490,7 +490,7 @@ export async function getPublicSiteConfig(): Promise<PublicSiteConfigResponse> {
 }
 
 export async function getAdminSiteSettings(): Promise<SiteSettingRow[]> {
-  const res = await requestEdgeFunction<{ items: SiteSettingRow[] }>('/admin/site-settings');
+  const res = await requestApi<{ items: SiteSettingRow[] }>('/admin/site-settings');
   return res.items || [];
 }
 
@@ -498,7 +498,7 @@ export async function saveAdminSiteSettingDraft<TPayload = unknown>(
   key: SiteSettingKey,
   draft: TPayload
 ): Promise<SiteSettingRow> {
-  const res = await requestEdgeFunction<{ item: SiteSettingRow }>(
+  const res = await requestApi<{ item: SiteSettingRow }>(
     `/admin/site-settings/${encodeURIComponent(key)}`,
     { method: 'PATCH', body: { draft } }
   );
@@ -506,7 +506,7 @@ export async function saveAdminSiteSettingDraft<TPayload = unknown>(
 }
 
 export async function publishAdminSiteSetting(key: SiteSettingKey): Promise<SiteSettingRow> {
-  const res = await requestEdgeFunction<{ item: SiteSettingRow }>(
+  const res = await requestApi<{ item: SiteSettingRow }>(
     `/admin/site-settings/${encodeURIComponent(key)}/publish`,
     { method: 'POST', body: {} }
   );
@@ -514,20 +514,20 @@ export async function publishAdminSiteSetting(key: SiteSettingKey): Promise<Site
 }
 
 export async function resetAdminSiteSetting(key: SiteSettingKey): Promise<{ reset: boolean }> {
-  return requestEdgeFunction(`/admin/site-settings/${encodeURIComponent(key)}`, {
+  return requestApi(`/admin/site-settings/${encodeURIComponent(key)}`, {
     method: 'DELETE',
   });
 }
 
 export async function getAdminActivity(limit = 100): Promise<AdminActivityEntry[]> {
-  const res = await requestEdgeFunction<{ items: AdminActivityEntry[] }>(
+  const res = await requestApi<{ items: AdminActivityEntry[] }>(
     `/admin/activity?limit=${encodeURIComponent(String(limit))}`
   );
   return res.items || [];
 }
 
 export async function getAdminAnalytics(): Promise<AdminAnalyticsResponse> {
-  return requestEdgeFunction<AdminAnalyticsResponse>('/admin/analytics');
+  return requestApi<AdminAnalyticsResponse>('/admin/analytics');
 }
 
 export async function searchAdminStudents(params?: {
@@ -544,7 +544,7 @@ export async function searchAdminStudents(params?: {
   if (params?.page) query.set('page', String(params.page));
   if (params?.pageSize) query.set('pageSize', String(params.pageSize));
   const qs = query.toString();
-  return requestEdgeFunction<AdminStudentDirectoryResponse>(`/admin/students${qs ? `?${qs}` : ''}`);
+  return requestApi<AdminStudentDirectoryResponse>(`/admin/students${qs ? `?${qs}` : ''}`);
 }
 
 export async function getAdminEnrollmentList(params?: {
@@ -565,7 +565,7 @@ export async function getAdminEnrollmentList(params?: {
   if (params?.page) query.set('page', String(params.page));
   if (params?.pageSize) query.set('pageSize', String(params.pageSize));
   const qs = query.toString();
-  const res = await requestEdgeFunction<AdminEnrollmentListResponse>(
+  const res = await requestApi<AdminEnrollmentListResponse>(
     `/admin/enrollments${qs ? `?${qs}` : ''}`
   );
   return {
@@ -600,7 +600,7 @@ export async function createAdminEnrollment(input: {
   overrideEligibility?: boolean;
   expiresAt?: string | null;
 }): Promise<AdminEnrollmentRow> {
-  const res = await requestEdgeFunction<{ item: AdminEnrollmentRow }>('/admin/enrollments', {
+  const res = await requestApi<{ item: AdminEnrollmentRow }>('/admin/enrollments', {
     method: 'POST',
     body: input,
   });
@@ -622,7 +622,7 @@ export interface BulkEnrollInput {
 }
 
 export async function bulkEnrollStudents(input: BulkEnrollInput): Promise<EnrollmentBulkResult> {
-  return requestEdgeFunction<EnrollmentBulkResult>('/admin/enrollments/bulk', {
+  return requestApi<EnrollmentBulkResult>('/admin/enrollments/bulk', {
     method: 'POST',
     body: input,
   });
@@ -633,14 +633,14 @@ export async function bulkRevokeEnrollments(input: {
   itemId: string;
   studentUids: string[];
 }): Promise<{ revoked: number; failed: number }> {
-  return requestEdgeFunction('/admin/enrollments/bulk-revoke', {
+  return requestApi('/admin/enrollments/bulk-revoke', {
     method: 'POST',
     body: { ...input, confirm: 'REVOKE' },
   });
 }
 
 export async function deleteAdminEnrollment(id: string): Promise<{ removed: boolean }> {
-  return requestEdgeFunction(`/admin/enrollments/${encodeURIComponent(id)}`, {
+  return requestApi(`/admin/enrollments/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
 }
@@ -649,7 +649,7 @@ export async function restoreAdminEnrollment(
   id: string,
   input?: { expiresAt?: string | null; force?: boolean }
 ): Promise<AdminEnrollmentRow> {
-  const res = await requestEdgeFunction<{ item: AdminEnrollmentRow }>(
+  const res = await requestApi<{ item: AdminEnrollmentRow }>(
     `/admin/enrollments/${encodeURIComponent(id)}/restore`,
     { method: 'POST', body: input || {} }
   );
@@ -657,21 +657,21 @@ export async function restoreAdminEnrollment(
 }
 
 export async function getEnrollmentHistory(limit = 120): Promise<EnrollmentHistoryEvent[]> {
-  const res = await requestEdgeFunction<{ items: EnrollmentHistoryEvent[]; unavailable?: boolean }>(
+  const res = await requestApi<{ items: EnrollmentHistoryEvent[]; unavailable?: boolean }>(
     `/admin/enrollments/history?limit=${encodeURIComponent(String(limit))}`
   );
   return res.items || [];
 }
 
 export async function getEnrollmentRules(): Promise<EnrollmentRule[]> {
-  const res = await requestEdgeFunction<{ items: EnrollmentRule[]; unavailable?: boolean }>(
+  const res = await requestApi<{ items: EnrollmentRule[]; unavailable?: boolean }>(
     '/admin/enrollment-rules'
   );
   return res.items || [];
 }
 
 export async function setEnrollmentRuleActive(id: string, active: boolean): Promise<EnrollmentRule> {
-  const res = await requestEdgeFunction<{ item: EnrollmentRule }>(
+  const res = await requestApi<{ item: EnrollmentRule }>(
     `/admin/enrollment-rules/${encodeURIComponent(id)}`,
     { method: 'PATCH', body: { active } }
   );
@@ -679,7 +679,7 @@ export async function setEnrollmentRuleActive(id: string, active: boolean): Prom
 }
 
 export async function deleteEnrollmentRule(id: string): Promise<{ removed: boolean }> {
-  return requestEdgeFunction(`/admin/enrollment-rules/${encodeURIComponent(id)}`, {
+  return requestApi(`/admin/enrollment-rules/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
 }
@@ -696,7 +696,7 @@ export interface EnrollmentConfirmationError {
 // ---------------------------------------------------------------------------
 
 export async function getStudentLibrary(): Promise<LibraryItem[]> {
-  const res = await requestEdgeFunction<{ items: LibraryItem[] }>('/library');
+  const res = await requestApi<{ items: LibraryItem[] }>('/library');
   return res.items || [];
 }
 
@@ -705,7 +705,7 @@ export async function saveStudentLibraryItem(input: {
   itemId: string;
   payload?: Record<string, unknown>;
 }): Promise<LibraryItem> {
-  const res = await requestEdgeFunction<{ item: LibraryItem }>('/library', {
+  const res = await requestApi<{ item: LibraryItem }>('/library', {
     method: 'POST',
     body: {
       itemType: input.itemType,
@@ -720,7 +720,7 @@ export async function deleteStudentLibraryItem(
   itemType: LibraryItemType,
   itemId: string
 ): Promise<{ removed: boolean }> {
-  return requestEdgeFunction(
+  return requestApi(
     `/library/${encodeURIComponent(itemType)}/${encodeURIComponent(itemId)}`,
     { method: 'DELETE' }
   );
@@ -752,21 +752,21 @@ export interface FeedbackMessageItem {
 }
 
 export async function getStudentFeedback(): Promise<StudentFeedbackItem[]> {
-  const res = await requestEdgeFunction<{ items: StudentFeedbackItem[] }>('/feedback');
+  const res = await requestApi<{ items: StudentFeedbackItem[] }>('/feedback');
   return res.items || [];
 }
 export async function submitFeedback(input: { subject: string; category: string; message: string }): Promise<StudentFeedbackItem> {
-  const res = await requestEdgeFunction<{ item: StudentFeedbackItem }>('/feedback', {
+  const res = await requestApi<{ item: StudentFeedbackItem }>('/feedback', {
     method: 'POST',
     body: { subject: input.subject.trim(), category: input.category, message: input.message.trim() },
   });
   return res.item;
 }
 export async function getStudentFeedbackThread(id: string): Promise<{ item: StudentFeedbackItem; messages: FeedbackMessageItem[] }> {
-  return requestEdgeFunction(`/feedback/${encodeURIComponent(id)}`);
+  return requestApi(`/feedback/${encodeURIComponent(id)}`);
 }
 export async function addFeedbackMessage(id: string, message: string): Promise<FeedbackMessageItem[]> {
-  const res = await requestEdgeFunction<{ messages: FeedbackMessageItem[] }>(`/feedback/${encodeURIComponent(id)}/messages`, {
+  const res = await requestApi<{ messages: FeedbackMessageItem[] }>(`/feedback/${encodeURIComponent(id)}/messages`, {
     method: 'POST',
     body: { message: message.trim() },
   });
@@ -779,20 +779,20 @@ export interface AdminFeedbackItem extends StudentFeedbackItem {
   class_level?: ClassLevel | null;
 }
 export async function getAdminFeedback(): Promise<AdminFeedbackItem[]> {
-  const res = await requestEdgeFunction<{ items: AdminFeedbackItem[] }>('/admin/feedback');
+  const res = await requestApi<{ items: AdminFeedbackItem[] }>('/admin/feedback');
   return res.items || [];
 }
 export async function getAdminFeedbackThread(id: string): Promise<{ item: AdminFeedbackItem; messages: FeedbackMessageItem[] }> {
-  return requestEdgeFunction(`/admin/feedback/${encodeURIComponent(id)}`);
+  return requestApi(`/admin/feedback/${encodeURIComponent(id)}`);
 }
 export async function replyToFeedback(id: string, message: string): Promise<void> {
-  await requestEdgeFunction(`/admin/feedback/${encodeURIComponent(id)}/reply`, {
+  await requestApi(`/admin/feedback/${encodeURIComponent(id)}/reply`, {
     method: 'POST',
     body: { message: message.trim() },
   });
 }
 export async function updateFeedbackStatus(id: string, status: 'open' | 'in_progress' | 'resolved'): Promise<void> {
-  await requestEdgeFunction(`/admin/feedback/${encodeURIComponent(id)}`, {
+  await requestApi(`/admin/feedback/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: { status },
   });
