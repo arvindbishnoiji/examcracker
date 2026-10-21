@@ -27,6 +27,15 @@ echo "Building Exam Cracker Next.js app and OpenNext assets from $REPO_ROOT"
 npm ci
 npm run build:cloudflare
 
+# Pages Functions run the same canonical D1 API handler as local Next.js,
+# but production API requests bind directly to D1 rather than calling the
+# exam-cracker-web service binding. Copy it into Functions' deployable bundle.
+echo "Preparing the direct-D1 Pages API handler"
+SHARED_API_DIR="$PAGES_DIR/functions/_shared/ec-api"
+mkdir -p "$SHARED_API_DIR"
+cp "$REPO_ROOT/workers/ec-api/src/index.js" "$SHARED_API_DIR/index.js"
+cp "$REPO_ROOT/workers/ec-api/src/drive.js" "$SHARED_API_DIR/drive.js"
+
 echo "Staging static assets for Cloudflare Pages"
 node "$PAGES_DIR/stage-assets.mjs"
 
