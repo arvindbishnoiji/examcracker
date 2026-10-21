@@ -77,16 +77,12 @@ async function requestEdgeFunction<T>(
   } = options;
 
   const normalizedRoute = route.startsWith('/') ? route : `/${route}`;
-  // Site-platform routes are served by the dedicated `ec-site-api` function so
-  // the heavily-used content API stays untouched. Both share auth + database.
-  const isSiteApiRoute = ['/public/site', '/admin/site-settings', '/admin/activity', '/admin/analytics', '/admin/enrollments', '/library'].some(
-    (prefix) => normalizedRoute === prefix || normalizedRoute.startsWith(`${prefix}/`) || normalizedRoute.startsWith(`${prefix}?`)
-  );
-  const baseUrl = options.baseUrl || (isSiteApiRoute ? APP_CONFIG.supabase.siteFunctionUrl : APP_CONFIG.supabase.functionUrl);
+  // All application data is served by the same-origin Cloudflare API, which
+  // accesses D1 through the bound database. Firebase remains the auth provider.
+  const baseUrl = options.baseUrl || APP_CONFIG.apiBaseUrl;
   const url = `${baseUrl}${normalizedRoute}`;
 
   const headers: Record<string, string> = {
-    apikey: APP_CONFIG.supabase.publishableKey,
     'Content-Type': 'application/json',
   };
 
