@@ -13,7 +13,7 @@ import {
   ReportsSection,
   SchedulingSection,
 } from '@/components/admin/sections/DataSections';
-import { ChatSection } from '@/components/admin/sections/ChatSection';
+import { FeedbackSection } from '@/components/admin/sections/FeedbackSection';
 import { EnrollmentConsole } from '@/components/admin/sections/EnrollmentConsole';
 import { HomepageBuilderSection } from '@/components/admin/sections/HomepageBuilderSection';
 import { NotificationsSection } from '@/components/admin/sections/NotificationsSection';
@@ -116,8 +116,8 @@ export default function AdminSectionPage() {
       return <LeaderboardsSection />;
     case 'notifications':
       return <NotificationsSection />;
-    case 'chat':
-      return <ChatSection />;
+    case 'feedback':
+      return <FeedbackSection />;
     case 'campaigns':
       return <CampaignsSection />;
     case 'scheduling':
