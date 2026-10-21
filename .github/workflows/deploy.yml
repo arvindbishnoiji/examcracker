@@ -1,8 +1,8 @@
-name: Deploy to Cloudflare Workers
+name: Update Exam Cracker Pages backend (manual only)
 
+# Do not deploy as a side effect of a push or merge.
+# The public site is the Cloudflare Pages project examcrack.pages.dev.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -88,7 +88,7 @@ jobs:
           NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${{ vars.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED || 'true' }}
           NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://examcrack.pages.dev' }}
 
-      - name: Deploy to Cloudflare Workers (exam-cracker-web)
+      - name: Update internal Pages backend Worker (exam-cracker-web)
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -98,19 +98,10 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      - name: Deploy Cloudflare media proxy (ec-content-api)
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --config workers/ec-content-api/wrangler.toml
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Verify deployed website health
         env:
-          HEALTH_URL: ${{ vars.CLOUDFLARE_WEB_HEALTH_URL || 'https://exam-cracker-web.arvinddara0290.workers.dev/login' }}
+          HEALTH_URL: https://examcrack.pages.dev/login
         run: |
           test -n "$HEALTH_URL" || { echo "Set CLOUDFLARE_WEB_HEALTH_URL to the deployed /login URL" >&2; exit 1; }
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 "$HEALTH_URL"
@@ -125,7 +116,7 @@ jobs:
 
       - name: Verify rendered app shell and JavaScript assets
         env:
-          HEALTH_URL: ${{ vars.CLOUDFLARE_WEB_HEALTH_URL || 'https://exam-cracker-web.arvinddara0290.workers.dev/login' }}
+          HEALTH_URL: https://examcrack.pages.dev/login
         run: |
           node --input-type=module <<'NODE'
           const configured = process.env.HEALTH_URL;
@@ -170,9 +161,3 @@ jobs:
           console.log(`App shell smoke test passed: ${targets.length} routes and ${Math.min(assets.size, 20)} JavaScript assets`);
           NODE
 
-      - name: Verify deployed media proxy health
-        env:
-          MEDIA_PROXY_URL: ${{ vars.NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL || 'https://ec-content-api.arvinddara0290.workers.dev' }}
-        run: |
-          test -n "$MEDIA_PROXY_URL" || { echo "Set NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL to the deployed media Worker URL" >&2; exit 1; }
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 "${MEDIA_PROXY_URL%/}/health"
