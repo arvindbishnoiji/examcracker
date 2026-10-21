@@ -1,0 +1,8 @@
+name = "examcrack"
+pages_build_output_dir = "./public"
+compatibility_date = "2026-10-21"
+
+# Keep the full dynamic Next.js app on the existing OpenNext Worker.
+[[services]]
+binding = "EXAM_CRACKER_WEB"
+service = "exam-cracker-web"
