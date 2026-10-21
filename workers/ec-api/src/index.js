@@ -24,6 +24,23 @@ const ALLOWED_ORIGINS = new Set([
   "http://localhost:3000",
   "http://127.0.0.1:3000",
 ]);
+
+function isAllowedOrigin(origin) {
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const parsed = new URL(origin);
+    const hostname = parsed.hostname.toLowerCase();
+    if (
+      parsed.protocol === "https:" &&
+      (hostname === "examcrack.pages.dev" || hostname.endsWith(".examcrack.pages.dev"))
+    ) {
+      return true;
+    }
+    return hostname.endsWith(".e2b.app");
+  } catch {
+    return false;
+  }
+}
 const MAX_BODY_BYTES = 512 * 1024;
 const SITE_SETTING_KEYS = new Set([
   "theme",
@@ -1157,16 +1174,8 @@ export async function handleApiRequest(request, env) {
   const url = new URL(request.url);
   const origin = request.headers.get("origin");
 
-  if (origin) {
-    let allowed = ALLOWED_ORIGINS.has(origin);
-    if (!allowed) {
-      try {
-        allowed = new URL(origin).hostname.endsWith(".e2b.app");
-      } catch {
-        allowed = false;
-      }
-    }
-    if (!allowed) return fail("Origin not allowed.", 403);
+  if (origin && !isAllowedOrigin(origin)) {
+    return fail("Origin not allowed.", 403);
   }
 
   if (request.method === "OPTIONS") {
