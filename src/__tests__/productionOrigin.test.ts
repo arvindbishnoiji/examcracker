@@ -6,8 +6,8 @@ const readRepoFile = (path: string) => readFileSync(resolve(process.cwd(), path)
 
 describe('production Pages origin and deployment guardrails', () => {
   it('allows the production Pages origin in the site API CORS allowlist', () => {
-    const source = readRepoFile('supabase/functions/ec-site-api/index.ts');
-    const match = source.match(/const DEFAULT_ALLOWED_ORIGINS = \[([\s\S]*?)\];/);
+    const source = readRepoFile('workers/ec-api/src/index.js');
+    const match = source.match(/const ALLOWED_ORIGINS = new Set\(\[([\s\S]*?)\]\);/);
     expect(match?.[1]).toContain('"https://examcrack.pages.dev"');
   });
 

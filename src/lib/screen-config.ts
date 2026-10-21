@@ -217,16 +217,16 @@ export const SCREEN_DEFINITIONS: ScreenDefinition[] = [
   {
     key: 'chat',
     slug: 'chat',
-    label: 'Student chat',
-    route: '/chat',
-    description: 'The private doubt thread between a student and the mentor.',
+    label: 'Feedback & help',
+    route: '/feedback',
+    description: 'Send suggestions and report issues, then track the team response.',
     icon: '✉',
     group: 'Communication',
     sections: [
-      { id: 'thread', label: 'Message thread and composer', description: 'Live Firestore conversation.', required: true },
+      { id: 'thread', label: 'Message thread and composer', description: 'D1-backed feedback form, inbox and response history.', required: true },
       { id: 'help', label: 'Privacy note', description: 'Explains that only the student’s own thread is visible.' },
     ],
-    locked: 'Firestore security rules, sender identity and per-student thread isolation.',
+    locked: 'Firebase-authenticated ownership checks and per-student D1 feedback isolation.',
   },
   {
     key: 'notifications',
@@ -240,7 +240,7 @@ export const SCREEN_DEFINITIONS: ScreenDefinition[] = [
       { id: 'list', label: 'Notification list', description: 'Live inbox with mark-read actions.', required: true },
       { id: 'info', label: 'Delivery note', description: 'Explains in-app delivery versus browser push.' },
     ],
-    locked: 'Firestore inbox ownership and read state.',
+    locked: 'D1 inbox ownership and read state.',
   },
   {
     key: 'search',
@@ -495,7 +495,7 @@ export const DEFAULT_PROFILE_SCREEN: ProfileScreenConfig = {
     showSort: false,
   }),
   heroEyebrow: 'Student profile',
-  askDoubtLabel: 'Ask a doubt',
+  askDoubtLabel: 'Send feedback',
   signOutLabel: 'Sign out',
   editLabel: 'Edit profile',
   allowProfileEdit: true,
@@ -566,7 +566,7 @@ export const DEFAULT_CHALLENGES_SCREEN: ChallengesScreenConfig = {
 
 export const DEFAULT_CHAT_SCREEN: ChatScreenConfig = {
   ...baseScreen('chat', {
-    pageTitle: 'Doubt chat',
+    pageTitle: 'Feedback & help',
     pageSubtitle: 'Ask your mentor directly. Only your own thread is visible to you.',
     eyebrow: 'Mentor support',
     showSearch: false,
@@ -575,14 +575,14 @@ export const DEFAULT_CHAT_SCREEN: ChatScreenConfig = {
     emptyTitle: 'No messages yet',
     emptyBody: 'Say hello to your mentor and ask your first doubt.',
   }),
-  composerPlaceholder: 'Type your doubt…',
+  composerPlaceholder: 'Add details to your feedback…',
   sendLabel: 'Send',
   emptyTitle: 'No messages yet',
   emptyBody: 'Say hello to your mentor and ask your first doubt.',
   showTimestamp: true,
   helpTitle: 'Private by default',
   helpBody:
-    'Your conversation is stored in Firestore and is visible only to you and your mentor. Messages are read and written under security rules.',
+    'Your feedback is stored in Cloudflare D1 and is visible only to you and your mentor. Every read and write is checked against your Firebase identity.',
 };
 
 export const DEFAULT_NOTIFICATIONS_SCREEN: NotificationsScreenConfig = {
@@ -594,7 +594,7 @@ export const DEFAULT_NOTIFICATIONS_SCREEN: NotificationsScreenConfig = {
     showFilters: false,
     showSort: false,
     emptyTitle: 'No notifications',
-    emptyBody: 'Notifications from your admin appear here as tests, lectures, chat replies or announcements are published.',
+    emptyBody: 'Notifications from your admin appear here as tests, lectures, feedback responses or announcements are published.',
   }),
   unreadLabel: 'Unread',
   readLabel: 'Read',
@@ -649,7 +649,7 @@ export const DEFAULT_ONBOARDING_SCREEN: OnboardingScreenConfig = {
   formEyebrow: 'Required setup',
   formTitle: 'Complete your profile',
   nameQuestion: 'What should we call you?',
-  nameHelp: 'This appears on your profile, leaderboard and doubt chat.',
+  nameHelp: 'This appears on your profile, leaderboard and feedback requests.',
   namePlaceholder: 'Your full name',
   examQuestion: 'Which exam are you preparing for?',
   examHelp: 'This controls your lectures, batches, tests and leaderboard.',

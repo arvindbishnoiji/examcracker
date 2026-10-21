@@ -165,7 +165,7 @@ export const DEFAULT_LOGIN: LoginConfig = {
   heroImageUrl: '',
   heroTitle: 'Crack JEE & NEET with focused lectures and real tests',
   heroSubtitle:
-    'A personalised dashboard, chapter-wise lectures, timed tests and live doubt chat — filtered for your exam and class.',
+    'A personalised dashboard, chapter-wise lectures, timed tests and a private feedback channel — filtered for your exam and class.',
   highlights: [
     'Email and Google sign-in secured by Firebase',
     'Personalised JEE / NEET content for Class 11 and 12',
@@ -455,12 +455,12 @@ export const DEFAULT_FOOTER: FooterConfig = {
       title: 'Support',
       links: [
         { id: 'footer-notifications', label: 'Notifications', href: '/notifications' },
-        { id: 'footer-chat', label: 'Doubt chat', href: '/chat' },
+        { id: 'footer-feedback', label: 'Feedback', href: '/feedback' },
       ],
     },
   ],
   socialLinks: [],
-  copyright: '© Exam Cracker. Built with Firebase, Supabase and Cloudflare.',
+  copyright: '© Exam Cracker. Built with Firebase, Cloudflare and Google Drive.',
 };
 
 export const DEFAULT_BANNERS: BannersConfig = {

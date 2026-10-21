@@ -26,7 +26,7 @@ jobs:
 
       - name: Validate deployment configuration
         run: |
-          required=(NEXT_PUBLIC_FIREBASE_API_KEY NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN NEXT_PUBLIC_FIREBASE_PROJECT_ID NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID NEXT_PUBLIC_FIREBASE_APP_ID NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY NEXT_PUBLIC_SUPABASE_FUNCTION_URL NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL)
+          required=(NEXT_PUBLIC_FIREBASE_API_KEY NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN NEXT_PUBLIC_FIREBASE_PROJECT_ID NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID NEXT_PUBLIC_FIREBASE_APP_ID NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL)
           for name in "${required[@]}"; do
             if [ -z "${!name}" ]; then echo "Missing required GitHub variable/secret: $name" >&2; exit 1; fi
           done
@@ -37,10 +37,6 @@ jobs:
           NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'darvo1.firebasestorage.app' }}
           NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '283467136948' }}
           NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID || '1:283467136948:web:c66fd594827909eb3f7ce1' }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'https://kncbvcozpcrfvxdbkbtf.supabase.co' }}
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_-4si2gp96FDx7ziHHMO7Kg_sasmLYB2' }}
-          NEXT_PUBLIC_SUPABASE_FUNCTION_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_FUNCTION_URL || 'https://kncbvcozpcrfvxdbkbtf.supabase.co/functions/v1/exam-cracker-api' }}
-          NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL || 'https://kncbvcozpcrfvxdbkbtf.supabase.co/functions/v1/ec-site-api' }}
           NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL: ${{ vars.NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL || 'https://ec-content-api.arvinddara0290.workers.dev' }}
 
       - name: Build Next.js
@@ -54,10 +50,6 @@ jobs:
           NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID || '1:283467136948:web:c66fd594827909eb3f7ce1' }}
           NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || 'G-FMV79YMHBC' }}
           NEXT_PUBLIC_FIREBASE_VAPID_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_VAPID_KEY }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'https://kncbvcozpcrfvxdbkbtf.supabase.co' }}
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_-4si2gp96FDx7ziHHMO7Kg_sasmLYB2' }}
-          NEXT_PUBLIC_SUPABASE_FUNCTION_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_FUNCTION_URL || 'https://kncbvcozpcrfvxdbkbtf.supabase.co/functions/v1/exam-cracker-api' }}
-          NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL || 'https://kncbvcozpcrfvxdbkbtf.supabase.co/functions/v1/ec-site-api' }}
           NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL: ${{ vars.NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL || 'https://ec-content-api.arvinddara0290.workers.dev' }}
           NEXT_PUBLIC_ADMIN_EMAIL: arvinddarabishnoi@gmail.com
           NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${{ vars.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED || 'true' }}
@@ -79,14 +71,39 @@ jobs:
           NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID || '1:283467136948:web:c66fd594827909eb3f7ce1' }}
           NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || 'G-FMV79YMHBC' }}
           NEXT_PUBLIC_FIREBASE_VAPID_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_VAPID_KEY }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'https://kncbvcozpcrfvxdbkbtf.supabase.co' }}
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_-4si2gp96FDx7ziHHMO7Kg_sasmLYB2' }}
-          NEXT_PUBLIC_SUPABASE_FUNCTION_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_FUNCTION_URL || 'https://kncbvcozpcrfvxdbkbtf.supabase.co/functions/v1/exam-cracker-api' }}
-          NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL || 'https://kncbvcozpcrfvxdbkbtf.supabase.co/functions/v1/ec-site-api' }}
           NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL: ${{ vars.NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL || 'https://ec-content-api.arvinddara0290.workers.dev' }}
           NEXT_PUBLIC_ADMIN_EMAIL: arvinddarabishnoi@gmail.com
           NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${{ vars.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED || 'true' }}
           NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://examcrack.pages.dev' }}
+
+      - name: Verify configured D1 database and apply schema migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_D1_DATABASE_ID: dbf2375d-a302-443f-83bf-df59e1d98177
+        run: |
+          npx wrangler d1 list --json > /tmp/d1-databases.json
+          node -e "const fs=require('node:fs');const raw=JSON.parse(fs.readFileSync('/tmp/d1-databases.json','utf8'));const list=Array.isArray(raw)?raw:(raw.result||raw.databases||raw.items||[]);const db=list.find(x=>(x.uuid||x.id||x.database_id||x.databaseId)===process.env.EXPECTED_D1_DATABASE_ID);if(!db||db.name!=='exam-cracker-db'){console.error('Expected D1 database was not found in the authenticated Cloudflare account; stopping before deployment.');process.exit(1)}console.log('Verified exam-cracker-db database ID:',process.env.EXPECTED_D1_DATABASE_ID)"
+          npx wrangler d1 migrations apply exam-cracker-db --remote
+          schema_output="$(npx wrangler d1 execute exam-cracker-db --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('student_profiles','course_catalog','subjects','course_subjects','drive_files','site_settings','feedback_threads','feedback_messages','notifications') ORDER BY name")"
+          echo "$schema_output"
+          for table in student_profiles course_catalog subjects course_subjects drive_files site_settings feedback_threads feedback_messages notifications; do
+            grep -q "$table" <<<"$schema_output" || (echo "Missing D1 table: $table" >&2 && exit 1)
+          done
+
+      - name: Report Google Drive Worker secret status
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          secret_json="$(npx wrangler secret list --name exam-cracker-web --format json 2>/dev/null || echo '[]')"
+          secret_names="$(SECRET_JSON="$secret_json" node -e "try{const parsed=JSON.parse(process.env.SECRET_JSON||'[]');const list=Array.isArray(parsed)?parsed:parsed.result||[];console.log(list.map(s=>s.name).join(' '))}catch{console.log('')}")"
+          echo "Configured Worker secrets: ${secret_names:-<none>}"
+          for secret in GOOGLE_SERVICE_ACCOUNT_JSON GOOGLE_DRIVE_FOLDER_ID; do
+            if ! grep -qw "$secret" <<<"$secret_names"; then
+              echo "::warning::Worker secret $secret is not configured. Photo/PDF routes will return 503 until you run: npx wrangler secret put $secret --name exam-cracker-web (see GOOGLE_DRIVE_SETUP.md)."
+            fi
+          done
 
       - name: Update internal Pages backend Worker (exam-cracker-web)
         uses: cloudflare/wrangler-action@v3

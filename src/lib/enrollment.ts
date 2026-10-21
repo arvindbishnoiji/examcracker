@@ -2,8 +2,8 @@ import type { CourseCatalogItem, Enrollment } from '@/types';
 
 /**
  * UI-facing enrollment helpers. The authoritative eligibility, paid-access and
- * expiry rules live in supabase/functions/_shared/enrollment-core.ts and are
- * enforced server-side. These helpers only render accurate labels/status.
+ * expiry rules live in `src/lib/enrollment-core.ts` and in the Worker; the
+ * server re-checks every enrollment. These helpers only render labels/status.
  */
 
 export function isPaidCourse(item: Pick<CourseCatalogItem, 'metadata'>): boolean {

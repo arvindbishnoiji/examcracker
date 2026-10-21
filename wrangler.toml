@@ -7,6 +7,14 @@ account_id = "93f8cbbe79e248f8d1db9fccc586f0c3"
 workers_dev = false
 upload_source_maps = true
 
+# Cloudflare D1 — Exam Cracker relational application data.
+# Database name and ID were supplied by the owner.
+[[d1_databases]]
+binding = "DB"
+database_name = "exam-cracker-db"
+database_id = "dbf2375d-a302-443f-83bf-df59e1d98177"
+migrations_dir = "migrations"
+
 # OpenNext/Next.js 15 can attempt a dynamic middleware-manifest require on Workers,
 # which can break every route. This app has no Next.js middleware.ts, so minimal
 # mode safely skips that unsupported code path.
@@ -26,7 +34,14 @@ binding = "ASSETS"
 enabled = true
 
 # Environment variables (public NEXT_PUBLIC_* are baked at build time via .env)
-# Secrets must be set via `wrangler secret put` or GitHub Actions secrets, never committed
+# Secrets must be set via `wrangler secret put` or GitHub Actions secrets, never committed.
+#
+# Google Drive (server-side only — see GOOGLE_DRIVE_SETUP.md):
+#   wrangler secret put GOOGLE_SERVICE_ACCOUNT_JSON --name exam-cracker-web
+#   wrangler secret put GOOGLE_DRIVE_FOLDER_ID      --name exam-cracker-web
+# Optional purpose-specific folders / limits can be Worker vars or secrets:
+#   GOOGLE_DRIVE_PROFILE_FOLDER_ID, GOOGLE_DRIVE_PDF_FOLDER_ID, GOOGLE_DRIVE_SCOPE,
+#   GOOGLE_DRIVE_MAX_PROFILE_PHOTO_MB (default 5), GOOGLE_DRIVE_MAX_PDF_MB (default 20)
 
 # Routes — add custom domain after deployment
 # [[routes]]

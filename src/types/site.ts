@@ -1,6 +1,6 @@
 /**
  * Site configuration contracts shared by the public website and the admin
- * control centre. These values are persisted in Supabase (`site_settings`) and
+ * control centre. These values are persisted in Cloudflare D1 (`site_settings`) and
  * delivered to the browser through the public `/public/site` endpoint.
  *
  * Nothing in this file contains secrets: every field is safe to render.

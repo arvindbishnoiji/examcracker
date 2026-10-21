@@ -15,7 +15,7 @@ import {
   resolveAudience,
   summarizeBulkResults,
   type StudentLike,
-} from '../../supabase/functions/_shared/enrollment-core';
+} from '../lib/enrollment-core';
 
 const item = {
   id: '11111111-1111-4111-8111-111111111111',

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import type { StudentProfile } from '@/types';
 import { getAdminStudents } from '@/lib/api';
-import { sendAdminNotification, sendAdminNotificationBatch } from '@/lib/firestore';
+import { sendAdminNotification, sendAdminNotificationBatch } from '@/lib/app-data';
 import { isValidInternalDeepLink } from '@/lib/validation';
 import { useToast } from '@/hooks/useToast';
 import { AdminPageHeader, Banner, ConfirmDialog, Field, Panel, SearchInput, Spinner, StatCard, StatusPill } from '../ui';
@@ -111,7 +111,7 @@ export function NotificationsSection() {
       <AdminPageHeader
         eyebrow="Communication"
         title="Notifications"
-        description="Deliver real in-app notifications to the student inbox. Every write is an individual Firestore document the student app already subscribes to."
+        description="Deliver real in-app notifications to the student inbox. Every write is an individual D1 row the student app reads."
         meta={
           <>
             <StatusPill tone="brand">{students.length} reachable students</StatusPill>
@@ -123,7 +123,7 @@ export function NotificationsSection() {
 
       <div className="grid gap-3 sm:grid-cols-3 mt-4">
         <StatCard label="Audience" value={recipients.length} hint={singleUid ? 'Selected student' : 'Matching current filters'} tone="brand" />
-        <StatCard label="Channel" value="In-app" hint="Firestore notification inbox" tone="info" />
+        <StatCard label="Channel" value="In-app" hint="D1 notification inbox" tone="info" />
         <StatCard label="Delivery" value="Batched" hint="400 writes per batch" tone="success" />
       </div>
 
@@ -173,7 +173,7 @@ export function NotificationsSection() {
             {result && (
               <Banner tone={result.failed ? 'warning' : 'success'} title={result.failed ? 'Partially delivered' : 'Delivered'}>
                 {result.sent} notification{result.sent === 1 ? '' : 's'} written to student inboxes
-                {result.failed ? ` · ${result.failed} failed (check Firestore rules and retry).` : '.'}
+                {result.failed ? ` · ${result.failed} failed (check the Worker logs and retry).` : '.'}
               </Banner>
             )}
           </div>

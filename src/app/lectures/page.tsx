@@ -15,13 +15,13 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { getCatalogContent, enrollInBatchOrSeries, ApiError } from '@/lib/api';
+import { getCatalogContent, getStudentSubjects, enrollInBatchOrSeries, ApiError } from '@/lib/api';
 import { Badge, Skeleton } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useToast } from '@/hooks/useToast';
 import { useSiteConfig } from '@/context/SiteConfigContext';
-import type { CourseCatalogItem } from '@/types';
+import type { CourseCatalogItem, Subject } from '@/types';
 import { isSafeHttpUrl } from '@/lib/validation';
 import { activeEnrollmentKeys, coursePriceLabel, isPaidCourse } from '@/lib/enrollment';
 import { visibleSectionIds } from '@/lib/screen-config';
@@ -61,6 +61,8 @@ function LecturesHubPageInner() {
   const [enrolling, setEnrolling] = useState<string | null>(null);
   const [justEnrolled, setJustEnrolled] = useState<Set<string>>(new Set());
   const [onlyMine, setOnlyMine] = useState(false);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjectFilter, setSubjectFilter] = useState('');
 
   const tabMeta: Record<Tab, { label: string; icon: React.ReactNode }> = {
     batches: { label: screen.tabLabels.batches, icon: <Layers size={14} /> },
@@ -87,6 +89,22 @@ function LecturesHubPageInner() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!profile) return;
+    let cancelled = false;
+    getStudentSubjects()
+      .then((rows) => {
+        if (!cancelled) setSubjects(rows);
+      })
+      .catch(() => {
+        // A subject catalogue failure must not block the lecture list.
+        if (!cancelled) setSubjects([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile]);
 
   useEffect(() => {
     setFilter(initialQuery);
@@ -128,6 +146,10 @@ function LecturesHubPageInner() {
     const q = filter.trim().toLowerCase();
     const list = items.filter((item) => {
       if (onlyMine && !isEnrolled(item)) return false;
+      if (subjectFilter) {
+        const itemSubject = item.subjectId || String(((item.metadata || {}) as Record<string, unknown>).subjectId || '');
+        if (itemSubject !== subjectFilter) return false;
+      }
       if (!q) return true;
       const meta = (item.metadata || {}) as Record<string, unknown>;
       return `${item.title} ${item.description} ${meta.subject || ''} ${meta.topic || ''}`.toLowerCase().includes(q);
@@ -137,7 +159,7 @@ function LecturesHubPageInner() {
       : [...list].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
     return screen.itemLimit > 0 ? sorted.slice(0, screen.itemLimit) : sorted;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, filter, sort, onlyMine, activeKeys, justEnrolled, screen.itemLimit]);
+  }, [items, filter, sort, onlyMine, subjectFilter, activeKeys, justEnrolled, screen.itemLimit]);
 
   const canFilterMine = tab === 'batches' || tab === 'series';
   const sections = visibleSectionIds('lectures', screen);
@@ -205,7 +227,7 @@ function LecturesHubPageInner() {
           const enrolled = isEnrolled(item);
           const paid = isPaidCourse(item);
           const codeValue = enrollCodes[item.id] || '';
-          const lessonParent = String(meta.parentId || meta.parent_id || meta.batchId || '');
+          const lessonParent = String(item.parentId || meta.parentId || meta.parent_id || meta.batchId || '');
           const preview = meta.isPreview === true;
           return (
             <article key={item.id} className="ec-card ec-card-interactive flex flex-col overflow-hidden">
@@ -247,7 +269,9 @@ function LecturesHubPageInner() {
                   <Badge>{item.exam}</Badge>
                   <Badge>Class {item.classes.join('/')}</Badge>
                   {needsCode && <Badge variant="info"><Lock size={9} className="mr-0.5" /> Access code</Badge>}
-                  {Boolean(meta.subject) && <Badge variant="default">{String(meta.subject)}</Badge>}
+                  {Boolean(item.subjectName || meta.subject) && (
+                    <Badge variant="default">{String(item.subjectName || meta.subject)}</Badge>
+                  )}
                 </div>
 
                 {(tab === 'batches' || tab === 'series') && (
@@ -298,7 +322,14 @@ function LecturesHubPageInner() {
                     >
                       <PlayCircle size={14} /> {screen.watchCtaLabel}
                     </Link>
-                    {Boolean(meta.notesPdfUrl) && isSafeHttpUrl(String(meta.notesPdfUrl)) && (
+                    {Boolean(item.metadata && (item.metadata as Record<string, unknown>).notesFileId) ? (
+                      <Link
+                        href={`/lectures/${item.id}`}
+                        className="ec-btn inline-flex items-center gap-1 border border-ink-200 px-3 py-2 text-xs font-semibold"
+                      >
+                        <FileText size={13} /> Notes
+                      </Link>
+                    ) : Boolean(meta.notesPdfUrl) && isSafeHttpUrl(String(meta.notesPdfUrl)) ? (
                       <a
                         href={String(meta.notesPdfUrl)}
                         target="_blank"
@@ -307,13 +338,20 @@ function LecturesHubPageInner() {
                       >
                         <FileText size={13} /> Notes
                       </a>
-                    )}
+                    ) : null}
                   </div>
                 )}
 
                 {tab === 'resources' && (
                   <div className="mt-auto pt-2">
-                    {Boolean(meta.pdfUrl) && isSafeHttpUrl(String(meta.pdfUrl)) ? (
+                    {Boolean(meta.notesFileId) ? (
+                      <Link
+                        href={`/lectures/${item.id}`}
+                        className="ec-btn flex w-full items-center justify-center gap-1.5 bg-ink-900 px-3 py-2 text-xs font-bold text-white"
+                      >
+                        <FileText size={14} /> Open resource
+                      </Link>
+                    ) : Boolean(meta.pdfUrl) && isSafeHttpUrl(String(meta.pdfUrl)) ? (
                       <a
                         href={String(meta.pdfUrl)}
                         target="_blank"
@@ -381,6 +419,21 @@ function LecturesHubPageInner() {
                 />
               </div>
             </div>
+          ) : null}
+          {subjects.length > 0 ? (
+            <select
+              className="ec-field !w-auto !py-2 !text-xs"
+              value={subjectFilter}
+              onChange={(event) => setSubjectFilter(event.target.value)}
+              aria-label="Filter by subject"
+            >
+              <option value="">All subjects</option>
+              {subjects.map((subject) => (
+                <option key={subject.id} value={subject.id}>
+                  {subject.name}
+                </option>
+              ))}
+            </select>
           ) : null}
           {screen.showSort ? (
             <select

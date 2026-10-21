@@ -84,7 +84,7 @@ export function OverviewSection() {
       {error && (
         <div className="mb-4">
           <Banner tone="danger" title="Overview could not load">
-            {error} — verify the Supabase Edge Function is deployed and the admin session is valid.
+            {error} — verify the Cloudflare Worker is deployed and the admin session is valid.
           </Banner>
         </div>
       )}

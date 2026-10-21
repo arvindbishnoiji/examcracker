@@ -1,231 +1,129 @@
-# Exam Cracker — Next.js Web App
+# Exam Cracker
 
-**JEE & NEET coaching web app** built with **Next.js App Router + TypeScript + Tailwind CSS**, connected to the existing **Firebase (darvo1)**, **Supabase Edge Function** and **Cloudflare ec-content-api Worker**. Mobile-first design with bottom nav, admin dashboard, YouTube playlist import (no Data API key) and real-time Firestore chat.
+JEE/NEET learning app for Class 11 and 12 (Next.js App Router, TypeScript,
+Tailwind CSS) built on:
 
-- **App name:** Exam Cracker
-- **Firebase project:** `darvo1` (configure `NEXT_PUBLIC_FIREBASE_API_KEY` with the Web app key from Firebase Console → Project settings → Your apps; the deploy workflow temporarily falls back to the project key bundled in `google-services.json` if the repository variable is unset.)
-- **Supabase project ref:** `kncbvcozpcrfvxdbkbtf` — Edge Function `exam-cracker-api`
-- **Cloudflare Worker (media proxy):** `https://ec-content-api.arvinddara0290.workers.dev` (separate from website Worker)
-- **Pages website:** `https://examcrack.pages.dev` (Cloudflare Pages project `examcrack`)
-- **Internal OpenNext Worker:** `exam-cracker-web` (service-binding target only; `workers_dev = false` in root `wrangler.toml`)
-- **Admin email (server-verified):** `arvinddarabishnoi@gmail.com`
-- **Android appId (preserved for future wrapper):** `com.darvo.ec` (no Capacitor build in this web deliverable)
+**Firebase Authentication → Cloudflare Worker API → Cloudflare D1 → Google Drive (files)**
 
----
+There is no Supabase or Firestore runtime. Files are never stored in D1 and never
+outside Google Drive.
 
-## Quick start
+## Architecture
+
+| Layer | Responsibility |
+| --- | --- |
+| Firebase Auth (`darvo1`) | Signup, sign-in, password reset, Google sign-in. Firebase UID is the identity key. Passwords never touch D1. |
+| Browser | Calls only the same-origin `/api/ec/*` API with a Firebase ID token. |
+| `src/app/api/ec/[...path]/route.ts` | Proxies to the Worker inside the same OpenNext deployment and fails closed with 503 when the D1 binding is absent. |
+| `workers/ec-api/src/index.js` | Verifies Firebase ID tokens (JWKS), enforces admin/ownership rules, validates bodies, scores tests on the server, and reads/writes D1 with parameterized SQL. |
+| Cloudflare D1 (`DB`) | All structured data: profiles, catalogue, subjects, progress, attempts, enrollments, feedback, notifications, settings, audit log, Drive metadata. |
+| Google Drive | Profile photos and course PDFs, accessed only by the Worker service account. Private; no public links. |
+| `ec-content-api` Worker | Separate YouTube video/playlist metadata proxy. Unchanged. |
+
+- D1 binding `DB`, database `exam-cracker-db`, ID `dbf2375d-a302-443f-83bf-df59e1d98177`.
+- Admin email `arvinddarabishnoi@gmail.com`, enforced by the Worker on every admin
+  request. Email verification is not a required admin login condition.
+- `/chat` redirects to `/feedback`. Feedback threads, replies and status live in D1
+  with server-enforced ownership.
+
+## Local setup
 
 ```bash
-cp .env.example .env.local   # edit if needed — defaults already correct for darvo1
 npm ci
-npm run dev                  # http://localhost:3000
-npm run build                # production build must pass
-npm test                     # Vitest suite (date, validation, playlist paging, admin gate)
+cp .env.example .env.local   # Firebase web config + media proxy URL
+npm run dev
+```
+
+`next dev` has no Cloudflare bindings, so `/api/ec/*` returns a clear 503. To run
+the full stack locally:
+
+```bash
+npx wrangler d1 migrations apply exam-cracker-db --local
+# create .dev.vars with the Worker secrets you need (never commit it)
+npm run build:cloudflare
+npx wrangler dev --local
+```
+
+Configure only public Firebase values in `.env.local`. Never put Cloudflare tokens,
+Firebase Admin keys, the service-account JSON or Drive folder ids in
+`NEXT_PUBLIC_*`. See [GOOGLE_DRIVE_SETUP.md](GOOGLE_DRIVE_SETUP.md).
+
+## D1 schema
+
+Versioned, additive migrations in `migrations/`:
+
+- `0001_initial_schema.sql` — profiles, catalogue, progress, attempts, enrollments,
+  events/rules, announcements, settings, activity, library, feedback,
+  notifications, push tokens, broadcasts.
+- `0002_subjects_and_drive_files.sql` — `subjects`, `course_subjects`, hierarchy
+  columns (`parent_id`, `subject_id`, `sort_order`) with a JSON backfill,
+  `drive_files`, `student_profiles.avatar_file_id`, `feedback_threads.resolved_at`.
+
+Validate locally before touching the remote database:
+
+```bash
+npx wrangler d1 migrations apply exam-cracker-db --local
+```
+
+Then, after verifying the account and database id:
+
+```bash
+npx wrangler whoami
+npx wrangler d1 list
+npx wrangler d1 migrations list exam-cracker-db --remote
+npx wrangler d1 migrations apply exam-cracker-db --remote
+npx wrangler d1 execute exam-cracker-db --remote --command="SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+```
+
+Stop if the database list does not contain ID `dbf2375d-a302-443f-83bf-df59e1d98177`.
+Do not create a duplicate. Remote migrations and Worker secrets are owner-run
+actions; the repository cannot verify them by itself.
+
+## Checks
+
+```bash
+npm ci
 npm run typecheck
-```
-
-`.env.local` is git-ignored. Copy `.env.example` to `.env.local` and replace placeholders with your Firebase Web App configuration, Supabase project URL/publishable key, function URLs, and deployed media Worker URL. The example intentionally contains placeholders only. Never commit `.env`, service-role keys, Firebase Admin JSON or Cloudflare API tokens.
-
-### Public env vars (NEXT_PUBLIC_* — browser-safe)
-
-| Var | Default | Notes |
-|-----|---------|-------|
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | *(required)* | Firebase Web App key; browser-visible, restrict by API/referrer in Google Cloud |
-| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | *(required)* | |
-| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | *(required)* | |
-| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | *(required)* | |
-| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | *(required)* | |
-| `NEXT_PUBLIC_FIREBASE_APP_ID` | *(required)* | |
-| `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | *(optional)* |
-| `NEXT_PUBLIC_SUPABASE_URL` | *(required)* | |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | *(required)* | **publishable only** — never service-role |
-| `NEXT_PUBLIC_SUPABASE_FUNCTION_URL` | *(required)* | `…/functions/v1/exam-cracker-api`, no trailing slash |
-| `NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL` | *(required)* | `…/functions/v1/ec-site-api`, no trailing slash |
-| `NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL` | *(required)* | deployed media Worker base URL |
-| `NEXT_PUBLIC_ADMIN_EMAIL` | `arvinddarabishnoi@gmail.com` | UI hint; server checks token |
-| `NEXT_PUBLIC_FIREBASE_VAPID_KEY` | *(empty)* | optional; set after Firebase Console → Project settings → Cloud Messaging → Web Push cert |
-| `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED` | `true` | optional; set to `false` when Google provider is disabled |
-| `NEXT_PUBLIC_SITE_URL` | fallback domain | optional canonical URL for metadata and sitemap |
-
-All browser requests to Supabase send:
-
-```
-Authorization: Bearer <Firebase ID token>
-apikey: <publishable key>
-Content-Type: application/json
-```
-
-See `src/lib/api.ts` for full contract.
-
----
-
-## Routes
-
-| Route | Access | Description |
-|-------|--------|-------------|
-| `/` | public | Redirects to `/login`, `/onboarding` or `/home` based on session |
-| `/login` | public | Email/password + Google (popup on desktop, redirect on mobile), reset |
-| `/onboarding` | auth | Name + JEE/NEET + Class 11/12 → `POST /profile` |
-| `/home` | auth | Today’s Goal, banners/events carousel, live/upcoming tests, batches, announcements |
-| `/lectures` | auth | All/My Batches, Series, Lectures, Resources; access-code enrolment |
-| `/lectures/[id]` | auth | YouTube player, next/prev, PDF, progress `POST /progress` (debounced) |
-| `/tests` | auth | Live/upcoming/completed filter |
-| `/tests/[id]` | auth | Timed attempt, draft restore, `POST /tests/:id/submit` (server scores) |
-| `/leaderboard` | auth | Per-test rank (never mixed) `GET /leaderboard?testId=` |
-| `/profile` | auth | `GET /analysis`, learning level, watched time |
-| `/chat` | auth | Realtime own thread `studentThreads/{uid}/messages` |
-| `/notifications` | auth | `users/{uid}/notifications` inbox |
-| `/events` | auth | Event calendar, cards, ICS download |
-| `/challenges` | auth | Study challenges with checklists |
-| `/search` | auth | Search across lectures, tests, batches, series, events and notices |
-| `/admin` | admin only | Overview + grouped workspaces (Learning content, Tests & performance, Students & access, Communication, Website settings, System) |
-| `/admin/screens` | admin only | **Screen Studio** — pick any student screen and edit its headings, labels, sections, layout and messages |
-| `/admin/screens/[screen]` | admin only | Per-screen editor with mobile/desktop preview, save draft and publish |
-
-Schedules rendered in **Asia/Kolkata (IST)**; stored as UTC ISO in Supabase.
-
----
-
-## Data flow (no secrets in browser)
-
-```
-Browser (NEXT_PUBLIC_*) ─Firebase Auth (ID token)─► Supabase Edge Function exam-cracker-api
-                      ─Firestore (chat/notifs, RLS via rules)─► Firebase Firestore
-                      ─Cloudflare ec-content-api (/video, /playlist + cursor)─► YouTube pages
-```
-
-- **RLS stays strict:** tables deny anon/auth direct access; only Edge Function with service-role (server side) reads/writes.
-- **Writes:** `POST /enrollments` (self-service, exam/class + access_code checked, paid → 402), `POST /progress`, `POST /tests/:id/submit`, admin CRUD under `/admin/*`.
-- **Admin enrollment API** (service-role only, Firebase token + admin-email check): paginated `/admin/enrollments`, `/admin/enrollments/bulk` (+`dryRun`, 409 `CONFIRMATION_REQUIRED` for wide audiences), `/admin/enrollments/bulk-revoke` (requires `confirm: "REVOKE"`), soft `DELETE`, `/:id/restore`, `/admin/enrollments/history`, `/admin/enrollment-rules`.
-- **Origin allowlist:** both Edge Functions reject unknown browser origins before reading data. Set the `ALLOWED_ORIGINS` secret (comma-separated) when adding a custom domain; requests without an `Origin` header (server jobs) are unaffected.
-- **Worker:** `workers/ec-content-api/src/index.js` + `workers/ec-content-api/wrangler.toml` **must stay** `ec-content-api`. Website is **separate** `wrangler.toml` → `exam-cracker-web`.
-
-- **Workers runtime compatibility:** the website Worker sets `NEXT_PRIVATE_MINIMAL_MODE=1`. This app has no `middleware.ts`; the flag avoids a known Next/OpenNext runtime path that can attempt a dynamic middleware-manifest require on Workers. If Next.js middleware is added later, revisit this workaround and test its effects before removing/changing it.
-
----
-
-## Cloudflare deployment
-
-### Prereq (one-time, owner)
-
-1. **Cloudflare account:** configure the account used by the project. Website and media proxy are separate Workers.
-2. **GitHub Actions secrets:** `CLOUDFLARE_API_TOKEN` (Workers deploy permission) and `CLOUDFLARE_ACCOUNT_ID`. Optional secret: `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (web push only).
-3. **Public build configuration:** the deploy workflow includes fallback values for the existing Firebase `darvo1`, Supabase project, and media Worker so first deployment does not require entering 11 public variables by hand. Repository variables such as `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL`, `NEXT_PUBLIC_SITE_URL`, and `CLOUDFLARE_WEB_HEALTH_URL` may override those defaults when intentionally changing projects/domains. These are browser-visible public configuration, not privileged credentials. The health check targets `https://examcrack.pages.dev/login`, the only public website destination.
-3. **Firebase Console (darvo1):**
-   - Authentication → Sign-in method: enable **Email/Password** + **Google**.
-   - Create user `arvinddarabishnoi@gmail.com` (admin must pre-exist).
-   - Authentication → Settings → Authorized domains: add deployed Worker domain.
-   - Firestore: ensure database exists (Native mode) and deploy `firestore.rules`.
-   - Cloud Messaging → Web Push certificates → generate VAPID key → set `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (optional; in-app notifs work without it).
-
-### Local check
-
-```bash
+npm test
+npm run lint
 npm run build
-npm ci
-npm run build
-npm run build:cloudflare          # produces .open-next/
-npx wrangler deploy --dry-run     # validate wrangler.toml
+npm run build:cloudflare
 ```
 
-### CI vs Deploy
+CI additionally applies both migrations to a local D1 database, checks the required
+tables and scans `src/` for retired Supabase code and server credentials.
 
-- **`ci.yml`** runs on every push/PR: `npm ci` → typecheck → lint → `vitest` → `next build` → secret-scan → worker-config check.
-- **`deploy.yml`** is manual-dispatch only. It may update the internal `exam-cracker-web` service Worker when intentionally run on `main`; it never deploys `ec-content-api` and never runs automatically on push/merge. The public website remains `https://examcrack.pages.dev`, served by the Pages project through its `EXAM_CRACKER_WEB` service binding. Do not run this workflow during a code-only fix.
+## Feature map
 
-> Deployment is only claimed complete when `deploy.yml` succeeds and URL is verified. No fake “live” claim.
+**Student** — onboarding (name → JEE/NEET → Class 11/12), home, batches/series,
+lecture player, subjects filter, Drive PDF viewer, tests/attempts/results,
+leaderboard, profile with photo upload and analysis, events, challenges,
+notifications, search, library, feedback.
 
-Deployment guide: <https://developers.cloudflare.com/workers/framework-guides/web-apps/nextjs/> (vinext beta; OpenNext is fallback documented there).
+**Admin** — overview, Screen Studio, homepage builder, goals, batches, series,
+**subjects and assignments**, lectures (with parent → subject cascade and Drive PDF
+upload), tests, analytics, leaderboards, students/enrollments, announcements,
+events, notifications, feedback inbox, appearance/navigation/footer/banners/
+popups/testimonials/media/SEO/toggles, scheduling, reports, health, import/export,
+preferences and the preserved classic console with the YouTube playlist importer.
 
----
+## Important paths
 
-## Enrollment system
+- `src/app/` — student and admin routes
+- `src/lib/api.ts` — typed same-origin API client (including authenticated blob
+  downloads and upload progress)
+- `src/lib/enrollment-core.ts` — pure eligibility/bulk-enrollment rules used by the
+  console and tests
+- `src/components/student/ProfileAvatar.tsx` — preview, progress, cancel/retry
+  profile photo control
+- `workers/ec-api/src/index.js` — Worker API
+- `workers/ec-api/src/drive.js` — Google Drive service-account auth, upload,
+  download and delete
+- `migrations/` — D1 schema
+- `D1_MIGRATION_RUNBOOK.md` — rollout steps
+- `GOOGLE_DRIVE_SETUP.md` — Drive, service account and secret setup
+- `cloudflare-pages/` — Pages front door and service binding
+- `MASTER_PROMPT.md` — authoritative engineering brief
 
-- `enrollments` keeps one row per `(firebase_uid, item_type, item_id)`; `supabase/migrations/20261021000000_ec_enrollment_system.sql` adds status/source/expiry/timestamps, dedupes existing rows, adds the unique index, an `enrollment_events` audit table and `enrollment_rules` for future students.
-- Apply the migration in the Supabase SQL editor **before** deploying the updated functions. It is idempotent and non-destructive: duplicates are archived as `deduplicated` events, never silently dropped.
-- Paid content is never self-granted: free items can be joined by eligible students, paid/restricted items need a server-side admin grant or a valid access code. `400/402/409` responses explain each refusal.
-- "Enroll all students" means every existing student matching the chosen exam/class filters (eligibility is checked row by row). "Include future eligible students" additionally writes a rule applied on first profile creation.
-- Revoking is a soft delete (`status=revoked`), every bulk write is chunked and reports created/reactivated/skipped/failed counts, and wide grants require the admin to confirm the resolved scope first.
-
----
-
-## Admin usage
-
-- Sign in as `arvinddarabishnoi@gmail.com` (email match is also checked server-side via token).
-- **Screen Studio (`/admin/screens`)** — the main place for routine changes. Pick a student screen, edit its heading, introduction, labels, buttons, section visibility/order, layout, item limits, empty states, help note and optional banner, preview it on desktop/mobile, then **Save draft** and **Publish to students**. Every screen except Login/Signup is manageable. Configuration is stored per key in `site_settings` (`draft` + `published`) and served by `/public/site`.
-- **What admin screen settings can never do:** change authentication, skip onboarding, alter enrolment/access rules, change test timing or scoring, reveal answer keys early, or weaken Firestore/Supabase security. Those stay in code and are enforced server-side.
-- **Goals:** text, start/end (IST → UTC), CTA/deepLink, priority, active.
-- **Batches/Series:** title, thumbnail, instructor, features, exam/classes, access_code.
-- **Lectures:** batch/series parent, single YouTube URL → “Auto-fill” via `/video`, or **playlist URL → Import** (follows `nextCursor`, dedup by `videoId`, select/edit, set target + exam/class, save). All via `firestore.rules` + Supabase API.
-- **Tests:** title, subject, schedule, duration, marks, JSON question bank — paste/upload → **Validate** → preview → save as `kind=test` with `metadata.questions`. Keys hidden until submit.
-- **Events/Banners:** multiple image URLs, schedule, deepLink.
-- **Announcements:** audience All/JEE/NEET, scheduled_at, active.
-
----
-
-## Tests & quality
-
-- `src/lib/date.ts` — IST ↔ UTC, schedule active, countdown.
-- `src/lib/validation.ts` — `validateQuestionsJson`, safe URLs, deep links, exam/class filter.
-- `src/lib/mediaProxy.ts` — `extractYoutubeVideoId/PlaylistId`, `importFullYoutubePlaylist` (cursor + dedup).
-- `src/__tests__/examCracker.test.ts` — covers validation, media parsing and admin email gate.
-- `src/__tests__/enrollment.test.ts` — eligibility, paid detection, bulk request validation, audience resolution, duplicate-safe summaries.
-- `src/__tests__/authGate.test.ts` — mandatory-onboarding routing, failed-bootstrap handling, no redirect loops.
-- `src/__tests__/progress.test.ts` — IST streak calculation and honest derived metrics.
-- `src/__tests__/screenStudio.test.ts` — Screen Studio defaults/sanitisation/validation, required-section protection, malformed-value fallbacks and a drift guard that the Supabase Edge Function allowlist mirrors the client registry.
-- `src/__tests__/screenStudioRender.test.tsx` — server-renders every screen preview to catch crashes and verify published values/hidden sections are reflected.
-- `npm audit` — fix high/critical or document exception.
-- Accessibility: semantic forms, focus rings, keyboard nav, safe-area, no `dangerouslySetInnerHTML` for user URLs.
-
----
-
-## Firestore rules
-
-Deployed from `firestore.rules` (project `darvo1`):
-
-- `studentThreads/{uid}` — read/create/update by own uid or admin; delete admin only.
-- `studentThreads/{uid}/messages/{id}` — create enforces `senderRole == 'student'` for students, `admin` for admin email.
-- `users/{uid}/notifications/{id}` — create admin only; update allows student to mark read.
-- `fcmTokens/{uid}/tokens/{id}` — per-uid write.
-- `broadcasts/{id}` — read if `active==true` by any signed-in; write admin.
-
-Tighten further if needed; never add public allow-all.
-
----
-
-## What’s implemented vs manual steps
-
-| Area | Status |
-|------|--------|
-| Next.js routes + responsive UI + skeletons/empty/error/toasts | ✅ |
-| Firebase Auth (email+Google, popup+redirect, reset, persistence) | ✅ (client-only, window guards) |
-| Supabase Edge Function wiring (all routes, token + apikey, error handling) | ✅ |
-| Mandatory onboarding + route gate (no skip) | ✅ |
-| Admin bulk enrollment, future rules, audit history | ✅ (migration must be applied) |
-| Home (goals, events, tests, announcements) | ✅ |
-| Batches/Series/lectures/resources browse + enrolment | ✅ |
-| Lecture player (YouTube embed, prev/next, PDF, debounced progress) | ✅ |
-| Tests (filter, timer, draft, submit, result, review, leaderboard) | ✅ |
-| Analysis/Profile | ✅ |
-| Firestore chat + notifications (live, rules, FCM optional) | ✅ |
-| Admin tabs (goals/batches/lectures/playlist/series/tests/events/announcements/students/chat) | ✅ |
-| Workers separation (web vs ec-content-api) | ✅ |
-| CI workflow | ✅ |
-| Deploy workflow | ✅ (requires owner to add secrets) |
-| Manual Firebase enable (Email/Google, admin user, Firestore init, authorized domains, VAPID) | ⚠️ owner must do (see above) |
-| Real Cloudflare deployment | ⚠️ runs when secrets set on `main` push |
-| APK/Capacitor | ⏸️ intentionally not built for this web task; scaffolding preserved if any |
-
----
-
-## FAQ
-
-**Why not use service-role in browser?** RLS denies it; Edge Function verifies Firebase token itself (verify_jwt disabled by design). Publishable key is not a permission grant.
-
-**Do we need YouTube Data API key?** No. `ec-content-api` scrapes public oEmbed/playlist pages. Private/blocked/region-locked content may fail — UI shows error + manual add.
-
-**Can students see other students’ chats?** No — rules + thread scoping enforce per-uid access; admin only sees all.
-
----
-
-Built for `arvindbishnoiji/examcracker`. See `MASTER_PROMPT.md` for the full specification.
+No production deployment, remote D1 migration, merge or secret configuration is
+performed by committing to this repository.

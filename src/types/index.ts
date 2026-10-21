@@ -17,6 +17,7 @@ export interface StudentProfile {
   exam: ExamTrack;
   class_level: ClassLevel;
   avatar_url: string | null;
+  avatar_file_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -142,8 +143,79 @@ export interface CourseCatalogItem<TMetadata = Record<string, unknown>> {
   access_code?: string | null;
   hasAccessCode?: boolean;
   metadata: TMetadata;
+  /** Stable D1 relationship columns (preferred over metadata for filtering). */
+  parentId?: string | null;
+  subjectId?: string | null;
+  subjectName?: string | null;
+  sortOrder?: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface SubjectAssignment {
+  courseId: string;
+  courseTitle: string;
+  courseKind: 'batch' | 'series' | 'lecture' | 'resource' | 'event' | 'goal' | 'test';
+  lectureCount: number;
+}
+
+export interface Subject {
+  id: string;
+  name: string;
+  description: string;
+  exam: ContentExam;
+  classes: ClassLevel[];
+  active: boolean;
+  archived: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  assignmentCount?: number;
+  lectureCount?: number;
+  assignments?: SubjectAssignment[];
+}
+
+export interface CourseTreeSubject extends Subject {
+  lectures: CourseCatalogItem[];
+  resources: CourseCatalogItem[];
+}
+
+export interface CourseTreeResponse {
+  parent: CourseCatalogItem;
+  enrolled: boolean;
+  locked: boolean;
+  previewCount: number;
+  subjects: CourseTreeSubject[];
+  unassigned: {
+    id: null;
+    name: string;
+    lectures: CourseCatalogItem[];
+    resources: CourseCatalogItem[];
+  } | null;
+}
+
+export interface CatalogItemResponse {
+  item: CourseCatalogItem;
+  parent: CourseCatalogItem | null;
+  subject: { id: string; name: string | null } | null;
+}
+
+export interface DriveFileItem {
+  id: string;
+  purpose: 'profile_photo' | 'pdf';
+  mimeType: string;
+  displayName: string;
+  sizeBytes: number;
+  courseId: string | null;
+  courseTitle?: string | null;
+  subjectId: string | null;
+  ownerUid?: string | null;
+  uploaderUid?: string | null;
+  status: 'active' | 'superseded' | 'deleted' | 'orphan';
+  visibility: 'private' | 'authenticated' | 'course';
+  createdAt: string;
+  updatedAt: string;
+  downloadUrl: string;
 }
 
 export interface Announcement {
@@ -240,6 +312,7 @@ export interface LeaderboardEntry {
   score: number;
   maxScore: number;
   submittedAt: string;
+  isCurrentUser?: boolean;
 }
 
 export type LearningLevel = 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert';
@@ -319,7 +392,7 @@ export interface AppNotification {
   createdAt: string;
   readAt?: string | null;
   isRead?: boolean;
-  type?: 'info' | 'test' | 'lecture' | 'chat' | 'announcement' | 'goal';
+  type?: 'info' | 'test' | 'lecture' | 'feedback' | 'chat' | 'announcement' | 'goal';
 }
 
 export interface BroadcastNotice {

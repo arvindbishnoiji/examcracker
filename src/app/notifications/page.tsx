@@ -50,7 +50,7 @@ export default function NotificationsPage() {
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
     setLoading(true);
-    import('@/lib/firestore')
+    import('@/lib/app-data')
       .then(({ subscribeToNotifications }) => {
         if (cancelled) return;
         unsubscribe = subscribeToNotifications(
@@ -84,7 +84,7 @@ export default function NotificationsPage() {
     if (!user) return;
     setBusyId(item.id);
     try {
-      const { markNotificationRead } = await import('@/lib/firestore');
+      const { markNotificationRead } = await import('@/lib/app-data');
       await markNotificationRead(user.uid, item.id);
       setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, isRead: true } : entry)));
     } catch (err) {

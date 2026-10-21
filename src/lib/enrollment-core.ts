@@ -1,10 +1,9 @@
 // Exam Cracker — shared enrollment domain logic
 // ---------------------------------------------------------------------------
-// Pure functions shared by the Supabase Edge Functions and the Vitest suite.
-// No Deno/Node/Supabase globals live here so the exact same rules that run on
-// the server can be unit-tested in CI. The server must never rely on a client
-// supplied `isAdmin` flag; authorisation stays in the Edge Function, while this
-// module only answers "who is eligible" and "what would the bulk action do".
+// Pure, dependency-free rules used by the admin enrollment console and the
+// Vitest suite. The Worker enforces authorisation and persistence; this module
+// only answers "who is eligible" and "what would the bulk action do". The
+// server must never rely on a client-supplied `isAdmin` flag.
 
 export type EnrollmentItemType = 'batch' | 'series';
 export type AudienceMode = 'selected' | 'all' | 'filter';
