@@ -40,14 +40,19 @@ describe('final architecture', () => {
     expect(nextProxy).toContain('handleApiRequest');
     expect(nextProxy).not.toMatch(/https?:\/\//);
 
-    const pagesApi = read('cloudflare-pages/functions/api/ec/[[path]].js');
+    const pagesApi = read('cloudflare-pages/pages-api-entry.mjs');
     expect(pagesApi).toContain('handleApiRequest');
     expect(pagesApi).toContain('env.DB');
     expect(pagesApi).not.toContain('EXAM_CRACKER_WEB');
 
+    const route = read('cloudflare-pages/functions/api/ec/[[path]].js');
+    expect(route).toContain('pages-api-entry.mjs');
+    expect(route).not.toContain('EXAM_CRACKER_WEB');
+
     const buildScript = read('cloudflare-pages/build.sh');
-    expect(buildScript).toContain('workers/ec-api/src/index.js');
-    expect(buildScript).toContain('workers/ec-api/src/drive.js');
+    expect(buildScript).toContain('esbuild');
+    expect(buildScript).toContain('pages-api-entry.mjs');
+    expect(buildScript).toContain('functions/api/ec/[[path]].js');
   });
 
   it('keeps the YouTube metadata Worker separate from the D1 API Worker', () => {
