@@ -668,11 +668,17 @@ export async function handleApiRequest(request, env) {
         return json({item:await first(db,"SELECT * FROM feedback_threads WHERE id=?",id),messages:await listFeedbackMessages(db,id)});
       }
       if (segments[1] === "feedback" && segments.length === 3 && method === "PATCH") {
-        const b=await readBody(request),status=String(b.status||"");
+        const b=await readBody(request), id=segments[2];
+        if (b.markRead === true) {
+          await run(db,"UPDATE feedback_messages SET is_read=1,read_at=? WHERE thread_id=? AND sender_role='student' AND is_read=0",now(),id);
+          await run(db,"UPDATE feedback_threads SET unread_by_admin=0 WHERE id=?",id);
+          return json({item:await first(db,"SELECT * FROM feedback_threads WHERE id=?",id)});
+        }
+        const status=String(b.status||"");
         if(!["open","in_progress","resolved"].includes(status)) return fail("Invalid feedback status.");
-        await run(db,"UPDATE feedback_threads SET status=?,updated_at=? WHERE id=?",status,now(),segments[2]);
-        await activity(db,user,"feedback.status","feedback",segments[2],"Changed feedback status",{status});
-        return json({item:await first(db,"SELECT * FROM feedback_threads WHERE id=?",segments[2])});
+        await run(db,"UPDATE feedback_threads SET status=?,updated_at=? WHERE id=?",status,now(),id);
+        await activity(db,user,"feedback.status","feedback",id,"Changed feedback status",{status});
+        return json({item:await first(db,"SELECT * FROM feedback_threads WHERE id=?",id)});
       }
       if (path === "/admin/notifications" && method === "POST") {
         const b=await readBody(request),uids=Array.isArray(b.studentUids)?b.studentUids.slice(0,500):[];
