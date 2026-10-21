@@ -4,7 +4,7 @@ This directory is the **public Pages front door** for Exam Cracker. Static asset
 
 ## Cloudflare Pages build settings
 
-Configure the Pages project `examcrack` in **Workers & Pages → examcrack → Settings → Builds & deployments**:
+Configure the Pages project `examcracker` in **Workers & Pages → examcracker → Settings → Builds & deployments**:
 
 - **Framework preset:** `None`
 - **Root directory:** `cloudflare-pages`
@@ -31,13 +31,13 @@ Set any custom **build-time public** values under Cloudflare Pages → Settings 
 - `NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL`
 - `NEXT_PUBLIC_ADMIN_EMAIL` (defaults to `arvinddarabishnoi@gmail.com`)
 - `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED` (defaults to `true`)
-- `NEXT_PUBLIC_SITE_URL` (defaults to `https://examcrack.pages.dev`)
+- `NEXT_PUBLIC_SITE_URL` (defaults to `https://examcracker.pages.dev`)
 
 All `NEXT_PUBLIC_*` values are embedded in browser JS at build time. **Never put private credentials, Google service-account JSON, or Cloudflare API tokens in these variables.** The backend Worker build also uses public config while rendering Next.js responses; if you override Firebase/media values, keep the same values in GitHub Actions repository Variables for its Worker deployment build.
 
 ## Direct D1 binding: Pages API → D1
 
-Configure this binding for **Production and Preview** under **Workers & Pages → examcrack → Settings → Bindings → Add → D1 database**:
+Configure this binding for **Production and Preview** under **Workers & Pages → examcracker → Settings → Bindings → Add → D1 database**:
 
 - **Variable name:** `DB`
 - **Database:** `exam-cracker-db`
@@ -49,7 +49,7 @@ Profile photos and PDFs still use private Google Drive in the shared API handler
 
 ## Service binding: Pages → backend Worker (still needed for page rendering)
 
-Dynamic Next.js HTML still needs the OpenNext backend Worker. In **Workers & Pages → examcrack → Settings → Bindings**, keep:
+Dynamic Next.js HTML still needs the OpenNext backend Worker. In **Workers & Pages → examcracker → Settings → Bindings**, keep:
 
 - **Type:** Service
 - **Variable name:** `EXAM_CRACKER_WEB`
@@ -68,4 +68,4 @@ Add it to Production and Preview as needed, save, and redeploy. The root and cat
 
 The root `wrangler.toml` continues to configure `exam-cracker-web` and its own D1 binding `DB` for server-rendered Next.js responses and local/backend fallback. Keep remote D1 migrations applied before deployment. The Google Drive secrets need to be configured for the Pages Function too, because a Pages binding cannot read another Worker's secrets. The separate `ec-content-api` YouTube metadata proxy remains unchanged.
 
-The public origin `https://examcrack.pages.dev` must be listed in Firebase Authentication → Authorized domains. The separate `ec-content-api` media proxy remains unchanged.
+The public origin `https://examcracker.pages.dev` must be listed in Firebase Authentication → Authorized domains. The separate `ec-content-api` media proxy remains unchanged.
