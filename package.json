@@ -2,7 +2,7 @@
   "name": "exam-cracker",
   "version": "1.0.0",
   "private": true,
-  "description": "Exam Cracker — JEE/NEET learning web app (Next.js + Firebase + Supabase + Cloudflare)",
+  "description": "Exam Cracker — JEE/NEET learning web app (Next.js + Firebase Auth + Cloudflare D1)",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
