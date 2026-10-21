@@ -52,7 +52,9 @@ jobs:
         run: |
           node --check 'cloudflare-pages/functions/[[path]].js'
           node --check cloudflare-pages/functions/index.js
-          node -e "const fs = require('node:fs'); const r = JSON.parse(fs.readFileSync('cloudflare-pages/public/_routes.json', 'utf8')); if (r.version !== 1 || !r.include.includes('/*') || r.exclude.length !== 0) process.exit(1); console.log('Pages proxy route configuration valid')"
+          node --check cloudflare-pages/stage-assets.mjs
+          bash -n cloudflare-pages/build.sh
+          node -e "const fs = require('node:fs'); const r = JSON.parse(fs.readFileSync('cloudflare-pages/public/_routes.json', 'utf8')); if (r.version !== 1 || !r.include.includes('/*') || r.exclude.length !== 0) process.exit(1); console.log('Pages proxy route template valid')"
           test ! -f cloudflare-pages/wrangler.toml
           grep -q 'EXAM_CRACKER_WEB' CLOUDFLARE_PAGES_DASHBOARD_ENV.md
           grep -q 'exam-cracker-web' CLOUDFLARE_PAGES_DASHBOARD_ENV.md
@@ -72,6 +74,34 @@ jobs:
 
       - name: Build OpenNext Cloudflare bundle
         run: npm run build:cloudflare
+
+      - name: Verify Pages static assets bypass Function routing
+        run: |
+          node cloudflare-pages/stage-assets.mjs
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+
+          const output = 'cloudflare-pages/public';
+          const routes = JSON.parse(fs.readFileSync(path.join(output, '_routes.json'), 'utf8'));
+          const requiredExcludes = ['/_next/static/*', '/icons/*', '/favicon.ico'];
+          for (const pattern of requiredExcludes) {
+            if (!routes.exclude.includes(pattern)) {
+              throw new Error(`Pages route config is missing static exclusion: ${pattern}`);
+            }
+          }
+          if (!fs.existsSync(path.join(output, '_next', 'static'))) {
+            throw new Error('Pages output does not contain the Next.js static assets.');
+          }
+          const hasAsset = (dir) => fs.readdirSync(dir, { withFileTypes: true }).some((entry) => {
+            const file = path.join(dir, entry.name);
+            return entry.isDirectory() ? hasAsset(file) : entry.name.endsWith('.js') || entry.name.endsWith('.css');
+          });
+          if (!hasAsset(path.join(output, '_next', 'static'))) {
+            throw new Error('Pages static asset directory contains no JS/CSS files.');
+          }
+          console.log(`Verified ${routes.exclude.length} Pages static-asset exclusions and generated JS/CSS output.`);
+          NODE
 
       - name: Audit (non-blocking)
         run: npm audit --audit-level=high || true

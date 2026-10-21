@@ -1,42 +1,58 @@
 # Exam Cracker on Cloudflare Pages
 
-This directory is a **Pages front door**, not a static export of the Next.js app. Exam Cracker's dynamic lecture/test routes and D1 API run on the OpenNext Worker `exam-cracker-web`. The Pages Functions forward requests through a Cloudflare service binding so the visitor stays on `examcrack.pages.dev`.
+This directory is the **public Pages front door** for Exam Cracker. Next.js dynamic pages and the authenticated D1 API continue to run on the OpenNext backend Worker `exam-cracker-web`; Pages forwards only requests that require server execution.
 
-## Cloudflare Pages project settings
+## Cloudflare Pages build settings
 
-The Pages project should use:
+Configure the Pages project `examcrack` in **Workers & Pages → examcrack → Settings → Builds & deployments**:
 
-- **Project name:** `examcrack`
 - **Framework preset:** `None`
-- **Build command:** `echo "Exam Cracker Pages proxy ready"`
+- **Root directory:** `cloudflare-pages`
+- **Build command:** `bash build.sh`
 - **Build output directory:** `public`
-- **Root directory (advanced):** `cloudflare-pages`
 
-Do not choose **Next.js (Static HTML Export)**. Static export would not safely preserve the app's dynamic lecture/test routes and runtime behavior.
+The build script moves to the repository root, installs dependencies, runs `npm run build:cloudflare`, then copies the generated `.open-next/assets` files into the Pages output. It generates the deployed `_routes.json` so hashed JS/CSS and ordinary public images are served as static Pages assets instead of being forwarded to the backend.
 
-## Required dashboard service binding
+**Important:** the current source `public/_routes.json` intentionally remains a catch-all template for compatibility with the old `echo` build. The new build script replaces it *inside the build output* after staging assets. Therefore, the quota-saving behavior starts only after the Cloudflare Pages build command has been changed to `bash build.sh` and a new deployment succeeds.
 
-The Pages project intentionally has **no `cloudflare-pages/wrangler.toml`** so environment variables and bindings can be managed from the Cloudflare dashboard.
+Do not choose **Next.js (Static HTML Export)**. Dynamic lecture/test routes and server API handlers require the OpenNext backend.
 
-Open **Workers & Pages → examcrack → Settings → Functions → Bindings** and add/verify this **Service binding** for **Production** (and Preview if it is used):
+## Environment variables
 
+Set any custom **build-time public** values under Cloudflare Pages → Settings → Variables and Secrets, for Production and Preview as applicable. The build script has the existing project defaults, and dashboard variables override those defaults:
+
+- `NEXT_PUBLIC_FIREBASE_API_KEY`
+- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+- `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+- `NEXT_PUBLIC_FIREBASE_APP_ID`
+- `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` (optional)
+- `NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL`
+- `NEXT_PUBLIC_ADMIN_EMAIL` (defaults to `arvinddarabishnoi@gmail.com`)
+- `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED` (defaults to `true`)
+- `NEXT_PUBLIC_SITE_URL` (defaults to `https://examcrack.pages.dev`)
+
+All `NEXT_PUBLIC_*` values are embedded in browser JS at build time. **Never put private credentials, Google service-account JSON, or Cloudflare API tokens in these variables.** The backend Worker build also uses public config while rendering Next.js responses; if you override Firebase/media values, keep the same values in GitHub Actions repository Variables for its Worker deployment build.
+
+## Service binding: Pages → backend Worker
+
+Because there is no `cloudflare-pages/wrangler.toml`, configure this binding in the Cloudflare dashboard under **Settings → Functions → Bindings**:
+
+- **Type:** Service
 - **Variable name:** `EXAM_CRACKER_WEB`
 - **Service:** `exam-cracker-web`
 
-Save settings and redeploy Pages. Both `cloudflare-pages/functions/index.js` and `cloudflare-pages/functions/[[path]].js` return HTTP 503 with an explicit message if this binding is missing. Do not assume the binding exists until it has been verified in the dashboard.
+Add it to Production and Preview as needed, save, and redeploy. Both Pages Function routes return HTTP 503 with a clear error if this binding is missing.
 
-The backend Worker must also be deployed. The root `wrangler.toml` configures that Worker and its D1 database binding `DB`; that is separate from the Pages service binding. The Worker additionally needs the remote D1 migrations and Google Drive secrets described in `D1_MIGRATION_RUNBOOK.md` and `GOOGLE_DRIVE_SETUP.md`.
+## What uses Worker requests?
 
-## Auth/API origin setup
+- **Static files** (hashed `/_next/static/*`, icons, fonts, and public images) are copied into Pages output and excluded from Function routing. These are served as static assets and do not invoke the Pages Function or backend Worker.
+- **Dynamic page HTML and `/api/ec/*` requests** still use `exam-cracker-web` through the service binding. Those requests are required for server rendering, authentication, admin operations and D1 access, so they still consume backend/Function requests.
+- Cloudflare Pages Functions requests count toward the Workers Free request allowance. Static assets are free and unlimited; Pages is not a way to make dynamic backend requests unlimited.
 
-The Worker allows the production origin `https://examcrack.pages.dev`. Add `examcrack.pages.dev` to Firebase Authentication → Settings → Authorized domains. The Pages front door forwards requests to the Worker, which verifies Firebase ID tokens and enforces admin authorization server-side.
+## Backend resources
 
-To allow another custom/preview origin, update the `ALLOWED_ORIGINS` set in `workers/ec-api/src/index.js` and redeploy the Worker.
+The root `wrangler.toml` configures the backend Worker and its D1 binding `DB` to `exam-cracker-db`. The backend also requires successful remote D1 migrations. Profile-photo/PDF storage uses the encrypted Worker secrets `GOOGLE_SERVICE_ACCOUNT_JSON` and `GOOGLE_DRIVE_FOLDER_ID`; these remain on `exam-cracker-web`, not in Pages variables.
 
-- Public website URL: `https://examcrack.pages.dev`.
-- The internal `exam-cracker-web` Worker is reached through the Pages `EXAM_CRACKER_WEB` service binding and should not expose a separate workers.dev URL (`workers_dev = false`).
-- The separate `ec-content-api` media proxy remains unchanged.
-
-## Environment variable distinction
-
-Values prefixed with `NEXT_PUBLIC_*` used by the Next.js browser bundle are build-time values supplied to GitHub Actions in `.github/workflows/deploy.yml`. Adding them only to Cloudflare Pages runtime variables does not rewrite an already-built Next.js bundle. Private Google service-account credentials belong only in encrypted secrets on the `exam-cracker-web` Worker, never in `NEXT_PUBLIC_*` or this repository.
+The public origin `https://examcrack.pages.dev` must be listed in Firebase Authentication → Authorized domains. The separate `ec-content-api` media proxy remains unchanged.
