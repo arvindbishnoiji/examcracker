@@ -10,15 +10,15 @@ const COPY: Record<string, { title: string; description: string }> = {
   },
   batches: {
     title: 'Batches',
-    description: 'Structured programmes with access codes, instructors and enrolled students.',
+    description: 'Create a batch, open its workspace, assign subjects and add lectures in the correct learning path.',
   },
   series: {
     title: 'Series',
-    description: 'Chapter and subject collections, ordered and access-controlled.',
+    description: 'Organize series by subject or chapter, then add ordered lectures and resources beneath each subject.',
   },
   lectures: {
     title: 'Lectures & Resources',
-    description: 'Lectures, notes and PDF resources. The original playlist importer is preserved exactly as it was.',
+    description: 'Search the lecture library or open a batch/series subject workspace to add content in context.',
   },
   tests: {
     title: 'Tests & Question Banks',
@@ -69,9 +69,8 @@ export function ContentToolSection({ slug }: { slug: string }) {
           </>
         }
       />
-      <Banner tone="info" title="Original tools, premium shell">
-        These screens are the existing Exam Cracker content tools embedded inside the new admin. CRUD, access codes,
-        scheduling and validation behave exactly as before — including the playlist importer, which was not touched.
+      <Banner tone="info" title="Manage persisted learning content">
+        Changes are saved through the authenticated D1 API. For a batch or series, choose Manage → assign or create a subject → Open subject · Add lecture. Disable preserves records; permanent deletion is guarded when students, progress, files or relationships still depend on an item.
       </Banner>
       <div className="mt-4">
         <AdminLegacyPanel embedded initialTab={tab} />

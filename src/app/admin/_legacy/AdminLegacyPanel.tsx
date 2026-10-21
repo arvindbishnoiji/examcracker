@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/Button';
 import { Input, Textarea, Select } from '@/components/ui/Input';
 import { useToast } from '@/hooks/useToast';
 import {
-  getAdminOverview, getAdminContentList, createAdminContent, updateAdminContent, disableAdminContent,
+  getAdminOverview, getAdminContentList, createAdminContent, updateAdminContent, disableAdminContent, permanentlyDeleteAdminContent,
   getAdminAnnouncements, createAdminAnnouncement, updateAdminAnnouncement, getAdminStudents,
-  getAdminSubjects, uploadAdminPdf, getCourseFiles, invalidateAuthorizedBlobCache,
+  getAdminSubjects, createAdminSubject, setCourseSubjects, uploadAdminPdf, getCourseFiles, invalidateAuthorizedBlobCache,
 } from '@/lib/api';
 import { fetchVideoMetadata, importFullYoutubePlaylist, extractYoutubeVideoId, extractYoutubePlaylistId, getYoutubeDefaultThumbnail } from '@/lib/mediaProxy';
 import { fromISTDateTimeLocalInput, toISTDateTimeLocalInput } from '@/lib/date';
@@ -19,6 +19,27 @@ import YoutubeThumbnail from '@/components/YoutubeThumbnail';
 import { ProfileImage } from '@/components/student/ProfileImage';
 
 export type AdminTab = 'overview'|'goals'|'batches'|'lectures'|'series'|'tests'|'events'|'announcements'|'students'|'feedback';
+
+function describeContentDeleteError(error: unknown): string {
+  const message = error instanceof Error ? error.message : 'Deletion was blocked or failed.';
+  if (!error || typeof error !== 'object' || !('payload' in error)) return message;
+  const payload = (error as { payload?: Record<string, unknown> }).payload;
+  const detail = typeof payload?.detail === 'string' ? payload.detail : '';
+  if (message !== 'CONTENT_HAS_DEPENDENCIES') return detail ? `${message}: ${detail}` : message;
+
+  const dependencies = payload?.dependencies && typeof payload.dependencies === 'object'
+    ? payload.dependencies as Record<string, unknown>
+    : {};
+  const labels: Record<string, string> = {
+    childContent: 'child content', enrollments: 'enrollments', lessonProgress: 'lesson progress',
+    subjectAssignments: 'subject assignments', studentReferences: 'saved student references',
+    storedFiles: 'stored files', testAttempts: 'test attempts',
+  };
+  const counts = Object.entries(dependencies)
+    .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] > 0)
+    .map(([key, count]) => `${count} ${labels[key] || key}`);
+  return `Delete blocked${counts.length ? ` by ${counts.join(', ')}` : ''}.${detail ? ` ${detail}` : ''}`;
+}
 
 export default function AdminPage({ embedded = false, initialTab }: { embedded?: boolean; initialTab?: AdminTab } = {}){
   const { user, isAdmin, initializing } = useAuth();
@@ -62,8 +83,7 @@ export default function AdminPage({ embedded = false, initialTab }: { embedded?:
         <div className="mb-4 rounded-xl border border-ink-200 bg-ink-50/70 px-4 py-3">
           <p className="text-sm font-semibold">Original content console</p>
           <p className="text-[11px] text-ink-500 mt-0.5">
-            These are the original Exam Cracker tools, preserved as-is — including the YouTube playlist importer, which
-            has not been modified here and keeps the latest upstream fixes.
+            The existing Exam Cracker tools remain available here, including the YouTube playlist importer, with D1-backed hierarchy, reload and safe content-lifecycle improvements.
           </p>
         </div>
       ) : (
@@ -142,16 +162,87 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
     images:'', subtitle:'',
   });
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [examFilter, setExamFilter] = useState('all');
+  const [classFilter, setClassFilter] = useState('all');
+  const [stateFilter, setStateFilter] = useState('all');
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [workspaceId, setWorkspaceId] = useState('');
+  const [workspaceSubjectIds, setWorkspaceSubjectIds] = useState<string[]>([]);
+  const [newSubjectName, setNewSubjectName] = useState('');
+  const [savingSubjects, setSavingSubjects] = useState(false);
 
   const load = useCallback(async()=>{
     setLoading(true); setError(null);
     try{
-      const data = await getAdminContentList({ kind });
+      const [data, subjectRows] = await Promise.all([
+        getAdminContentList({ kind }),
+        (kind === 'batch' || kind === 'series') ? getAdminSubjects({ includeArchived: false }) : Promise.resolve([] as Subject[]),
+      ]);
       setItems(data);
+      setSubjects(subjectRows);
     }catch(e){ setError(e instanceof Error? e.message:'Failed'); }
     finally{ setLoading(false); }
   },[kind]);
   useEffect(()=>{ load(); },[load]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    setWorkspaceSubjectIds(subjects
+      .filter((subject) => subject.assignments?.some((assignment) => assignment.courseId === workspaceId))
+      .map((subject) => subject.id));
+  }, [workspaceId, subjects]);
+
+  async function saveWorkspaceSubjects(event: React.FormEvent) {
+    event.preventDefault();
+    if (!workspaceId) return;
+    setSavingSubjects(true);
+    try {
+      await setCourseSubjects(workspaceId, workspaceSubjectIds);
+      push('Subject assignments saved to D1.','success');
+      await load();
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Could not save subject assignments.','error');
+    } finally {
+      setSavingSubjects(false);
+    }
+  }
+
+  async function createAndAssignSubject(event: React.FormEvent) {
+    event.preventDefault();
+    const course = items.find((item) => item.id === workspaceId);
+    const name = newSubjectName.trim();
+    if (!course || !name) return;
+    setSavingSubjects(true);
+    try {
+      const created = await createAdminSubject({
+        name,
+        description: '',
+        exam: course.exam,
+        classes: course.classes,
+        active: true,
+        sortOrder: subjects.length + 1,
+      });
+      await setCourseSubjects(workspaceId, [...workspaceSubjectIds, created.id]);
+      setNewSubjectName('');
+      push(`${created.name} created and assigned to ${course.title}.`,'success');
+      await load();
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Could not create and assign this subject.','error');
+    } finally {
+      setSavingSubjects(false);
+    }
+  }
+
+  const visibleItems = items.filter((item) => {
+    const query = search.trim().toLowerCase();
+    if (query && !`${item.title} ${item.description}`.toLowerCase().includes(query)) return false;
+    if (examFilter !== 'all' && item.exam !== examFilter && item.exam !== 'Both') return false;
+    if (classFilter !== 'all' && !item.classes.includes(classFilter as '11' | '12')) return false;
+    if (stateFilter === 'active' && !item.active) return false;
+    if (stateFilter === 'disabled' && item.active) return false;
+    return true;
+  });
 
   function openCreate(){
     setEditing(null);
@@ -212,18 +303,54 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
         await updateAdminContent(editing.id, payload);
         push('Updated','success');
       } else {
-        await createAdminContent(payload);
-        push('Created','success');
+        const created = await createAdminContent(payload);
+        if (kind === 'batch' || kind === 'series') setWorkspaceId(created.id);
+        push('Created in D1. Open its management workspace below.','success');
       }
       setShowForm(false);
-      load();
+      await load();
     }catch(err){ push(err instanceof Error? err.message:'Save failed','error'); }
     finally{ setSaving(false); }
   }
 
-  async function handleDisable(id:string){
-    if(!confirm('Disable (active=false) this item? This is soft-disable, not delete.')) return;
-    try{ await disableAdminContent(id); push('Disabled','success'); load(); }catch(err){ push(err instanceof Error? err.message:'Failed','error'); }
+  async function handleToggleActive(item: CourseCatalogItem){
+    if(item.active && !confirm(`Disable “${item.title}”? Its data and relationships will be preserved.`)) return;
+    try{
+      if(item.active){
+        await disableAdminContent(item.id);
+        push('Disabled. You can restore it from this list.','success');
+      } else {
+        await updateAdminContent(item.id, {
+          kind: item.kind as any,
+          title: item.title,
+          description: item.description,
+          exam: item.exam,
+          classes: item.classes,
+          active: true,
+          accessCode: (item as any).access_code ?? null,
+          metadata: item.metadata as Record<string, unknown>,
+          parentId: item.parentId,
+          subjectId: item.subjectId,
+          sortOrder: item.sortOrder,
+        });
+        push('Restored and published.','success');
+      }
+      await load();
+    }catch(err){ push(err instanceof Error? err.message:'Could not update content state.','error'); }
+  }
+
+  async function handlePermanentDelete(item: CourseCatalogItem) {
+    if (item.active) return;
+    const confirmed = confirm(`Permanently delete “${item.title}”? This cannot be undone. The API will block deletion while dependent lessons, enrollments, assignments, progress or files exist.`);
+    if (!confirmed) return;
+    try {
+      await permanentlyDeleteAdminContent(item.id);
+      if (workspaceId === item.id) setWorkspaceId('');
+      push('Item permanently deleted.','success');
+      await load();
+    } catch (error) {
+      push(describeContentDeleteError(error),'error');
+    }
   }
 
   return (
@@ -237,11 +364,21 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
       </div>
 
       {loading && <Skeleton className="h-40 w-full" />}
-      {error && <div className="p-3 bg-red-50 border border-red-200 text-sm text-red-700 rounded-xl">{error}</div>}
+      {error && <div role="alert" className="p-3 bg-red-50 border border-red-200 text-sm text-red-700 rounded-xl">{error} <Button size="sm" variant="outline" className="ml-2" onClick={() => void load()}>Retry</Button></div>}
       {!loading && !error && items.length===0 && <EmptyState title={`No ${kind}s yet`} description={`Create your first ${kind} — exam, class, title, description, active flag and metadata fields.`} />}
+      {items.length > 0 && (
+        <div className="grid gap-2 rounded-2xl border border-ink-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Input label="Search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${kind}s`} />
+          <Select label="Exam" value={examFilter} onChange={(event) => setExamFilter(event.target.value)}><option value="all">All exams</option><option value="JEE">JEE</option><option value="NEET">NEET</option></Select>
+          <Select label="Class" value={classFilter} onChange={(event) => setClassFilter(event.target.value)}><option value="all">All classes</option><option value="11">Class 11</option><option value="12">Class 12</option></Select>
+          <Select label="State" value={stateFilter} onChange={(event) => setStateFilter(event.target.value)}><option value="all">Active and disabled</option><option value="active">Active</option><option value="disabled">Disabled</option></Select>
+          <p className="text-xs text-ink-500 sm:col-span-2 lg:col-span-4" aria-live="polite">Showing {visibleItems.length} of {items.length} {kind}s · disabled content remains available here to restore.</p>
+        </div>
+      )}
+      {!loading && !error && items.length > 0 && visibleItems.length === 0 && <EmptyState title="No content matches these filters" description="Try a different search, exam, class or state." />}
 
       <div className="grid gap-3">
-        {items.map(it=>{
+        {visibleItems.map(it=>{
           const meta = it.metadata as Record<string,any>;
           return (
             <Card key={it.id} className="p-4">
@@ -254,14 +391,70 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
                   {kind==='event' && meta.images && <p className="text-xs">Images: {JSON.stringify(meta.images).slice(0,120)}</p>}
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
+                  {(kind === 'batch' || kind === 'series') && <Button size="sm" onClick={() => setWorkspaceId(it.id)} aria-expanded={workspaceId === it.id}>Manage</Button>}
                   <Button size="sm" variant="outline" onClick={()=> openEdit(it)}>Edit</Button>
-                  <Button size="sm" variant="danger" onClick={()=> handleDisable(it.id)}>Disable</Button>
+                  <Button size="sm" variant={it.active ? 'danger' : 'outline'} onClick={()=> handleToggleActive(it)}>{it.active ? 'Disable' : 'Restore'}</Button>
+                  <Button size="sm" variant="danger" disabled={it.active} title={it.active ? 'Disable this item first' : 'Permanently delete if it has no dependencies'} onClick={() => void handlePermanentDelete(it)}>Delete</Button>
                 </div>
               </div>
             </Card>
           );
         })}
       </div>
+
+      {(kind === 'batch' || kind === 'series') && items.some((item) => item.id === workspaceId) && (() => {
+        const course = items.find((item) => item.id === workspaceId)!;
+        const assignedCount = workspaceSubjectIds.length;
+        return (
+          <Card className="space-y-4 border-brand-200 p-5" aria-label={`${course.title} management workspace`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-brand-700">{course.kind} workspace</p>
+                <h3 className="text-lg font-extrabold">{course.title}</h3>
+                <p className="text-xs text-ink-500">{assignedCount} subject{assignedCount === 1 ? '' : 's'} assigned · lectures and resources are grouped by subject.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link href={`/lectures/${encodeURIComponent(course.id)}`} className="ec-btn border border-ink-200 px-3 py-2 text-xs font-bold">Preview learning tree</Link>
+                <button type="button" className="ec-btn px-3 py-2 text-xs font-bold text-ink-500 hover:bg-ink-100" onClick={() => setWorkspaceId('')}>Close</button>
+              </div>
+            </div>
+            <form onSubmit={saveWorkspaceSubjects} className="space-y-3">
+              <fieldset>
+                <legend className="mb-2 text-sm font-bold">Assigned subjects</legend>
+                {subjects.filter((subject) => subject.active && !subject.archived).length ? (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {subjects.filter((subject) => subject.active && !subject.archived).map((subject) => {
+                      const checked = workspaceSubjectIds.includes(subject.id);
+                      const examOkay = subject.exam === 'Both' || course.exam === 'Both' || subject.exam === course.exam;
+                      const classOkay = subject.classes.some((level) => course.classes.includes(level));
+                      return (
+                        <label key={subject.id} className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${checked ? 'border-brand-300 bg-brand-50/70' : 'border-ink-200'}`}>
+                          <input type="checkbox" checked={checked} disabled={!examOkay || !classOkay} onChange={(event) => setWorkspaceSubjectIds((previous) => event.target.checked ? [...new Set([...previous, subject.id])] : previous.filter((id) => id !== subject.id))} />
+                          <span className="min-w-0"><span className="block font-semibold">{subject.name}</span><span className="text-[10px] text-ink-500">{subject.exam} · Class {subject.classes.join('/')}{!examOkay || !classOkay ? ' · not applicable' : ''}</span></span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : <p className="rounded-xl border border-dashed border-ink-200 p-3 text-xs text-ink-500">No subjects yet. Create one here and it will be linked to this {course.kind}.</p>}
+              </fieldset>
+              <div className="flex flex-wrap items-end gap-2">
+                <Button type="submit" loading={savingSubjects}>Save subject assignments</Button>
+                <Link href={`/admin/lectures?parentId=${encodeURIComponent(course.id)}`} className="ec-btn border border-ink-200 px-3 py-2 text-xs font-bold">Manage lectures &amp; resources</Link>
+              </div>
+            </form>
+            <form onSubmit={createAndAssignSubject} className="grid gap-2 rounded-xl border border-ink-200 bg-ink-50/50 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <Input label="Create and assign a subject" value={newSubjectName} onChange={(event) => setNewSubjectName(event.target.value)} placeholder="e.g. Physics" maxLength={100} required />
+              <Button type="submit" variant="outline" loading={savingSubjects} disabled={!newSubjectName.trim()}>Create &amp; assign</Button>
+              <p className="text-[11px] text-ink-500 sm:col-span-2">Uses this {course.exam} · Class {course.classes.join('/')} scope. The subject and course link are saved to D1 together through authenticated API calls.</p>
+            </form>
+            {workspaceSubjectIds.map((subjectId) => {
+              const subject = subjects.find((row) => row.id === subjectId);
+              if (!subject) return null;
+              return <div key={subjectId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-200 px-3 py-2 text-sm"><span className="font-semibold">{subject.name}</span><Link href={`/admin/lectures?parentId=${encodeURIComponent(course.id)}&subjectId=${encodeURIComponent(subject.id)}`} className="text-xs font-bold text-brand-700 hover:underline">Open subject · Add lecture →</Link></div>;
+            })}
+          </Card>
+        );
+      })()}
 
       {showForm && (
         <Card className="p-6 border-brand-200">
@@ -334,6 +527,10 @@ function AdminLecturesTab(){
   const [error, setError] = useState<string|null>(null);
   const [parentFilter, setParentFilter] = useState('');
   const [subjectFilter, setSubjectFilter] = useState('');
+  const [lectureSearch, setLectureSearch] = useState('');
+  const [lectureStateFilter, setLectureStateFilter] = useState('all');
+  const [lectureExamFilter, setLectureExamFilter] = useState('all');
+  const [lectureClassFilter, setLectureClassFilter] = useState('all');
   const [pdfUploading, setPdfUploading] = useState(false);
   const [pdfProgress, setPdfProgress] = useState(0);
   const [pdfError, setPdfError] = useState<string|null>(null);
@@ -356,6 +553,7 @@ function AdminLecturesTab(){
   const [playlistClasses, setPlaylistClasses] = useState<string[]>(['11']);
   const [playlistTopic, setPlaylistTopic] = useState('');
   const [playlistSubject, setPlaylistSubject] = useState('');
+  const initializedWorkspaceLink = useRef(false);
 
   const load = useCallback(async()=>{
     setLoading(true); setError(null);
@@ -371,6 +569,18 @@ function AdminLecturesTab(){
     finally{ setLoading(false); }
   },[]);
   useEffect(()=>{ load(); },[load]);
+
+  useEffect(() => {
+    if (initializedWorkspaceLink.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const parentId = params.get('parentId') || '';
+    if (!parentId || ![...batches, ...series].some((course) => course.id === parentId)) return;
+    const subjectId = params.get('subjectId') || '';
+    const subjectIsAssigned = subjects.some((subject) => subject.id === subjectId && subject.assignments?.some((assignment) => assignment.courseId === parentId));
+    initializedWorkspaceLink.current = true;
+    setForm({ ...EMPTY_LECTURE_FORM, parentId, subjectId: subjectIsAssigned ? subjectId : '' });
+    setShowForm(true);
+  }, [batches, series, subjects]);
 
   // Subject options come from the parent course's assignment list, so the admin
   // cannot pick a pair the API would reject.
@@ -390,6 +600,11 @@ function AdminLecturesTab(){
     const itemSubject = item.subjectId || m.subjectId || '';
     if (parentFilter && itemParent !== parentFilter) return false;
     if (subjectFilter && itemSubject !== subjectFilter) return false;
+    if (lectureSearch.trim() && !`${item.title} ${item.description} ${m.lesson || ''} ${m.topic || ''}`.toLowerCase().includes(lectureSearch.trim().toLowerCase())) return false;
+    if (lectureStateFilter === 'active' && !item.active) return false;
+    if (lectureStateFilter === 'disabled' && item.active) return false;
+    if (lectureExamFilter !== 'all' && item.exam !== lectureExamFilter && item.exam !== 'Both') return false;
+    if (lectureClassFilter !== 'all' && !item.classes.includes(lectureClassFilter as '11' | '12')) return false;
     return true;
   });
 
@@ -471,11 +686,12 @@ function AdminLecturesTab(){
     if(form.thumbnailUrl && !isSafeHttpUrl(form.thumbnailUrl)){ push('Thumbnail must be http(s)','error'); return; }
     if(form.notesPdfUrl && !isSafeHttpUrl(form.notesPdfUrl)){ push('PDF URL must be http(s)','error'); return; }
     if(form.youtubeUrl && !extractYoutubeVideoId(form.youtubeUrl)){ push('Invalid YouTube URL','error'); return; }
+    if(form.subjectId && !form.parentId){ push('Choose a parent batch or series before selecting a subject.','error'); return; }
+    if(form.parentId && !form.subjectId){ push('Choose a subject assigned to this batch or series.','error'); return; }
+    if(form.notesFileId && !form.parentId){ push('A Drive PDF needs a parent batch or series.','error'); return; }
     setSaving(true);
     try{
       const vid = form.youtubeUrl ? extractYoutubeVideoId(form.youtubeUrl) : (form.videoId || '');
-      if(form.subjectId && !form.parentId){ push('Choose a parent batch or series before selecting a subject.','error'); return; }
-      if(form.notesFileId && !form.parentId){ push('A Drive PDF needs a parent batch or series.','error'); return; }
       const metadata: Record<string,unknown> = {
         youtubeUrl: form.youtubeUrl || undefined,
         videoId: vid || undefined,
@@ -509,17 +725,50 @@ function AdminLecturesTab(){
       else await createAdminContent(payload);
       invalidateAuthorizedBlobCache('/api/ec/files');
       push(editing?'Updated':'Created','success');
-      setShowForm(false); load();
+      setShowForm(false); await load();
     }catch(err){ push(err instanceof Error? err.message:'Save failed','error'); }
     finally{ setSaving(false); }
   }
 
-  async function handleDisable(id:string){
-    if(!confirm('Disable this lecture?')) return;
-    try{ await disableAdminContent(id); push('Disabled','success'); load(); }catch(err){ push(err instanceof Error? err.message:'Failed','error'); }
+  async function handleToggleActive(item: CourseCatalogItem){
+    if(item.active && !confirm(`Disable “${item.title}”? Its data and relationships will be preserved.`)) return;
+    try{
+      if(item.active){
+        await disableAdminContent(item.id);
+        push('Lecture disabled. You can restore it from this list.','success');
+      } else {
+        await updateAdminContent(item.id, {
+          kind: 'lecture',
+          title: item.title,
+          description: item.description,
+          exam: item.exam,
+          classes: item.classes,
+          active: true,
+          accessCode: (item as any).access_code ?? null,
+          metadata: item.metadata as Record<string, unknown>,
+          parentId: item.parentId,
+          subjectId: item.subjectId,
+          sortOrder: item.sortOrder,
+        });
+        push('Lecture restored and published.','success');
+      }
+      await load();
+    }catch(err){ push(err instanceof Error? err.message:'Could not update lecture state.','error'); }
   }
 
-  async function handlePlaylistImport(){
+  async function handlePermanentDeleteLecture(item: CourseCatalogItem) {
+    if (item.active) return;
+    if (!confirm(`Permanently delete “${item.title}”? This cannot be undone. The API will block deletion while student progress or stored files refer to it.`)) return;
+    try {
+      await permanentlyDeleteAdminContent(item.id);
+      push('Content permanently deleted.','success');
+      await load();
+    } catch (error) {
+      push(describeContentDeleteError(error),'error');
+    }
+  }
+
+  async function handlePlaylistImport() {
     if(!playlistUrl.trim()){ push('Paste YouTube playlist URL','error'); return; }
     const pid = extractYoutubePlaylistId(playlistUrl);
     if(!pid){ push('Invalid playlist URL (needs list= param)','error'); return; }
@@ -562,6 +811,7 @@ function AdminLecturesTab(){
   async function handlePlaylistSave(){
     if(!playlistItems.length){ push('No items to save','error'); return; }
     if(!playlistTarget){ push('Select target batch/series','error'); return; }
+    if(!playlistSubject){ push('Select a subject assigned to the target batch/series.','error'); return; }
     const selectedItems = playlistItems.filter((i:any)=> i.selected!==false);
     if(!selectedItems.length){ push('Select at least one video','error'); return; }
     const existingVideoIds = new Set(items.map((item:any) => String((item.metadata as Record<string,any>)?.videoId || '')).filter(Boolean));
@@ -611,7 +861,7 @@ function AdminLecturesTab(){
       }
     } finally {
       setSaving(false);
-      if(ok) load();
+      if(ok) await load();
     }
   }
 
@@ -642,8 +892,8 @@ function AdminLecturesTab(){
                 {series.map(s=> <option key={s.id} value={s.id}>Series: {s.title}</option>)}
               </Select>
               <Select label="Exam" value={playlistExam} onChange={e=> setPlaylistExam(e.target.value)}><option>JEE</option><option>NEET</option><option>Both</option></Select>
-              <Select label="Subject (optional)" value={playlistSubject} onChange={e=> setPlaylistSubject(e.target.value)}>
-                <option value="">Unassigned</option>
+              <Select label="Subject*" value={playlistSubject} required onChange={e=> setPlaylistSubject(e.target.value)}>
+                <option value="">Choose a subject…</option>
                 {playlistTarget
                   ? subjectsForParent(playlistTarget).map(subject=> <option key={subject.id} value={subject.id}>{subject.name}</option>)
                   : subjects.map(subject=> <option key={subject.id} value={subject.id}>{subject.name}</option>)}
@@ -681,7 +931,8 @@ function AdminLecturesTab(){
       </Card>
 
       <Card className="p-4">
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Input label="Search lectures" type="search" value={lectureSearch} onChange={e=> setLectureSearch(e.target.value)} placeholder="Title, topic or description" />
           <Select label="Filter by course" value={parentFilter} onChange={e=> setParentFilter(e.target.value)}>
             <option value="">All batches &amp; series</option>
             {batches.map(b=> <option key={b.id} value={b.id}>Batch: {b.title}</option>)}
@@ -691,7 +942,10 @@ function AdminLecturesTab(){
             <option value="">All subjects</option>
             {subjects.map(subject=> <option key={subject.id} value={subject.id}>{subject.name}</option>)}
           </Select>
-          <p className="pb-2 text-xs text-ink-500">
+          <Select label="Exam" value={lectureExamFilter} onChange={e=> setLectureExamFilter(e.target.value)}><option value="all">All exams</option><option value="JEE">JEE</option><option value="NEET">NEET</option></Select>
+          <Select label="Class" value={lectureClassFilter} onChange={e=> setLectureClassFilter(e.target.value)}><option value="all">All classes</option><option value="11">Class 11</option><option value="12">Class 12</option></Select>
+          <Select label="State" value={lectureStateFilter} onChange={e=> setLectureStateFilter(e.target.value)}><option value="all">Active and disabled</option><option value="active">Active</option><option value="disabled">Disabled</option></Select>
+          <p className="pb-2 text-xs text-ink-500 self-end">
             {filteredItems.length} of {items.length} lecture{items.length===1?'':'s'}
             {subjects.length===0 && <> · no subjects yet — <Link href="/admin/subjects" className="font-semibold text-brand-700 hover:underline">create one</Link></>}
           </p>
@@ -727,7 +981,8 @@ function AdminLecturesTab(){
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
                   <Button size="sm" variant="outline" onClick={()=> openEdit(it)}>Edit</Button>
-                  <Button size="sm" variant="danger" onClick={()=> handleDisable(it.id)}>Disable</Button>
+                  <Button size="sm" variant={it.active ? 'danger' : 'outline'} onClick={()=> handleToggleActive(it)}>{it.active ? 'Disable' : 'Restore'}</Button>
+                  <Button size="sm" variant="danger" disabled={it.active} title={it.active ? 'Disable this lecture first' : 'Permanently delete if no progress/files refer to it'} onClick={() => void handlePermanentDeleteLecture(it)}>Delete</Button>
                 </div>
               </div>
             </Card>
@@ -758,9 +1013,10 @@ function AdminLecturesTab(){
                     <Select
                       label="Subject"
                       value={form.subjectId}
+                      required
                       onChange={e=> setForm((s:any)=>({...s, subjectId:e.target.value}))}
                     >
-                      <option value="">Unassigned (course-level lecture)</option>
+                      <option value="">Choose a subject…</option>
                       {subjectsForParent(form.parentId).map(subject=> (
                         <option key={subject.id} value={subject.id}>{subject.name}</option>
                       ))}

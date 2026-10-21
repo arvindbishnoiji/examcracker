@@ -471,6 +471,17 @@ export async function disableAdminContent(id: string): Promise<{
   });
 }
 
+export async function permanentlyDeleteAdminContent(id: string): Promise<{
+  deleted: boolean;
+  id: string;
+  kind: ContentKind;
+  title: string;
+}> {
+  return requestApi(`/admin/content/${encodeURIComponent(id)}?permanent=1`, {
+    method: 'DELETE',
+  });
+}
+
 export async function getAdminAnnouncements(): Promise<Announcement[]> {
   const res = await requestApi<{ items: Announcement[] }>('/admin/announcements');
   return res.items || [];

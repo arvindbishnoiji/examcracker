@@ -362,15 +362,15 @@ export function baseScreen(
 
 export const DEFAULT_LECTURES_SCREEN: LecturesScreenConfig = {
   ...baseScreen('lectures', {
-    pageTitle: 'Lectures & batches',
+    pageTitle: 'My learning',
     pageSubtitle:
-      'Curated for your exam and class. Access is verified on every lesson.',
-    eyebrow: 'Learning library',
-    searchPlaceholder: 'Search the library…',
+      'Start with your enrolled batch or series, choose a subject, then continue through its lectures and resources.',
+    eyebrow: 'Your JEE / NEET classroom',
+    searchPlaceholder: 'Search batches, series or lessons…',
     emptyTitle: 'Nothing published here yet',
     emptyBody: 'New batches, series and lectures appear here as soon as your mentor publishes them.',
   }),
-  tabLabels: { batches: 'Batches', series: 'Series', lectures: 'Lectures', resources: 'Resources' },
+  tabLabels: { batches: 'Batches', series: 'Series', lectures: 'All lectures', resources: 'Resources' },
   mineFilterLabel: 'My courses only',
   sortNewestLabel: 'Newest first',
   sortTitleLabel: 'A–Z',

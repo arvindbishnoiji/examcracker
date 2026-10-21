@@ -1,19 +1,33 @@
-# Cloudflare Pages: dashboard-managed environment variables
+# Cloudflare Pages: dashboard-managed settings
 
-The Pages project `examcrack` uses the GitHub directory `cloudflare-pages/`. Its Wrangler file has intentionally been removed so that **Cloudflare Pages dashboard settings** can manage environment variables and bindings.
+The Pages project `examcrack` uses the `cloudflare-pages/` repository directory. Production API requests under `/api/ec/*` run in a Pages Function and access D1 through the `DB` binding. Dynamic Next.js page HTML still uses the `exam-cracker-web` service binding.
 
-## Required dashboard check after this change is deployed
+## Required dashboard configuration after this change
 
 1. Open Cloudflare Dashboard → **Workers & Pages** → **examcrack** → **Settings**.
-2. Confirm the Pages build settings still use the existing repository and output directory. The previous Wrangler config used `pages_build_output_dir = "./public"`; if the dashboard output directory is blank, set it to `public` (with `cloudflare-pages` as the project root directory, if that is how the project is configured).
-3. Under **Bindings**, add a **Service** binding for both Production and Preview environments as needed:
+2. Under **Builds & deployments**, confirm:
+   - Framework preset: `None`
+   - Root directory: `cloudflare-pages`
+   - Build command: `bash build.sh`
+   - Build output directory: `public`
+3. Under **Bindings**, add a **D1 database binding** for both Production and Preview environments as needed:
+   - Variable name: `DB`
+   - Database: `exam-cracker-db`
+   - Database ID: `dbf2375d-a302-443f-83bf-df59e1d98177`
+4. Under **Bindings**, keep/add the **Service** binding for dynamic Next.js page rendering:
    - Variable name: `EXAM_CRACKER_WEB`
    - Service: `exam-cracker-web`
-4. Under **Variables and Secrets**, add the non-secret values the Pages Function actually needs. Add secret values as encrypted secrets, not plain-text variables.
-5. Save the settings and trigger a new Pages deployment so the binding and variables are available to the deployment.
+5. Under **Variables and Secrets**, configure the server-only Google Drive values for the Pages Function, for Production (and Preview if used):
+   - Secret: `GOOGLE_SERVICE_ACCOUNT_JSON`
+   - Secret or encrypted variable: `GOOGLE_DRIVE_FOLDER_ID`
+   - Optional existing values, only when configured: `GOOGLE_DRIVE_PROFILE_FOLDER_ID`, `GOOGLE_DRIVE_PDF_FOLDER_ID`, `GOOGLE_DRIVE_SCOPE`, `GOOGLE_DRIVE_MAX_PROFILE_PHOTO_MB`, `GOOGLE_DRIVE_MAX_PDF_MB`
+6. Save settings and redeploy Pages so all bindings/secrets are active.
 
-## Important distinction: Pages vs. the app's Next.js build
+**Important:** Worker secrets are not automatically shared with Pages Functions. The Google Drive secret(s) used for protected profile-photo/PDF storage must be separately configured for Pages. Never commit the service-account JSON or put it in any `NEXT_PUBLIC_*` variable.
 
-- This change only unlocks dashboard-managed configuration for the **Pages project**.
-- Values prefixed with `NEXT_PUBLIC_` that are referenced by the Next.js frontend are inlined when GitHub Actions runs `npm run build` / `npm run build:cloudflare`. Adding those values only to the Pages runtime settings does **not** rewrite the already-built JavaScript bundle. Configure those at build time in the repository's GitHub Actions Variables/Secrets if they are needed by the frontend.
-- Server-only Google Drive credentials belong on the `exam-cracker-web` Worker as encrypted Worker secrets (for example, `GOOGLE_SERVICE_ACCOUNT_JSON`). Do not store private keys or service-account JSON in Pages variables, `NEXT_PUBLIC_*`, or the repository.
+## Pages runtime settings vs. Next.js build settings
+
+- The `DB` binding is runtime-only and is used by the Pages Function; the browser never connects to D1 directly.
+- `EXAM_CRACKER_WEB` is still required for dynamic Next.js HTML and other server routes. The `/api/ec/*` API route no longer sends API calls through that service binding.
+- Values prefixed with `NEXT_PUBLIC_` are embedded in browser JavaScript at build time when GitHub Actions runs `npm run build` / `npm run build:cloudflare`. Adding them only to Pages runtime settings does not change an already-built JavaScript bundle. Configure any custom public build values in GitHub Actions Variables/Secrets too.
+- Pages Function requests still count against the Workers Free daily request allowance. Static assets excluded through `_routes.json` remain free and unlimited.

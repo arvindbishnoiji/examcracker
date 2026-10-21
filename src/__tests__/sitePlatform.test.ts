@@ -3,6 +3,7 @@ import type { Banner, HomeSectionConfig, NoticePopup, Testimonial } from '../typ
 import {
   audienceMatches,
   createHomeSection,
+  DEFAULT_SITE_CONFIG,
   DEFAULT_TESTIMONIALS,
   DEFAULT_THEME,
   getBannerState,
@@ -18,6 +19,7 @@ import {
   selectBannersForPlacement,
 } from '../lib/site-config';
 import { validateSettingValue } from '../lib/site-validation';
+import { DEFAULT_LECTURES_SCREEN } from '../lib/screen-config';
 import { THEME_PRESETS } from '../lib/theme';
 
 const NOW = Date.parse('2026-10-20T10:00:00.000Z');
@@ -134,6 +136,17 @@ describe('Homepage sections', () => {
       { exam: 'JEE', classLevel: '12' }
     );
     expect(visible.map((section) => section.id)).toEqual(['a', 'd']);
+  });
+
+  it('defaults to a batch-first student path with structured series and secondary all-lecture browsing', () => {
+    const sections = getHomeSectionsForStudent(DEFAULT_SITE_CONFIG.homepage, { exam: 'JEE', classLevel: '11' });
+    const types = sections.map((section) => section.type);
+    expect(types.indexOf('featured_batches')).toBeGreaterThanOrEqual(0);
+    expect(types.indexOf('featured_series')).toBeGreaterThan(types.indexOf('featured_batches'));
+    expect(types.indexOf('continue_learning')).toBeGreaterThan(types.indexOf('featured_series'));
+    expect(types.indexOf('live_tests')).toBeGreaterThan(types.indexOf('continue_learning'));
+    expect(DEFAULT_LECTURES_SCREEN.tabLabels.batches).toBe('Batches');
+    expect(DEFAULT_LECTURES_SCREEN.tabLabels.lectures).toBe('All lectures');
   });
 
   it('moves sections without mutating the original array', () => {
