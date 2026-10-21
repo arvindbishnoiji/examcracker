@@ -1,6 +1,12 @@
 'use client';
 
-export default function GlobalError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+import { useEffect } from 'react';
+
+export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  useEffect(() => {
+    // Preserve the diagnostic in browser logs without exposing stacks in the UI.
+    console.error('[ExamCracker] Root app shell error', error?.digest || error?.message || 'Unknown root error');
+  }, [error]);
   return (
     <html lang="en">
       <body style={{ fontFamily: 'system-ui, sans-serif', background: '#f8fafc', color: '#0f172a' }}>
