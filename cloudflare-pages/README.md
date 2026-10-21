@@ -11,7 +11,7 @@ Configure the Pages project `examcrack` in **Workers & Pages → examcrack → S
 - **Build command:** `bash build.sh`
 - **Build output directory:** `public`
 
-The build script moves to the repository root, installs dependencies, runs `npm run build:cloudflare`, copies the canonical D1 API handler and its Google Drive module into `functions/_shared/ec-api`, then stages the generated `.open-next/assets` files in the Pages output. It generates `_routes.json` so hashed JS/CSS and ordinary public images are served as static Pages assets. The more-specific `functions/api/ec/[[path]].js` route handles API calls directly with D1; the root catch-all remains for dynamic Next.js pages.
+The build script moves to the repository root, installs dependencies, runs `npm run build:cloudflare`, bundles `pages-api-entry.mjs` and the canonical API handler into a self-contained `functions/api/ec/[[path]].js`, then stages generated `.open-next/assets` files into the Pages output. It generates `_routes.json` so hashed JS/CSS and ordinary public images are served as static Pages assets. The more-specific API route handles requests directly with D1; the root catch-all remains for dynamic Next.js pages.
 
 **Important:** the current source `public/_routes.json` intentionally remains a catch-all template for compatibility with the old `echo` build. The new build script replaces it *inside the build output* after staging assets. Therefore, the quota-saving behavior starts only after the Cloudflare Pages build command has been changed to `bash build.sh` and a new deployment succeeds.
 
