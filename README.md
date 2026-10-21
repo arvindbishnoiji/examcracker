@@ -23,25 +23,28 @@ npm test                     # Vitest suite (date, validation, playlist paging, 
 npm run typecheck
 ```
 
-`.env.local` is git-ignored. Never commit `.env`, service-role keys, Firebase Admin JSON or Cloudflare API tokens.
+`.env.local` is git-ignored. Copy `.env.example` to `.env.local` and replace placeholders with your Firebase Web App configuration, Supabase project URL/publishable key, function URLs, and deployed media Worker URL. The example intentionally contains placeholders only. Never commit `.env`, service-role keys, Firebase Admin JSON or Cloudflare API tokens.
 
 ### Public env vars (NEXT_PUBLIC_* — browser-safe)
 
 | Var | Default | Notes |
 |-----|---------|-------|
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | `AIzaSy...nhTA` | darvo1 web key |
-| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | `darvo1.firebaseapp.com` | |
-| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | `darvo1` | |
-| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | `darvo1.firebasestorage.app` | |
-| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | `283467136948` | |
-| `NEXT_PUBLIC_FIREBASE_APP_ID` | `1:283467136948:web:...f7ce1` | |
-| `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | `G-FMV79YMHBC` | optional |
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://kncbvcozpcrfvxdbkbtf.supabase.co` | |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_...` | **publishable only** — never service-role |
-| `NEXT_PUBLIC_SUPABASE_FUNCTION_URL` | `…/functions/v1/exam-cracker-api` | no trailing slash |
-| `NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL` | `https://ec-content-api...workers.dev` | |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | *(required)* | Firebase Web App key; browser-visible, restrict by API/referrer in Google Cloud |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | *(required)* | |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | *(required)* | |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | *(required)* | |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | *(required)* | |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | *(required)* | |
+| `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | *(optional)* |
+| `NEXT_PUBLIC_SUPABASE_URL` | *(required)* | |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | *(required)* | **publishable only** — never service-role |
+| `NEXT_PUBLIC_SUPABASE_FUNCTION_URL` | *(required)* | `…/functions/v1/exam-cracker-api`, no trailing slash |
+| `NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL` | *(required)* | `…/functions/v1/ec-site-api`, no trailing slash |
+| `NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL` | *(required)* | deployed media Worker base URL |
 | `NEXT_PUBLIC_ADMIN_EMAIL` | `arvinddarabishnoi@gmail.com` | UI hint; server checks token |
-| `NEXT_PUBLIC_FIREBASE_VAPID_KEY` | *(empty)* | set after Firebase Console → Project settings → Cloud Messaging → Web Push cert |
+| `NEXT_PUBLIC_FIREBASE_VAPID_KEY` | *(empty)* | optional; set after Firebase Console → Project settings → Cloud Messaging → Web Push cert |
+| `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED` | `true` | optional; set to `false` when Google provider is disabled |
+| `NEXT_PUBLIC_SITE_URL` | fallback domain | optional canonical URL for metadata and sitemap |
 
 All browser requests to Supabase send:
 
@@ -97,10 +100,9 @@ Browser (NEXT_PUBLIC_*) ─Firebase Auth (ID token)─► Supabase Edge Function
 
 ### Prereq (one-time, owner)
 
-1. **Cloudflare account:** ID `93f8cbbe79e248f8d1db9fccc586f0c3` already in `wrangler.toml`.
-2. **GitHub Actions secrets:**
-   - `CLOUDFLARE_API_TOKEN` — Workers deploy permission
-   - `CLOUDFLARE_ACCOUNT_ID` — `93f8cbbe79e248f8d1db9fccc586f0c3`
+1. **Cloudflare account:** configure the account used by the project. Website and media proxy are separate Workers.
+2. **GitHub Actions secrets:** `CLOUDFLARE_API_TOKEN` (Workers deploy permission), `CLOUDFLARE_ACCOUNT_ID`, and `NEXT_PUBLIC_FIREBASE_API_KEY` (public browser config at build-time; treated as a repository secret to avoid publishing it in configuration). Optional secret: `NEXT_PUBLIC_FIREBASE_VAPID_KEY`.
+3. **GitHub Actions repository variables:** `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`, `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`, `NEXT_PUBLIC_FIREBASE_APP_ID`, `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` (optional), `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SUPABASE_FUNCTION_URL`, `NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL`, `NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL`, and `CLOUDFLARE_WEB_HEALTH_URL` (deployed website `/login` health-check URL). These values are public client configuration, not privileged credentials.
 3. **Firebase Console (darvo1):**
    - Authentication → Sign-in method: enable **Email/Password** + **Google**.
    - Create user `arvinddarabishnoi@gmail.com` (admin must pre-exist).
@@ -112,14 +114,16 @@ Browser (NEXT_PUBLIC_*) ─Firebase Auth (ID token)─► Supabase Edge Function
 
 ```bash
 npm run build
-npx @opennextjs/cloudflare build  # produces .open-next/
+npm ci
+npm run build
+npm run build:cloudflare          # produces .open-next/
 npx wrangler deploy --dry-run     # validate wrangler.toml
 ```
 
 ### CI vs Deploy
 
 - **`ci.yml`** runs on every push/PR: `npm ci` → typecheck → lint → `vitest` → `next build` → secret-scan → worker-config check.
-- **`deploy.yml`** runs only on `main` push: build + `npx @opennextjs/cloudflare build` + `wrangler deploy` (needs secrets).
+- **`deploy.yml`** runs only on `main` push or manual dispatch on `main`; it validates required client configuration, builds Next.js and the OpenNext Worker, deploys website and media proxy separately, then health-checks both. It requires the settings above and is intentionally not triggered from feature branches.
 
 > Deployment is only claimed complete when `deploy.yml` succeeds and URL is verified. No fake “live” claim.
 
