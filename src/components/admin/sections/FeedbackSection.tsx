@@ -5,7 +5,7 @@ import { CheckCircle2, Clock3, MessageSquareText, Send } from 'lucide-react';
 import { Card, Badge, EmptyState, Skeleton } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/hooks/useToast';
-import { getAdminFeedback, getAdminFeedbackThread, replyToFeedback, updateFeedbackStatus, type FeedbackMessageItem, type StudentFeedbackItem } from '@/lib/api';
+import { getAdminFeedback, getAdminFeedbackThread, replyToFeedback, updateFeedbackStatus, type AdminFeedbackItem, type FeedbackMessageItem } from '@/lib/api';
 
 function timeLabel(value?: string | null) {
   if (!value) return '';
@@ -18,7 +18,7 @@ function statusText(status: string) {
 
 export function FeedbackSection() {
   const { push } = useToast();
-  const [items, setItems] = useState<StudentFeedbackItem[]>([]);
+  const [items, setItems] = useState<AdminFeedbackItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<FeedbackMessageItem[]>([]);
   const [reply, setReply] = useState('');
