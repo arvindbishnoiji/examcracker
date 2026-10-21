@@ -4,11 +4,35 @@
  * Never add Supabase service-role, Firebase Admin JSON or Cloudflare API tokens here.
  */
 
+/**
+ * Explicit references are required here: Next.js only inlines NEXT_PUBLIC_*
+ * values into browser bundles when each variable is accessed statically as
+ * process.env.NEXT_PUBLIC_NAME. Looking up process.env[name] dynamically leaves
+ * the browser value undefined and caused Firebase auth/invalid-api-key after
+ * hydration, even when GitHub Actions had supplied the correct build values.
+ */
+const PUBLIC_ENV: Record<string, string | undefined> = {
+  NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  NEXT_PUBLIC_FIREBASE_VAPID_KEY: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  NEXT_PUBLIC_SUPABASE_FUNCTION_URL: process.env.NEXT_PUBLIC_SUPABASE_FUNCTION_URL,
+  NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL: process.env.NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL,
+  NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL: process.env.NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL,
+  NEXT_PUBLIC_ADMIN_EMAIL: process.env.NEXT_PUBLIC_ADMIN_EMAIL,
+  NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED,
+};
+
 function env(name: string, fallback: string): string {
-  const v = process.env[name];
+  const v = PUBLIC_ENV[name];
   return (v !== undefined && v !== '' ? v : fallback).trim();
 }
-
 function envRequired(name: string, fallback: string): string {
   const v = env(name, fallback);
   if (!v) {
