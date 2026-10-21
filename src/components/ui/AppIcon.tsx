@@ -17,8 +17,8 @@ import {
   Layers,
   LayoutDashboard,
   LayoutTemplate,
+  MonitorSmartphone,
   ListVideo,
-  LogIn,
   Megaphone,
   Menu,
   MessageSquareWarning,
@@ -81,8 +81,8 @@ export function NavIcon({
 
 const ADMIN_ICONS: Record<string, LucideIcon> = {
   overview: LayoutDashboard,
+  screens: MonitorSmartphone,
   appearance: Palette,
-  login: LogIn,
   homepage: LayoutTemplate,
   banners: ImageIcon,
   popups: MessageSquareWarning,
@@ -102,6 +102,7 @@ const ADMIN_ICONS: Record<string, LucideIcon> = {
   analytics: BarChart3,
   leaderboards: Trophy,
   notifications: BellRing,
+  chat: MessagesSquare,
   media: FolderOpen,
   search: Search,
   scheduling: CalendarClock,

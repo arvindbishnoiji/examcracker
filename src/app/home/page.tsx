@@ -299,6 +299,9 @@ export default function HomePage() {
   const sections = getHomeSectionsForStudent(config.homepage, audience);
   const greeting = config.homepage.greetingTemplate.replace('{name}', profile.display_name.split(' ')[0] || 'there');
   const heroBanners = selectBannersForPlacement(config.banners, audience, 'home_hero');
+  const heroSection = sections.find((section) => section.type === 'hero');
+  const heroTitle = (heroSection?.title || '').replace('{name}', profile.display_name.split(' ')[0] || 'there');
+  const heroSubtitle = (heroSection?.subtitle || '').replace('{name}', profile.display_name.split(' ')[0] || 'there');
   const primaryTestId = (liveTests[0] || upcomingTests[0])?.id;
   const nextTest = liveTests[0] || upcomingTests[0];
   const todayGoal = goals[0];
@@ -617,12 +620,15 @@ export default function HomePage() {
                   </span>
                 )}
               </div>
-              <h1 className="mt-2 max-w-2xl text-[26px] font-extrabold leading-[1.12] tracking-[-0.03em] sm:text-[34px]">
-                {greeting}<span className="text-[var(--ec-brand)]">.</span>
+              {config.homepage.showGreeting ? (
+                <p className="mt-2 text-[12px] font-semibold text-ink-500">{greeting}</p>
+              ) : null}
+              <h1 className="mt-1 max-w-2xl text-[26px] font-extrabold leading-[1.12] tracking-[-0.03em] sm:text-[34px]">
+                {heroTitle || greeting}
               </h1>
               <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-ink-500 sm:text-sm">
-                A focused plan for {profile.exam} · Class {profile.class_level}. Pick up where you left off, then put
-                your preparation to the test.
+                {heroSubtitle ||
+                  `A focused plan for ${profile.exam} · Class ${profile.class_level}. Pick up where you left off, then put your preparation to the test.`}
               </p>
 
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -647,6 +653,15 @@ export default function HomePage() {
                   {nextTest ? (nextTest.isLive ? 'Live test now' : 'Next test') : 'Browse tests'}
                   <ArrowRight size={13} className="opacity-60" />
                 </Link>
+                {heroSection?.ctaLabel && isValidInternalDeepLink(heroSection.ctaHref) ? (
+                  <Link
+                    href={heroSection.ctaHref}
+                    className="ec-btn inline-flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold text-brand-700 hover:bg-brand-50"
+                  >
+                    {heroSection.ctaLabel}
+                    <ArrowRight size={13} className="opacity-70" />
+                  </Link>
+                ) : null}
                 {todayGoal && isValidInternalDeepLink(String(metaOf(todayGoal).deepLink || '')) && (
                   <Link
                     href={String(metaOf(todayGoal).deepLink)}

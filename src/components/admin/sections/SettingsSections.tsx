@@ -149,7 +149,7 @@ export function NavigationSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Design studio"
+        eyebrow="Website settings"
         title="Navigation & Menu Manager"
         description="Control the header CTA, header links, bottom navigation and the announcement bar. Every link is validated before publishing."
         meta={<StatusPill tone="brand">{draft.headerLinks.filter((link) => link.visible).length} header links</StatusPill>}
@@ -214,7 +214,7 @@ export function FooterSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Design studio"
+        eyebrow="Website settings"
         title="Footer Manager"
         description="Footer copy, link columns, social links and copyright — published with the rest of the site settings."
         meta={<StatusPill tone={draft.show ? 'success' : 'neutral'}>{draft.show ? 'Footer visible' : 'Footer hidden'}</StatusPill>}
@@ -290,7 +290,7 @@ export function SearchSeoSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Growth"
+        eyebrow="Website settings"
         title="Search & Discoverability"
         description="Metadata applied to the public site plus the search experience inside the student app."
         meta={
@@ -380,7 +380,7 @@ export function FeaturesSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="System"
+        eyebrow="Website settings"
         title="Feature Toggles"
         description="Hide student-facing capabilities without deleting any data. Navigation links for hidden features are automatically dropped."
         meta={<StatusPill tone="brand">{Object.values(draft).filter(Boolean).length} of {Object.keys(draft).length} enabled</StatusPill>}
@@ -466,7 +466,7 @@ export function MediaSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Design studio"
+        eyebrow="Website settings"
         title="Media Library"
         description="A single registry of reusable image, PDF and video URLs. The library stores references — files stay on your hosting/CDN."
         meta={<StatusPill tone="brand">{draft.items.length} assets</StatusPill>}
@@ -598,7 +598,7 @@ export function ChallengesSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Learning"
+        eyebrow="Learning content"
         title="Study Challenges"
         description="Short, measurable study sprints. Progress is computed from real lecture progress, tests and checklists on the student side."
         meta={<StatusPill tone="brand">{items.filter((item) => item.active).length} active challenges</StatusPill>}

@@ -13,9 +13,9 @@ import {
   ReportsSection,
   SchedulingSection,
 } from '@/components/admin/sections/DataSections';
+import { ChatSection } from '@/components/admin/sections/ChatSection';
 import { EnrollmentConsole } from '@/components/admin/sections/EnrollmentConsole';
 import { HomepageBuilderSection } from '@/components/admin/sections/HomepageBuilderSection';
-import { LoginDesignerSection } from '@/components/admin/sections/LoginDesignerSection';
 import { NotificationsSection } from '@/components/admin/sections/NotificationsSection';
 import { PopupsSection } from '@/components/admin/sections/PopupsSection';
 import {
@@ -43,6 +43,35 @@ export default function AdminSectionPage() {
   const slug = typeof params?.section === 'string' ? params.section : '';
   const meta = findAdminSection(slug);
 
+  // Login / Signup are code-managed on purpose. `/admin/login` historically
+  // opened a designer; it now explains the decision instead of editing auth.
+  if (slug === 'login') {
+    return (
+      <div className="max-w-2xl mx-auto py-10">
+        <div className="ec-card p-6 sm:p-8">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-brand-700">Code-managed screen</p>
+          <h1 className="mt-1.5 text-2xl font-extrabold">Sign-in and sign-up are not editable here</h1>
+          <p className="mt-2 text-sm leading-relaxed text-ink-500">
+            Authentication screens stay in code so that email sign-in, Google sign-in, password reset, account creation
+            and session handling cannot be broken by a configuration change. Any previously saved login presentation
+            values are still honoured by the live sign-in page.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Link href="/admin/screens" className="ec-btn bg-brand-600 px-4 py-2 text-sm font-semibold text-white">
+              Open Screen Studio
+            </Link>
+            <Link href="/login" className="ec-btn border border-ink-200 px-4 py-2 text-sm font-semibold">
+              View sign-in page ↗
+            </Link>
+            <Link href="/admin" className="ec-btn px-4 py-2 text-sm font-semibold text-ink-600 hover:bg-ink-50">
+              Back to overview
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!meta) {
     return (
       <div className="max-w-lg mx-auto py-16 text-center">
@@ -59,8 +88,6 @@ export default function AdminSectionPage() {
   switch (slug) {
     case 'appearance':
       return <AppearanceSection />;
-    case 'login':
-      return <LoginDesignerSection />;
     case 'homepage':
       return <HomepageBuilderSection />;
     case 'banners':
@@ -89,6 +116,8 @@ export default function AdminSectionPage() {
       return <LeaderboardsSection />;
     case 'notifications':
       return <NotificationsSection />;
+    case 'chat':
+      return <ChatSection />;
     case 'campaigns':
       return <CampaignsSection />;
     case 'scheduling':

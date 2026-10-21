@@ -6,6 +6,21 @@
  * Nothing in this file contains secrets: every field is safe to render.
  */
 
+import type {
+  ChallengesScreenConfig,
+  ChatScreenConfig,
+  EventsScreenConfig,
+  LeaderboardScreenConfig,
+  LecturePlayerScreenConfig,
+  LecturesScreenConfig,
+  NotificationsScreenConfig,
+  OnboardingScreenConfig,
+  ProfileScreenConfig,
+  SearchScreenConfig,
+  TestPlayerScreenConfig,
+  TestsScreenConfig,
+} from './screens';
+
 export type ThemePresetId =
   | 'modern'
   | 'minimal'
@@ -367,6 +382,11 @@ export interface MediaConfig {
 
 export interface SiteConfig {
   theme: ThemeConfig;
+  /**
+   * Login / signup presentation. Kept as a stored contract because the live
+   * login screen still renders published values, but it is intentionally NOT
+   * exposed in the admin screen editor.
+   */
   login: LoginConfig;
   homepage: HomepageConfig;
   navigation: NavigationConfig;
@@ -378,6 +398,19 @@ export interface SiteConfig {
   features: FeatureFlags;
   seo: SeoConfig;
   media: MediaConfig;
+  // Screen Studio documents (presentation only).
+  lectures: LecturesScreenConfig;
+  lecturePlayer: LecturePlayerScreenConfig;
+  tests: TestsScreenConfig;
+  testPlayer: TestPlayerScreenConfig;
+  leaderboard: LeaderboardScreenConfig;
+  profile: ProfileScreenConfig;
+  eventsScreen: EventsScreenConfig;
+  challengesScreen: ChallengesScreenConfig;
+  chat: ChatScreenConfig;
+  notifications: NotificationsScreenConfig;
+  search: SearchScreenConfig;
+  onboarding: OnboardingScreenConfig;
 }
 
 export type SiteSettingKey = keyof SiteConfig;

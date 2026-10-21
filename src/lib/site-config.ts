@@ -32,6 +32,12 @@ import type {
 } from '@/types';
 import { isSafeHttpUrl } from './validation';
 import { isHexColor, normalizeHex } from './theme';
+import {
+  DEFAULT_SCREEN_CONFIGS,
+  SCREEN_KEYS,
+  SCREEN_SANITIZERS,
+  type ScreenKey,
+} from './screen-config';
 
 export const SITE_SETTING_KEYS: SiteSettingKey[] = [
   'theme',
@@ -46,7 +52,11 @@ export const SITE_SETTING_KEYS: SiteSettingKey[] = [
   'features',
   'seo',
   'media',
+  ...SCREEN_KEYS,
 ];
+
+/** Keys exposed by the public config endpoint and rendered by student pages. */
+export const PUBLIC_SITE_SETTING_KEYS: SiteSettingKey[] = [...SITE_SETTING_KEYS];
 
 export function isSiteSettingKey(value: string): value is SiteSettingKey {
   return (SITE_SETTING_KEYS as string[]).includes(value);
@@ -518,6 +528,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   features: DEFAULT_FEATURES,
   seo: DEFAULT_SEO,
   media: DEFAULT_MEDIA,
+  ...(DEFAULT_SCREEN_CONFIGS as Pick<SiteConfig, ScreenKey>),
 };
 
 export function defaultForSetting<K extends SiteSettingKey>(key: K): SiteConfig[K] {
@@ -1092,6 +1103,10 @@ function sanitizeMedia(value: unknown): MediaConfig {
 }
 
 export function sanitizeSiteConfig(config: SiteConfig): SiteConfig {
+  const safeScreens = {} as Pick<SiteConfig, ScreenKey>;
+  for (const key of SCREEN_KEYS) {
+    safeScreens[key] = SCREEN_SANITIZERS[key]((config as unknown as Record<string, unknown>)[key]) as never;
+  }
   return {
     theme: sanitizeTheme(config.theme),
     login: sanitizeLogin(config.login),
@@ -1105,6 +1120,7 @@ export function sanitizeSiteConfig(config: SiteConfig): SiteConfig {
     features: sanitizeFeatures(config.features),
     seo: sanitizeSeo(config.seo),
     media: sanitizeMedia(config.media),
+    ...safeScreens,
   };
 }
 

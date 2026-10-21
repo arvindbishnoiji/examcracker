@@ -68,7 +68,7 @@ export function AnalyticsSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Students"
+        eyebrow="Tests & performance"
         title="Student Analytics"
         description="Every chart is computed from submitted exam attempts and stored profiles. There are no simulated metrics."
         actions={<button type="button" onClick={() => void load()} className="ec-btn px-3 py-2 text-xs font-semibold border border-ink-200 bg-white">⟳ Refresh</button>}
@@ -236,7 +236,7 @@ export function LeaderboardsSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Students"
+        eyebrow="Tests & performance"
         title="Leaderboards"
         description="Inspect the real ranking that students see for any test. Rankings come straight from server-scored attempts."
         meta={<StatusPill tone="brand">{tests.length} tests</StatusPill>}
@@ -662,7 +662,7 @@ export function CampaignsSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Learning"
+        eyebrow="Learning content"
         title="Revision Campaigns"
         description="Revision marathons are events tagged with “revision” in the title, description or category metadata. Create and edit them in the Events manager; this view is a focused campaign lens."
         meta={<StatusPill tone="brand">{filtered.length} revision campaigns</StatusPill>}

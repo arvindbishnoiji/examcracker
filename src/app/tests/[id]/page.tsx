@@ -7,13 +7,19 @@ import { Card, Badge, Skeleton } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/hooks/useToast';
 import { formatCountdown } from '@/lib/date';
+import { useSiteConfig } from '@/context/SiteConfigContext';
 import type { TestQuestion } from '@/types';
+import { visibleSectionIds } from '@/lib/screen-config';
+import { ScreenAnnouncementBanner, ScreenHelpNote } from '@/components/student/ScreenScaffold';
 
 export default function TestAttemptPage(){
   const params = useParams<{id:string}>();
   const id = params.id;
   const router = useRouter();
   const { push } = useToast();
+  const { config } = useSiteConfig();
+  const screen = config.testPlayer;
+  const sections = visibleSectionIds('testPlayer', screen);
   const [test, setTest] = useState<any>(null);
   const [questions, setQuestions] = useState<TestQuestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,7 +100,7 @@ export default function TestAttemptPage(){
 
   async function handleSubmit(isAuto=false){
     if(!questions.length || submitLockRef.current) return;
-    if(!isAuto && !confirm('Submit your answers? You cannot change after submission.')) return;
+    if(!isAuto && !confirm(screen.submitConfirm || 'Submit your answers? You cannot change them after submission.')) return;
     submitLockRef.current = true;
     setSubmitting(true);
     let completed = false;
@@ -128,7 +134,10 @@ export default function TestAttemptPage(){
     <div className="max-w-2xl mx-auto">
       <Card className="p-6 text-center">
         <p className="font-semibold">{error}</p>
-        <p className="text-sm text-ink-500 mt-1">GET /tests/:id is filtered by exam/class and hides answers until submission. Expired or already-attempted tests show result.</p>
+        <p className="mt-1 text-sm text-ink-500">
+          This test may be scheduled for a different time, limited to another exam or class, or already submitted. Your
+          previous result is shown automatically when one exists.
+        </p>
         <div className="flex gap-2 justify-center mt-4">
           <Button variant="outline" onClick={()=>router.back()}>Go back</Button>
           <Link href="/tests" className="px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-semibold">Browse tests</Link>
@@ -140,23 +149,25 @@ export default function TestAttemptPage(){
   if(showResult && result){
     const { attempt, result: summary, review } = result;
     return (
-      <div className="max-w-3xl mx-auto space-y-4">
-        <Card className="p-6 bg-gradient-to-br from-brand-600 to-brand-800 text-white">
-          <h1 className="text-xl font-bold">Result • {test?.title || id.slice(0,8)}</h1>
+      <div className="mx-auto max-w-3xl space-y-4">
+        <ScreenAnnouncementBanner announcement={screen.announcement} />
+        <Card className="bg-gradient-to-br from-brand-600 to-brand-800 p-6 text-white">
+          <h1 className="text-xl font-bold">{screen.resultTitle} • {test?.title || id.slice(0,8)}</h1>
           <div className="grid grid-cols-3 gap-3 mt-4">
             <div className="bg-white/15 rounded-xl p-3 text-center"><p className="text-2xl font-bold">{summary.score}/{summary.maxScore}</p><p className="text-xs opacity-80">Score</p></div>
             <div className="bg-white/15 rounded-xl p-3 text-center"><p className="text-2xl font-bold">{summary.correct}/{summary.correct+summary.incorrect+summary.unanswered}</p><p className="text-xs opacity-80">Correct</p></div>
             <div className="bg-white/15 rounded-xl p-3 text-center"><p className="text-2xl font-bold">{Math.round(summary.percentage)}%</p><p className="text-xs opacity-80">Accuracy</p></div>
           </div>
-          <p className="text-xs opacity-70 mt-3">Correct {summary.correct} • Incorrect {summary.incorrect} • Unanswered {summary.unanswered} • Server-calculated via POST /tests/:id/submit</p>
+          <p className="text-xs opacity-70 mt-3">Correct {summary.correct} • Incorrect {summary.incorrect} • Unanswered {summary.unanswered} • Scored on the server</p>
           <div className="flex gap-2 mt-4">
-            <Link href={`/leaderboard?testId=${id}`} className="px-4 py-2 bg-white text-brand-700 rounded-xl text-sm font-semibold">View leaderboard</Link>
+            <Link href={`/leaderboard?testId=${id}`} className="ec-btn bg-white px-4 py-2 text-sm font-semibold text-brand-700">{screen.leaderboardCtaLabel}</Link>
             <Link href="/tests" className="px-4 py-2 bg-white/20 text-white rounded-xl text-sm font-semibold border border-white/30">Back to tests</Link>
           </div>
         </Card>
 
+        {sections.includes('review') ? (
         <div className="space-y-3">
-          <h2 className="font-bold">Review & Explanations</h2>
+          <h2 className="font-bold">{screen.reviewTitle}</h2>
           {review?.length ? review.map((r:any, idx:number)=>(
             <Card key={r.questionId || idx} className={`p-4 border-l-4 ${r.isCorrect ? 'border-l-emerald-500':'border-l-red-500'}`}>
               <p className="font-semibold text-sm">Q{idx+1} • {r.questionId}</p>
@@ -167,12 +178,19 @@ export default function TestAttemptPage(){
                 <Badge>Correct: {r.correctAnswer || '—'}</Badge>
               </div>
             </Card>
-          )) : <Card className="p-4 text-sm text-ink-500">No review items returned by server.</Card>}
+          )) : <Card className="p-4 text-sm text-ink-500">{screen.reviewEmpty}</Card>}
         </div>
+        ) : null}
 
-        <Card className="p-4 bg-ink-50 border-dashed text-xs text-ink-500">
-          <p>Attempt ID {attempt.id} • Submitted {new Date(attempt.submitted_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST • Never calculate official score solely in browser.</p>
+        <Card className="border-dashed bg-ink-50 p-4 text-xs text-ink-500">
+          <p>
+            Attempt {attempt.id.slice(0, 8)} • Submitted{' '}
+            {new Date(attempt.submitted_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST • Score
+            calculated on the server.
+          </p>
         </Card>
+
+        <ScreenHelpNote help={screen.help} />
       </div>
     );
   }
@@ -182,7 +200,9 @@ export default function TestAttemptPage(){
   const total = questions.length;
 
   return (
-    <div className="max-w-6xl mx-auto grid lg:grid-cols-[1fr_300px] gap-4">
+    <div className="mx-auto max-w-6xl space-y-3">
+      <ScreenAnnouncementBanner announcement={screen.announcement} />
+    <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -190,8 +210,8 @@ export default function TestAttemptPage(){
             <p className="text-sm text-ink-500">{test?.description} • {test?.subject || 'General'} • {test?.durationMinutes ? `${test.durationMinutes} min` : ''} • {total} questions</p>
           </div>
           <div className="flex items-center gap-2">
-            {timeLeft!==null && <div className={`px-3 py-2 rounded-xl font-mono font-bold ${timeLeft<300 ? 'bg-red-600 text-white':'bg-ink-900 text-white'}`}>{formatCountdown(timeLeft)}</div>}
-            <Link href="/tests" className="px-3 py-2 bg-white border border-ink-200 rounded-xl text-sm">Exit</Link>
+            {timeLeft!==null && <div className={`rounded-xl px-3 py-2 font-mono font-bold ${timeLeft < screen.timerWarningMinutes * 60 ? 'bg-red-600 text-white':'bg-ink-900 text-white'}`}>{formatCountdown(timeLeft)}</div>}
+            <Link href="/tests" className="ec-btn border border-ink-200 bg-[var(--ec-surface)] px-3 py-2 text-sm">{screen.exitLabel}</Link>
           </div>
         </div>
 
@@ -221,7 +241,7 @@ export default function TestAttemptPage(){
                   })}
                 </div>
                 <div className="flex flex-wrap gap-2 pt-2">
-                  <Button variant="outline" size="sm" onClick={()=> setAnswers(a=> { const n={...a}; delete n[q.id]; return n;})}>Clear answer</Button>
+                  <Button variant="outline" size="sm" onClick={()=> setAnswers(a=> { const n={...a}; delete n[q.id]; return n;})}>{screen.clearAnswerLabel}</Button>
                   <span className="text-xs text-ink-400 self-center">Draft saved locally (in-progress) and restored on reload.</span>
                 </div>
               </div>
@@ -233,20 +253,25 @@ export default function TestAttemptPage(){
               {currentIdx < total-1 ? (
                 <Button onClick={()=> setCurrentIdx(i=> Math.min(total-1,i+1))}>Next</Button>
               ) : (
-                <Button onClick={()=> handleSubmit(false)} loading={submitting}>Submit test</Button>
+                <Button onClick={()=> handleSubmit(false)} loading={submitting}>{screen.submitLabel}</Button>
               )}
             </div>
           </div>
         </Card>
 
-        <Card className="p-4 bg-amber-50 border-amber-200 text-xs text-amber-900">
-          <p>⚠️ Warning: Submitting sends your answers to server for scoring. Server response is authoritative. Duplicate attempts blocked per test unless allowMultipleAttempts enabled by admin.</p>
-        </Card>
+        {sections.includes('warning') ? (
+          <Card className="border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+            <p>
+              Submitting sends your answers to the server for scoring. The server response is authoritative, and
+              duplicate attempts are blocked unless your mentor allows them for this test.
+            </p>
+          </Card>
+        ) : null}
       </div>
 
       <div className="space-y-3">
         <Card className="p-4">
-          <h3 className="font-semibold mb-3">Question palette</h3>
+          <h3 className="mb-3 font-semibold">{screen.paletteTitle}</h3>
           <div className="grid grid-cols-5 gap-2">
             {questions.map((qq, idx)=>{
               const isAnswered = !!answers[qq.id];
@@ -263,19 +288,22 @@ export default function TestAttemptPage(){
             <span className="px-2 py-1 bg-white border border-ink-200 rounded-full">Not answered</span>
             <span className="px-2 py-1 bg-brand-600 text-white rounded-full">Current</span>
           </div>
-          <Button className="w-full mt-4" variant="danger" onClick={()=> handleSubmit(false)} loading={submitting}>Submit • {answeredCount}/{total}</Button>
-          <p className="text-[11px] text-ink-400 mt-2 text-center">Handles expired test & duplicate attempts visibly via API errors.</p>
+          <Button className="w-full mt-4" variant="danger" onClick={()=> handleSubmit(false)} loading={submitting}>{screen.submitLabel} · {answeredCount}/{total}</Button>
+          <p className="mt-2 text-center text-[11px] text-ink-400">Submit once — the server records your attempt and protects it from duplicates.</p>
         </Card>
 
-        <Card className="p-4">
-          <h4 className="font-semibold text-sm">Instructions</h4>
-          <ul className="text-xs text-ink-500 list-disc pl-4 mt-2 space-y-1">
-            <li>Timer uses IST schedule; expired tests show result instead of attempt.</li>
-            <li>Answers are sanitized; explanations hidden until after submission.</li>
-            <li>LaTeX/math strings preserved verbatim.</li>
-          </ul>
-        </Card>
+        <ScreenHelpNote help={screen.help} />
+
+        {screen.showInstructions && sections.includes('instructions') ? (
+          <Card className="p-4">
+            <h4 className="text-sm font-semibold">{screen.instructionsTitle}</h4>
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-ink-500">
+              {screen.instructions.map((line, index) => <li key={index}>{line}</li>)}
+            </ul>
+          </Card>
+        ) : null}
       </div>
+    </div>
     </div>
   );
 }

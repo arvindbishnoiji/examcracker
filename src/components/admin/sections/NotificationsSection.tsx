@@ -109,7 +109,7 @@ export function NotificationsSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Growth"
+        eyebrow="Communication"
         title="Notifications"
         description="Deliver real in-app notifications to the student inbox. Every write is an individual Firestore document the student app already subscribes to."
         meta={

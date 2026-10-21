@@ -74,7 +74,12 @@ See `src/lib/api.ts` for full contract.
 | `/profile` | auth | `GET /analysis`, learning level, watched time |
 | `/chat` | auth | Realtime own thread `studentThreads/{uid}/messages` |
 | `/notifications` | auth | `users/{uid}/notifications` inbox |
-| `/admin` | admin only | Overview, Goals, Batches, Lectures+playlist, Series, Tests+JSON, Events, Announcements, Students, Chat |
+| `/events` | auth | Event calendar, cards, ICS download |
+| `/challenges` | auth | Study challenges with checklists |
+| `/search` | auth | Search across lectures, tests, batches, series, events and notices |
+| `/admin` | admin only | Overview + grouped workspaces (Learning content, Tests & performance, Students & access, Communication, Website settings, System) |
+| `/admin/screens` | admin only | **Screen Studio** — pick any student screen and edit its headings, labels, sections, layout and messages |
+| `/admin/screens/[screen]` | admin only | Per-screen editor with mobile/desktop preview, save draft and publish |
 
 Schedules rendered in **Asia/Kolkata (IST)**; stored as UTC ISO in Supabase.
 
@@ -146,6 +151,8 @@ Deployment guide: <https://developers.cloudflare.com/workers/framework-guides/we
 ## Admin usage
 
 - Sign in as `arvinddarabishnoi@gmail.com` (email match is also checked server-side via token).
+- **Screen Studio (`/admin/screens`)** — the main place for routine changes. Pick a student screen, edit its heading, introduction, labels, buttons, section visibility/order, layout, item limits, empty states, help note and optional banner, preview it on desktop/mobile, then **Save draft** and **Publish to students**. Every screen except Login/Signup is manageable. Configuration is stored per key in `site_settings` (`draft` + `published`) and served by `/public/site`.
+- **What admin screen settings can never do:** change authentication, skip onboarding, alter enrolment/access rules, change test timing or scoring, reveal answer keys early, or weaken Firestore/Supabase security. Those stay in code and are enforced server-side.
 - **Goals:** text, start/end (IST → UTC), CTA/deepLink, priority, active.
 - **Batches/Series:** title, thumbnail, instructor, features, exam/classes, access_code.
 - **Lectures:** batch/series parent, single YouTube URL → “Auto-fill” via `/video`, or **playlist URL → Import** (follows `nextCursor`, dedup by `videoId`, select/edit, set target + exam/class, save). All via `firestore.rules` + Supabase API.
@@ -164,6 +171,8 @@ Deployment guide: <https://developers.cloudflare.com/workers/framework-guides/we
 - `src/__tests__/enrollment.test.ts` — eligibility, paid detection, bulk request validation, audience resolution, duplicate-safe summaries.
 - `src/__tests__/authGate.test.ts` — mandatory-onboarding routing, failed-bootstrap handling, no redirect loops.
 - `src/__tests__/progress.test.ts` — IST streak calculation and honest derived metrics.
+- `src/__tests__/screenStudio.test.ts` — Screen Studio defaults/sanitisation/validation, required-section protection, malformed-value fallbacks and a drift guard that the Supabase Edge Function allowlist mirrors the client registry.
+- `src/__tests__/screenStudioRender.test.tsx` — server-renders every screen preview to catch crashes and verify published values/hidden sections are reflected.
 - `npm audit` — fix high/critical or document exception.
 - Accessibility: semantic forms, focus rings, keyboard nav, safe-area, no `dangerouslySetInnerHTML` for user URLs.
 

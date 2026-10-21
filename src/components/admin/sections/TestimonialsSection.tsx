@@ -48,7 +48,7 @@ export function TestimonialsSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Growth"
+        eyebrow="Website settings"
         title="Testimonials & Highlights"
         description="Curate genuine student stories. They appear on the login page and in the homepage testimonial section only when active and featured as configured."
         meta={

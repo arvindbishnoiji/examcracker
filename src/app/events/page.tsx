@@ -7,7 +7,16 @@ import { useAuth } from '@/context/AuthContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { formatCountdown, formatISTDateTime } from '@/lib/date';
 import { isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
-import type { CourseCatalogItem } from '@/types';
+import type { CourseCatalogItem, EventsScreenConfig } from '@/types';
+import { visibleSectionIds } from '@/lib/screen-config';
+import {
+  ScreenAnnouncementBanner,
+  ScreenEmpty,
+  ScreenHelpNote,
+  ScreenPageHeader,
+  ScreenSection,
+  screenGridClass,
+} from '@/components/student/ScreenScaffold';
 
 type EventState = 'live' | 'upcoming' | 'completed' | 'unscheduled';
 
@@ -72,6 +81,7 @@ function downloadIcs(record: EventRecord) {
   if (!record.start) return;
   const start = new Date(record.start);
   const end = record.end ? new Date(record.end) : new Date(start.getTime() + 60 * 60 * 1000);
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const escape = (value: string) => value.replace(/([,;\\])/g, '\\$1').replace(/\n/g, '\\n');
   const lines = [
     'BEGIN:VCALENDAR',
@@ -84,10 +94,10 @@ function downloadIcs(record: EventRecord) {
     `DTEND:${icsDate(end.toISOString())}`,
     `SUMMARY:${escape(record.item.title)}`,
     `DESCRIPTION:${escape(record.item.description || 'Exam Cracker event')}`,
-    'URL:https://exam-cracker-web.arvinddara0290.workers.dev/events',
+    origin ? `URL:${origin}/events` : '',
     'END:VEVENT',
     'END:VCALENDAR',
-  ];
+  ].filter(Boolean);
   const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -110,45 +120,44 @@ function useCountdown(target: string | null): string | null {
   return formatCountdown(remaining);
 }
 
-function EventCard({ record }: { record: EventRecord }) {
+function EventCard({ record, screen }: { record: EventRecord; screen: EventsScreenConfig }) {
   const countdown = useCountdown(record.state === 'upcoming' ? record.start : null);
   return (
-    <article className="ec-card overflow-hidden flex flex-col">
+    <article className="ec-card flex flex-col overflow-hidden">
       {record.image ? (
-        <img src={record.image} alt="" className="h-40 w-full object-cover bg-ink-100" loading="lazy" />
+        <img src={record.image} alt="" className="h-40 w-full bg-ink-100 object-cover" loading="lazy" />
       ) : (
-        <div className="h-40 w-full bg-gradient-to-br from-brand-500 to-brand-800 grid place-items-center text-white/80 text-xs font-bold uppercase tracking-wider">
+        <div className="grid h-40 w-full place-items-center bg-gradient-to-br from-brand-500 to-brand-800 text-xs font-bold uppercase tracking-wider text-white/80">
           {record.item.exam}
         </div>
       )}
-      <div className="p-4 flex-1 flex flex-col">
+      <div className="flex flex-1 flex-col p-4">
         <div className="flex items-start justify-between gap-2">
           <h3 className="text-sm font-bold leading-snug">{record.item.title}</h3>
           <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold capitalize ${STATE_TONE[record.state]}`}>
-            {record.state}
+            {screen.filterLabels[record.state] || record.state}
           </span>
         </div>
-        <p className="text-[11px] text-ink-500 mt-1 line-clamp-2">{record.item.description}</p>
-        <p className="text-[11px] font-semibold text-ink-700 mt-2">
+        <p className="mt-1 text-[11px] text-ink-500 line-clamp-2">{record.item.description}</p>
+        <p className="mt-2 text-[11px] font-semibold text-ink-700">
           {record.start ? formatISTDateTime(record.start) : 'Schedule to be announced'}
           {record.end ? ` → ${formatISTDateTime(record.end)}` : ''}
         </p>
-        {countdown && <p className="text-[10px] text-brand-700 font-bold mt-0.5">Starts in {countdown}</p>}
-        <div className="flex flex-wrap gap-2 mt-auto pt-3">
-          {record.link && (
-            isValidInternalDeepLink(record.link) ? (
-              <Link href={record.link} className="ec-btn px-3 py-1.5 text-[11px] font-bold bg-[var(--ec-brand)] text-[var(--ec-on-brand)]">
-                Register / details
+        {countdown && <p className="mt-0.5 text-[10px] font-bold text-brand-700">Starts in {countdown}</p>}
+        <div className="mt-auto flex flex-wrap gap-2 pt-3">
+          {record.link &&
+            (isValidInternalDeepLink(record.link) ? (
+              <Link href={record.link} className="ec-btn bg-[var(--ec-brand)] px-3 py-1.5 text-[11px] font-bold text-[var(--ec-on-brand)]">
+                {screen.detailsCtaLabel}
               </Link>
             ) : (
-              <a href={record.link} target="_blank" rel="noopener noreferrer" className="ec-btn px-3 py-1.5 text-[11px] font-bold bg-[var(--ec-brand)] text-[var(--ec-on-brand)]">
-                Register ↗
+              <a href={record.link} target="_blank" rel="noopener noreferrer" className="ec-btn bg-[var(--ec-brand)] px-3 py-1.5 text-[11px] font-bold text-[var(--ec-on-brand)]">
+                {screen.detailsCtaLabel} ↗
               </a>
-            )
-          )}
+            ))}
           {record.start && (
-            <button type="button" onClick={() => downloadIcs(record)} className="ec-btn px-3 py-1.5 text-[11px] font-bold border border-ink-200">
-              Add to calendar
+            <button type="button" onClick={() => downloadIcs(record)} className="ec-btn border border-ink-200 px-3 py-1.5 text-[11px] font-bold">
+              {screen.addToCalendarLabel}
             </button>
           )}
         </div>
@@ -160,6 +169,7 @@ function EventCard({ record }: { record: EventRecord }) {
 export default function EventsPage() {
   const { bootstrap, profile, initializing, user } = useAuth();
   const { config } = useSiteConfig();
+  const screen = config.eventsScreen;
   const router = useRouter();
   const [month, setMonth] = useState(() => {
     const now = new Date();
@@ -192,129 +202,160 @@ export default function EventsPage() {
     return cells;
   }, [month, records]);
 
-  const visible = records.filter((record) => {
-    if (filter !== 'all' && record.state !== filter) return false;
-    if (selectedDay && (!record.start || record.start.slice(0, 10) !== selectedDay)) return false;
-    return true;
-  });
+  const visible = records
+    .filter((record) => {
+      if (filter !== 'all' && record.state !== filter) return false;
+      if (selectedDay && (!record.start || record.start.slice(0, 10) !== selectedDay)) return false;
+      return true;
+    })
+    .slice(0, screen.itemLimit > 0 ? screen.itemLimit : undefined);
+
+  const sections = visibleSectionIds('eventsScreen', screen);
+  const gridClass = screenGridClass(screen.layout);
+  const filterOptions: Array<'all' | EventState> = ['all', 'live', 'upcoming', 'completed', 'unscheduled'];
 
   if (initializing) {
-    return <div className="max-w-6xl mx-auto ec-skeleton h-64" />;
+    return <div className="mx-auto max-w-6xl ec-skeleton h-64" />;
+  }
+
+  function renderCalendar() {
+    return (
+      <section className="ec-card p-3" aria-label="Event calendar">
+        <div className="mb-2 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => { setSelectedDay(null); setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1)); }}
+            className="h-8 w-8 rounded-lg border border-ink-200 text-sm"
+            aria-label="Previous month"
+          >
+            ‹
+          </button>
+          <p className="text-sm font-bold">{month.toLocaleString('en-IN', { month: 'long', year: 'numeric' })}</p>
+          <button
+            type="button"
+            onClick={() => { setSelectedDay(null); setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1)); }}
+            className="h-8 w-8 rounded-lg border border-ink-200 text-sm"
+            aria-label="Next month"
+          >
+            ›
+          </button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 text-center text-[9px] font-bold uppercase text-ink-400">
+          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}
+        </div>
+        <div className="mt-1 grid grid-cols-7 gap-1">
+          {calendar.map((cell, index) => {
+            const isSelected = cell.date && cell.date === selectedDay;
+            const hasEvents = cell.events.length > 0;
+            return (
+              <button
+                key={`${cell.date || 'blank'}-${index}`}
+                type="button"
+                disabled={!cell.date}
+                onClick={() => setSelectedDay(cell.date)}
+                aria-label={cell.date ? `${cell.date}${hasEvents ? `, ${cell.events.length} events` : ''}` : undefined}
+                className={`flex aspect-square flex-col items-center justify-center rounded-lg text-[11px] transition ${
+                  !cell.date
+                    ? 'opacity-0'
+                    : isSelected
+                      ? 'bg-[var(--ec-brand)] font-bold text-[var(--ec-on-brand)]'
+                      : hasEvents
+                        ? 'bg-brand-50 font-bold text-brand-800 hover:bg-brand-100'
+                        : 'text-ink-600 hover:bg-ink-50'
+                }`}
+              >
+                {cell.day}
+                {hasEvents && !isSelected && <span className="mt-0.5 h-1 w-1 rounded-full bg-[var(--ec-brand)]" />}
+              </button>
+            );
+          })}
+        </div>
+        {screen.calendarNote ? <p className="mt-2 text-center text-[10px] text-ink-400">{screen.calendarNote}</p> : null}
+      </section>
+    );
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">Events &amp; Calendar</h1>
-          <p className="text-sm text-ink-500 mt-1">
-            Mock tests, marathons and doubt sessions{profile ? ` for ${profile.exam} · Class ${profile.class_level}` : ''}. Times are IST.
-          </p>
-        </div>
-        <Link href="/home" className="px-3.5 py-2 text-xs font-bold border border-ink-200 rounded-[var(--ec-button-radius)] bg-white">
-          ← Dashboard
-        </Link>
-      </div>
+    <div className="mx-auto max-w-6xl space-y-5">
+      <ScreenPageHeader
+        showHeader={screen.showHeader}
+        eyebrow={screen.eyebrow}
+        title={screen.pageTitle}
+        description={screen.pageSubtitle}
+        meta={profile ? <span className="ec-chip">{profile.exam} · Class {profile.class_level}</span> : undefined}
+        actions={
+          <Link href="/home" className="ec-btn border border-ink-200 px-3.5 py-2 text-xs font-bold">
+            ← Dashboard
+          </Link>
+        }
+      />
 
-      <div className="flex flex-wrap items-center gap-2">
-        {(['all', 'live', 'upcoming', 'completed', 'unscheduled'] as const).map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setFilter(option)}
-            className={`px-3 py-1.5 rounded-full text-[11px] font-bold border capitalize ${
-              filter === option ? 'bg-ink-900 text-white border-ink-900' : 'bg-white border-ink-200 text-ink-600'
-            }`}
-          >
-            {option}
-          </button>
-        ))}
-        {(selectedDay || filter !== 'all') && (
-          <button type="button" onClick={() => { setSelectedDay(null); setFilter('all'); }} className="text-[11px] font-semibold text-brand-700">
-            Clear filters
-          </button>
-        )}
-        <span className="ml-auto text-[11px] text-ink-500">{visible.length} events</span>
-      </div>
+      <ScreenAnnouncementBanner announcement={screen.announcement} />
 
-      <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)] items-start">
-        <section className="ec-card p-3">
-          <div className="flex items-center justify-between mb-2">
-            <button
-              type="button"
-              onClick={() => { setSelectedDay(null); setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1)); }}
-              className="h-8 w-8 rounded-lg border border-ink-200 text-sm"
-              aria-label="Previous month"
-            >
-              ‹
-            </button>
-            <p className="text-sm font-bold">
-              {month.toLocaleString('en-IN', { month: 'long', year: 'numeric' })}
-            </p>
-            <button
-              type="button"
-              onClick={() => { setSelectedDay(null); setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1)); }}
-              className="h-8 w-8 rounded-lg border border-ink-200 text-sm"
-              aria-label="Next month"
-            >
-              ›
-            </button>
-          </div>
-          <div className="grid grid-cols-7 gap-1 text-center text-[9px] font-bold uppercase text-ink-400">
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day) => <span key={day}>{day}</span>)}
-          </div>
-          <div className="grid grid-cols-7 gap-1 mt-1">
-            {calendar.map((cell, index) => {
-              const isSelected = cell.date && cell.date === selectedDay;
-              const hasEvents = cell.events.length > 0;
-              return (
-                <button
-                  key={`${cell.date || 'blank'}-${index}`}
-                  type="button"
-                  disabled={!cell.date}
-                  onClick={() => setSelectedDay(cell.date)}
-                  className={`aspect-square rounded-lg text-[11px] flex flex-col items-center justify-center transition ${
-                    !cell.date
-                      ? 'opacity-0'
-                      : isSelected
-                        ? 'bg-[var(--ec-brand)] text-[var(--ec-on-brand)] font-bold'
-                        : hasEvents
-                          ? 'bg-brand-50 text-brand-800 font-bold hover:bg-brand-100'
-                          : 'text-ink-600 hover:bg-ink-50'
-                  }`}
-                >
-                  {cell.day}
-                  {hasEvents && !isSelected && <span className="mt-0.5 h-1 w-1 rounded-full bg-[var(--ec-brand)]" />}
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-[10px] text-ink-400 mt-2 text-center">Days with events are highlighted. Select a day to filter.</p>
-        </section>
-
-        <div>
-          {visible.length ? (
-            <div className="grid sm:grid-cols-2 gap-3">
-              {visible.map((record) => <EventCard key={record.item.id} record={record} />)}
-            </div>
-          ) : (
-            <div className="ec-card p-10 text-center">
-              <p className="text-sm font-bold">{config.theme.emptyStateTitle || 'No events match this view'}</p>
-              <p className="text-xs text-ink-500 mt-1">
-                {config.theme.emptyStateBody || 'New events appear here as soon as an admin publishes them.'}
+      {sections.map((id) => {
+        if (id === 'calendar') {
+          if (!screen.showCalendar) return null;
+          return (
+            <ScreenSection key={id}>
+              <div className="max-w-md">{renderCalendar()}</div>
+            </ScreenSection>
+          );
+        }
+        if (id === 'list') {
+          return (
+            <ScreenSection key={id}>
+              {screen.showFilters ? (
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  {filterOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setFilter(option)}
+                      aria-pressed={filter === option}
+                      className={`rounded-full border px-3 py-1.5 text-[11px] font-bold ${
+                        filter === option ? 'border-ink-900 bg-ink-900 text-white' : 'border-ink-200 bg-[var(--ec-surface)] text-ink-600'
+                      }`}
+                    >
+                      {screen.filterLabels[option]}
+                    </button>
+                  ))}
+                  {(selectedDay || filter !== 'all') && (
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedDay(null); setFilter('all'); }}
+                      className="text-[11px] font-semibold text-brand-700"
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                  <span className="ml-auto text-[11px] text-ink-500">
+                    {visible.length} event{visible.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+              ) : null}
+              {visible.length ? (
+                <div className={gridClass}>
+                  {visible.map((record) => <EventCard key={record.item.id} record={record} screen={screen} />)}
+                </div>
+              ) : (
+                <ScreenEmpty title={selectedDay ? screen.noResultsTitle : screen.emptyTitle} body={selectedDay ? screen.noResultsBody : screen.emptyBody} />
+              )}
+            </ScreenSection>
+          );
+        }
+        if (id === 'info') {
+          return (
+            <ScreenSection key={id} title={screen.infoTitle}>
+              <p className="rounded-[var(--ec-radius)] border border-ink-200 bg-[var(--ec-surface)] p-4 text-[11.5px] leading-relaxed text-ink-500">
+                {screen.infoBody}
               </p>
-            </div>
-          )}
-        </div>
-      </div>
+            </ScreenSection>
+          );
+        }
+        return null;
+      })}
 
-      <div className="rounded-[var(--ec-radius)] border border-ink-200 bg-white p-4 text-[11px] text-ink-500">
-        <p className="font-bold text-ink-700">How reminders work</p>
-        <p className="mt-1">
-          “Add to calendar” downloads a standard ICS file you can open in Google Calendar, Apple Calendar or Outlook.
-          Browser push reminders are not configured, so no in-app reminder is promised.
-        </p>
-      </div>
+      <ScreenHelpNote help={screen.help} />
     </div>
   );
 }

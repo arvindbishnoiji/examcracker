@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import type { CourseCatalogItem, HomeSectionConfig, HomeSectionType } from '@/types';
 import { useSettingWorkspace } from '@/hooks/useSettingWorkspace';
@@ -160,9 +161,9 @@ export function HomepageBuilderSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Design studio"
+        eyebrow="Screen Studio"
         title="Home Page Builder"
-        description="Compose the student dashboard from real data-backed sections. Reorder, hide, target by exam/class and publish — the live homepage follows this exact order."
+        description="Compose the student dashboard from real data-backed sections. Reorder, hide, target by exam/class and publish — the live homepage follows this exact order. The hero section's heading, description and button are edited here too."
         meta={
           <>
             <StatusPill tone="brand">{sections.length} sections</StatusPill>
@@ -172,6 +173,9 @@ export function HomepageBuilderSection() {
         }
         actions={
           <>
+            <Link href="/admin/screens" className="ec-btn px-3 py-2 text-xs font-semibold border border-ink-200 hover:bg-ink-50">
+              Screen Studio
+            </Link>
             <a href="/home" target="_blank" className="ec-btn px-3 py-2 text-xs font-semibold border border-ink-200 hover:bg-ink-50">
               View homepage ↗
             </a>
@@ -205,8 +209,8 @@ export function HomepageBuilderSection() {
               <Toggle
                 checked={draft.showGreeting}
                 onChange={(showGreeting) => update({ showGreeting })}
-                label="Show greeting"
-                description="Personalised welcome line above the first section."
+                label="Show hero panel"
+                description="The welcome line, hero heading, buttons and quick stats. Turning this off hides the panel entirely; the hero headline is edited in the hero section below."
               />
               <Toggle
                 checked={draft.showSearch}

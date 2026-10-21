@@ -10,6 +10,14 @@ import { deleteStudentLibraryItem, getStudentLibrary, saveStudentLibraryItem } f
 import { formatISTDateTime } from '@/lib/date';
 import { matchesStudentExamAndClass } from '@/lib/validation';
 import type { LibraryItem, StudyChallenge } from '@/types';
+import { visibleSectionIds } from '@/lib/screen-config';
+import {
+  ScreenAnnouncementBanner,
+  ScreenEmpty,
+  ScreenHelpNote,
+  ScreenPageHeader,
+  ScreenSection,
+} from '@/components/student/ScreenScaffold';
 
 interface StoredProgress {
   checked: string[];
@@ -36,6 +44,7 @@ function challengeState(challenge: StudyChallenge): 'upcoming' | 'active' | 'end
 export default function ChallengesPage() {
   const { profile, initializing, user } = useAuth();
   const { config } = useSiteConfig();
+  const screen = config.challengesScreen;
   const router = useRouter();
   const { push } = useToast();
   const [library, setLibrary] = useState<LibraryItem[]>([]);
@@ -150,19 +159,23 @@ export default function ChallengesPage() {
     );
   }
 
+  const sections = visibleSectionIds('challengesScreen', screen);
+
   return (
-    <div className="max-w-4xl mx-auto space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">Study challenges</h1>
-          <p className="text-sm text-ink-500 mt-1">
-            Short, focused sprints published by your admin. Join one, tick items and keep your streak moving.
-          </p>
-        </div>
-        <Link href="/home" className="px-3.5 py-2 text-xs font-bold border border-ink-200 rounded-[var(--ec-button-radius)] bg-white">
-          ← Dashboard
-        </Link>
-      </div>
+    <div className="mx-auto max-w-4xl space-y-5">
+      <ScreenPageHeader
+        showHeader={screen.showHeader}
+        eyebrow={screen.eyebrow}
+        title={screen.pageTitle}
+        description={screen.pageSubtitle}
+        actions={
+          <Link href="/home" className="ec-btn border border-ink-200 px-3.5 py-2 text-xs font-bold">
+            ← Dashboard
+          </Link>
+        }
+      />
+
+      <ScreenAnnouncementBanner announcement={screen.announcement} />
 
       {error && (
         <div className="rounded-[var(--ec-radius)] border border-red-200 bg-red-50 p-3 text-xs text-red-800">
@@ -173,14 +186,8 @@ export default function ChallengesPage() {
         </div>
       )}
 
-      {challenges.length === 0 ? (
-        <div className="ec-card p-10 text-center">
-          <p className="text-3xl">🔥</p>
-          <p className="text-sm font-bold mt-2">{config.theme.emptyStateTitle || 'No challenges are live right now'}</p>
-          <p className="text-xs text-ink-500 mt-1">
-            {config.theme.emptyStateBody || 'Your admin can publish a study sprint from the admin console.'}
-          </p>
-        </div>
+      {!sections.includes('list') ? null : challenges.length === 0 ? (
+        <ScreenEmpty icon={<span aria-hidden>🔥</span>} title={screen.emptyTitle} body={screen.emptyBody} />
       ) : (
         <div className="space-y-3">
           {challenges.map((challenge) => {
@@ -205,15 +212,21 @@ export default function ChallengesPage() {
                       }`}>
                         {state}
                       </span>
-                      {saved && <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-700">Joined</span>}
+                      {saved && <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-700">{screen.joinedLabel}</span>}
                     </div>
                     <p className="text-xs text-ink-500 mt-1">{challenge.description}</p>
-                    <p className="text-[10px] text-ink-400 mt-1">
-                      {challenge.startAt ? formatISTDateTime(challenge.startAt) : 'Open'} →{' '}
-                      {challenge.endAt ? formatISTDateTime(challenge.endAt) : 'no end date'} · Target {challenge.targetCount}{' '}
-                      {challenge.targetType}
-                      {challenge.reward ? ` · Reward: ${challenge.reward}` : ''}
-                    </p>
+                    {screen.showSchedule || (screen.showReward && challenge.reward) ? (
+                      <p className="text-[10px] text-ink-400 mt-1">
+                        {screen.showSchedule ? (
+                          <>
+                            {challenge.startAt ? formatISTDateTime(challenge.startAt) : 'Open'} →{' '}
+                            {challenge.endAt ? formatISTDateTime(challenge.endAt) : 'no end date'} · Target {challenge.targetCount}{' '}
+                            {challenge.targetType}
+                          </>
+                        ) : null}
+                        {screen.showReward && challenge.reward ? ` · Reward: ${challenge.reward}` : ''}
+                      </p>
+                    ) : null}
                   </div>
                   {saved ? (
                     <button
@@ -222,7 +235,7 @@ export default function ChallengesPage() {
                       onClick={() => void leave(challenge)}
                       className="px-3 py-1.5 text-[11px] font-bold border border-ink-200 rounded-full disabled:opacity-60"
                     >
-                      Leave
+                      {screen.leaveLabel}
                     </button>
                   ) : (
                     <button
@@ -231,15 +244,15 @@ export default function ChallengesPage() {
                       onClick={() => void join(challenge)}
                       className="px-3 py-1.5 text-[11px] font-bold bg-[var(--ec-brand)] text-[var(--ec-on-brand)] rounded-full disabled:opacity-50"
                     >
-                      {state === 'ended' ? 'Ended' : 'Join challenge'}
+                      {state === 'ended' ? screen.endedLabel : screen.joinLabel}
                     </button>
                   )}
                 </div>
 
-                {total > 0 && (
+                {screen.showChecklist && total > 0 && (
                   <div className="mt-3">
                     <div className="flex items-center justify-between text-[10px] font-semibold text-ink-500">
-                      <span>Checklist progress</span>
+                      <span>{screen.checklistTitle}</span>
                       <span>{done}/{total} · {percent}%</span>
                     </div>
                     <div className="ec-progress mt-1">
@@ -266,7 +279,7 @@ export default function ChallengesPage() {
                         );
                       })}
                     </ul>
-                    {!saved && <p className="text-[10px] text-ink-400 mt-1">Join the challenge to tick items.</p>}
+                    {!saved && screen.joinHint ? <p className="text-[10px] text-ink-400 mt-1">{screen.joinHint}</p> : null}
                   </div>
                 )}
               </article>
@@ -274,6 +287,12 @@ export default function ChallengesPage() {
           })}
         </div>
       )}
+
+      {sections.includes('info') ? (
+        <ScreenSection>
+          <ScreenHelpNote help={screen.help} />
+        </ScreenSection>
+      ) : null}
     </div>
   );
 }

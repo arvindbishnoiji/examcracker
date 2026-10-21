@@ -1355,7 +1355,7 @@ export function EnrollmentConsole() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Students · Access control"
+        eyebrow="Students & access"
         title="Students & enrollments"
         description="Grant free or paid access to batches and series, enroll everyone eligible, and keep an enforceable audit trail. Server-side admin checks and database uniqueness prevent duplicate or self-granted access."
         meta={

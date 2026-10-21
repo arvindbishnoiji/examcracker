@@ -1,80 +1,203 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
+
+import { useEffect, useRef, useState } from 'react';
+import { Send } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useSiteConfig } from '@/context/SiteConfigContext';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { useToast } from '@/hooks/useToast';
+import type { ChatMessage } from '@/types';
+import { visibleSectionIds } from '@/lib/screen-config';
+import {
+  ScreenAnnouncementBanner,
+  ScreenEmpty,
+  ScreenHelpNote,
+  ScreenPageHeader,
+  ScreenSection,
+} from '@/components/student/ScreenScaffold';
 
-export default function StudentChatPage(){
+function formatMessageTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+}
+
+export default function StudentChatPage() {
   const { user } = useAuth();
+  const { config } = useSiteConfig();
+  const screen = config.chat;
   const { push } = useToast();
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string|null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  useEffect(()=>{
-    if(!user) return;
+  useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
-    let unsub: (() => void) | undefined;
-    import('@/lib/firestore').then(({ subscribeToStudentMessages, markThreadReadForStudent }) => {
-      if (cancelled) return;
-      unsub = subscribeToStudentMessages(user.uid, setMessages, (err)=> setError(err.message));
-      markThreadReadForStudent(user.uid).catch(()=>{});
-    }).catch((err) => {
-      if (!cancelled) setError(err instanceof Error ? err.message : 'Unable to load chat');
-    });
-    return () => { cancelled = true; unsub?.(); };
-  },[user]);
+    let unsubscribe: (() => void) | undefined;
+    setLoading(true);
+    import('@/lib/firestore')
+      .then(({ subscribeToStudentMessages, markThreadReadForStudent }) => {
+        if (cancelled) return;
+        unsubscribe = subscribeToStudentMessages(
+          user.uid,
+          (next) => {
+            setMessages(next);
+            setLoading(false);
+            setError(null);
+          },
+          (err) => {
+            setError(err.message);
+            setLoading(false);
+          }
+        );
+        void markThreadReadForStudent(user.uid).catch(() => undefined);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'Unable to open your conversation.');
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [user]);
 
-  useEffect(()=>{
+  useEffect(() => {
     listRef.current?.scrollTo(0, listRef.current.scrollHeight);
-  },[messages]);
+  }, [messages]);
 
-  async function handleSend(e: React.FormEvent){
-    e.preventDefault();
-    if(!user) return;
-    if(!text.trim()) return;
-    if(text.length>5000){ push('Message too long (max 5000 chars)','error'); return; }
+  async function handleSend(event: React.FormEvent) {
+    event.preventDefault();
+    if (!user) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (trimmed.length > 5000) {
+      push('Message is too long (maximum 5000 characters).', 'error');
+      return;
+    }
     setSending(true);
-    try{
+    try {
       const { sendStudentMessage } = await import('@/lib/firestore');
-      await sendStudentMessage(user.uid, text.trim(), 'student', user.uid);
+      await sendStudentMessage(user.uid, trimmed, 'student', user.uid);
       setText('');
-    }catch(err){ push(err instanceof Error? err.message:'Failed to send','error'); }
-    finally{ setSending(false); }
+    } catch (err) {
+      push(err instanceof Error ? err.message : 'Message could not be sent.', 'error');
+    } finally {
+      setSending(false);
+    }
   }
 
-  if(!user) return <div className="max-w-xl mx-auto text-sm text-ink-500">Sign in to chat.</div>;
+  if (!user) {
+    return <div className="mx-auto max-w-xl text-sm text-ink-500">Sign in to message your mentor.</div>;
+  }
+
+  const sections = visibleSectionIds('chat', screen);
 
   return (
-    <div className="max-w-2xl mx-auto flex flex-col h-[70vh] min-h-[500px]">
-      <div className="mb-3">
-        <h1 className="text-xl font-bold">Doubt Chat</h1>
-        <p className="text-sm text-ink-500">Real-time via Firestore. You can access only your own thread. Admin can read/respond. Validate max length, reject admin spoof.</p>
-      </div>
+    <div className="mx-auto flex min-h-[calc(100vh-12rem)] max-w-2xl flex-col space-y-4">
+      <ScreenPageHeader
+        showHeader={screen.showHeader}
+        eyebrow={screen.eyebrow}
+        title={screen.pageTitle}
+        description={screen.pageSubtitle}
+      />
 
-      <Card className="flex-1 flex flex-col overflow-hidden">
-        <div ref={listRef} className="flex-1 overflow-auto p-4 space-y-3 bg-ink-50">
-          {messages.length===0 && <p className="text-sm text-ink-500 text-center py-10">No messages yet. Say hi to your mentor! 👋</p>}
-          {messages.map(m=>(
-            <div key={m.id} className={`flex ${m.senderRole==='student' ? 'justify-end':'justify-start'}`}>
-              <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm ${m.senderRole==='student' ? 'bg-brand-600 text-white rounded-br-sm':'bg-white border border-ink-200 rounded-bl-sm'}`}>
-                <p>{m.text}</p>
-                <p className={`text-[10px] mt-1 ${m.senderRole==='student'?'text-white/70':'text-ink-400'}`}>{new Date(m.createdAt).toLocaleString('en-IN',{ timeZone:'Asia/Kolkata'})} IST</p>
-              </div>
-            </div>
-          ))}
-        </div>
-        <form onSubmit={handleSend} className="p-3 border-t border-ink-100 flex gap-2 bg-white">
-          <input value={text} onChange={e=>setText(e.target.value)} placeholder="Type your doubt..." maxLength={5000} className="flex-1 rounded-full border border-ink-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-          <Button type="submit" loading={sending} disabled={!text.trim()}>Send</Button>
-        </form>
-      </Card>
-      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
-      <p className="text-xs text-ink-400 mt-2 text-center">Firestore rules enforce: student can create only senderRole=student with own UID. Timestamp + unread indicators via live listeners.</p>
+      <ScreenAnnouncementBanner announcement={screen.announcement} />
+
+      {sections.map((id) => {
+        if (id === 'thread') {
+          return (
+            <ScreenSection key={id}>
+              <Card className="flex min-h-[420px] flex-1 flex-col overflow-hidden">
+                <div
+                  ref={listRef}
+                  className="flex-1 space-y-3 overflow-y-auto bg-ink-50/70 p-4"
+                  aria-live="polite"
+                  aria-busy={loading}
+                >
+                  {loading ? (
+                    <div className="space-y-2">
+                      <div className="ec-skeleton h-12 w-2/3" />
+                      <div className="ec-skeleton ml-auto h-12 w-1/2" />
+                    </div>
+                  ) : messages.length === 0 && !error ? (
+                    <div className="py-6">
+                      <ScreenEmpty title={screen.emptyTitle} body={screen.emptyBody} />
+                    </div>
+                  ) : (
+                    messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex ${message.senderRole === 'student' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div
+                          className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+                            message.senderRole === 'student'
+                              ? 'rounded-br-sm bg-brand-600 text-white'
+                              : 'rounded-bl-sm border border-ink-200 bg-[var(--ec-surface)]'
+                          }`}
+                        >
+                          <p className="whitespace-pre-wrap break-words">{message.text}</p>
+                          {screen.showTimestamp ? (
+                            <p
+                              className={`mt-1 text-[10px] ${
+                                message.senderRole === 'student' ? 'text-white/70' : 'text-ink-400'
+                              }`}
+                            >
+                              {formatMessageTime(message.createdAt)}
+                              {message.senderRole === 'admin' ? ' · Mentor' : ''}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {error ? (
+                  <div role="alert" className="border-t border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">
+                    {error}
+                  </div>
+                ) : null}
+                <form onSubmit={handleSend} className="flex gap-2 border-t border-ink-100 bg-[var(--ec-surface)] p-3">
+                  <label className="flex-1">
+                    <span className="sr-only">Your message</span>
+                    <input
+                      value={text}
+                      onChange={(event) => setText(event.target.value)}
+                      placeholder={screen.composerPlaceholder}
+                      maxLength={5000}
+                      className="ec-field !rounded-full"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <Button type="submit" loading={sending} disabled={!text.trim()} aria-label={screen.sendLabel}>
+                    <Send size={14} className="mr-1.5" /> {screen.sendLabel}
+                  </Button>
+                </form>
+              </Card>
+            </ScreenSection>
+          );
+        }
+        if (id === 'help') {
+          return (
+            <ScreenSection key={id}>
+              <ScreenHelpNote
+                help={{ title: screen.helpTitle || screen.help.title, body: screen.helpBody || screen.help.body }}
+              />
+            </ScreenSection>
+          );
+        }
+        return null;
+      })}
     </div>
   );
 }

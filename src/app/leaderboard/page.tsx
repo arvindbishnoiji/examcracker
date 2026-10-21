@@ -1,104 +1,239 @@
 'use client';
-import { useEffect, useState, useCallback, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { getTestLeaderboard, getStudentTests } from '@/lib/api';
-import { Card, Badge, EmptyState, Skeleton } from '@/components/ui/Card';
-import { Select } from '@/components/ui/Input';
-import Link from 'next/link';
-import type { TestCardItem, LeaderboardEntry } from '@/types';
 
-function LeaderboardContent(){
+import { useCallback, useEffect, useMemo, useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { RefreshCw, Trophy } from 'lucide-react';
+import { getStudentTests, getTestLeaderboard } from '@/lib/api';
+import { Badge, Skeleton } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { useSiteConfig } from '@/context/SiteConfigContext';
+import type { LeaderboardEntry, TestCardItem } from '@/types';
+import { formatISTDateTime } from '@/lib/date';
+import { visibleSectionIds } from '@/lib/screen-config';
+import {
+  ScreenAnnouncementBanner,
+  ScreenEmpty,
+  ScreenHelpNote,
+  ScreenPageHeader,
+  ScreenSection,
+  screenGridClass,
+} from '@/components/student/ScreenScaffold';
+
+function initials(name: string): string {
+  return (
+    name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('') || 'S'
+  );
+}
+
+function LeaderboardContent() {
   const searchParams = useSearchParams();
   const initialTestId = searchParams?.get('testId') || '';
+  const { config } = useSiteConfig();
+  const screen = config.leaderboard;
   const [tests, setTests] = useState<TestCardItem[]>([]);
   const [selected, setSelected] = useState(initialTestId);
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string|null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadTests = useCallback(async()=>{
-    try{
-      const t = await getStudentTests();
-      setTests(t);
-      if(!selected && t.length) setSelected(t[0].id);
-    }catch{}
-  },[selected]);
+  const loadTests = useCallback(async () => {
+    try {
+      const items = await getStudentTests();
+      setTests(items);
+      setSelected((current) => current || items[0]?.id || '');
+    } catch {
+      // The empty state below explains that no tests are available.
+    }
+  }, []);
 
-  useEffect(()=>{ loadTests(); },[loadTests]);
+  useEffect(() => {
+    void loadTests();
+  }, [loadTests]);
 
-  const loadLeaderboard = useCallback(async()=>{
-    if(!selected) { setEntries([]); return; }
-    setLoading(true); setError(null);
-    try{
+  const loadLeaderboard = useCallback(async () => {
+    if (!selected) {
+      setEntries([]);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
       const res = await getTestLeaderboard(selected);
       setEntries(res.items || []);
-    }catch(e){ setError(e instanceof Error ? e.message : 'Failed'); }
-    finally{ setLoading(false); }
-  },[selected]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load this leaderboard.');
+    } finally {
+      setLoading(false);
+    }
+  }, [selected]);
 
-  useEffect(()=>{ loadLeaderboard(); },[loadLeaderboard]);
+  useEffect(() => {
+    void loadLeaderboard();
+  }, [loadLeaderboard]);
 
-  return (
-    <div className="max-w-4xl mx-auto space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">Leaderboard</h1>
-        <p className="text-sm text-ink-500">Per-test ranking only — never a mixed global score. Select a test to see rank, name, score/max.</p>
-      </div>
+  const selectedTest = useMemo(() => tests.find((test) => test.id === selected), [tests, selected]);
+  const limited = screen.itemLimit > 0 ? entries.slice(0, screen.itemLimit) : entries;
+  const sections = visibleSectionIds('leaderboard', screen);
 
-      <Card className="p-4 flex flex-wrap gap-3 items-end">
-        <div className="flex-1 min-w-[240px]">
-          <label className="text-sm font-medium text-ink-700">Select test</label>
-          <select value={selected} onChange={e=> setSelected(e.target.value)} className="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm">
-            <option value="">— Choose a test —</option>
-            {tests.map(t=> <option key={t.id} value={t.id}>{t.title} • {t.totalQuestions} Qs • {t.durationMinutes} min</option>)}
-          </select>
+  function renderSection(id: string) {
+    if (id === 'selector') {
+      if (!screen.showTestSelector) return null;
+      return (
+        <div key={id} className="ec-card flex flex-wrap items-end gap-3 p-4">
+          <label className="min-w-[240px] flex-1">
+            <span className="text-xs font-semibold text-ink-700">{screen.selectorLabel}</span>
+            <select
+              value={selected}
+              onChange={(event) => setSelected(event.target.value)}
+              className="ec-field mt-1"
+            >
+              <option value="">— {screen.noTestTitle} —</option>
+              {tests.map((test) => (
+                <option key={test.id} value={test.id}>
+                  {test.title} • {test.totalQuestions} Qs • {test.durationMinutes} min
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button size="sm" variant="outline" onClick={() => void loadLeaderboard()}>
+            <RefreshCw size={14} className="mr-1.5" /> {screen.refreshLabel}
+          </Button>
+          <Link href="/tests" className="ec-btn border border-ink-200 px-3.5 py-2 text-xs font-semibold">
+            {screen.browseCtaLabel}
+          </Link>
         </div>
-        <button onClick={loadLeaderboard} className="px-4 py-2.5 bg-ink-900 text-white rounded-xl text-sm font-semibold">Refresh</button>
-        <Link href="/tests" className="px-4 py-2.5 bg-white border border-ink-200 rounded-xl text-sm font-semibold">Browse tests</Link>
-      </Card>
-
-      {!selected && <EmptyState title="Select a test" description="Leaderboard is per test, not a mix of scores across different tests. Choose one above." />}
-      {loading && <div className="space-y-2">{[1,2,3,4,5].map(i=> <Skeleton key={i} className="h-16 w-full" />)}</div>}
-      {error && <div className="p-3 bg-red-50 border border-red-200 text-sm text-red-700 rounded-xl">{error}</div>}
-
-      {!loading && !error && selected && entries.length===0 && (
-        <EmptyState title="No attempts yet" description="No one has submitted this test yet. Be the first to attempt!" />
-      )}
-
-      {!loading && !error && entries.length>0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs text-ink-500">
-            <span>Rank • Name • Score</span>
-            <span>Showing test {selected.slice(0,8)}</span>
+      );
+    }
+    if (id === 'ranking') {
+      if (!selected) {
+        return <ScreenEmpty key={id} icon={<Trophy size={18} />} title={screen.noTestTitle} body={screen.noTestBody} />;
+      }
+      if (loading) {
+        return (
+          <div key={id} className={screenGridClass('list')}>
+            {[1, 2, 3, 4, 5].map((index) => (
+              <Skeleton key={index} className="h-16 w-full" />
+            ))}
           </div>
-          {entries.map(e=>(
-            <Card key={e.firebaseUid + e.submittedAt} className="p-4 flex items-center gap-3">
-              <div className={`h-9 w-9 rounded-full grid place-items-center font-bold text-sm ${e.rank===1?'bg-amber-100 text-amber-800': e.rank===2?'bg-ink-100 text-ink-700': e.rank===3?'bg-orange-100 text-orange-800':'bg-ink-50 text-ink-600'}`}>#{e.rank}</div>
-              <img src={e.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(e.name)}&background=random`} alt={e.name} className="h-10 w-10 rounded-full object-cover bg-ink-100" />
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm truncate">{e.name}</p>
-                <p className="text-xs text-ink-500">{new Date(e.submittedAt).toLocaleString('en-IN',{ timeZone:'Asia/Kolkata'})} IST</p>
+        );
+      }
+      if (error) {
+        return (
+          <div key={id} className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+            <Button size="sm" variant="outline" className="ml-2" onClick={() => void loadLeaderboard()}>
+              Try again
+            </Button>
+          </div>
+        );
+      }
+      if (!limited.length) {
+        return (
+          <ScreenEmpty
+            key={id}
+            icon={<Trophy size={18} />}
+            title={screen.noAttemptsTitle}
+            body={screen.noAttemptsBody}
+            action={
+              selectedTest ? (
+                <Link
+                  href={`/tests/${selectedTest.id}`}
+                  className="ec-btn bg-brand-600 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  {config.tests.attemptCtaLabel}
+                </Link>
+              ) : undefined
+            }
+          />
+        );
+      }
+      return (
+        <div key={id} className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-500">
+            <span>{screen.rankLabel}</span>
+            {selectedTest ? <span className="truncate">{selectedTest.title}</span> : null}
+          </div>
+          {limited.map((entry) => (
+            <div key={`${entry.firebaseUid}-${entry.submittedAt}`} className="ec-card flex items-center gap-3 p-3.5">
+              <div
+                className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold ${
+                  entry.rank === 1
+                    ? 'bg-amber-100 text-amber-800'
+                    : entry.rank === 2
+                      ? 'bg-ink-100 text-ink-700'
+                      : entry.rank === 3
+                        ? 'bg-orange-100 text-orange-800'
+                        : 'bg-ink-50 text-ink-600'
+                }`}
+              >
+                #{entry.rank}
               </div>
-              <div className="text-right">
-                <p className="font-bold text-ink-900">{e.score}/{e.maxScore}</p>
-                <p className="text-xs text-ink-500">{e.maxScore? Math.round(e.score/e.maxScore*100):0}%</p>
+              {screen.showAvatars ? (
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-100 text-[11px] font-bold text-brand-700" aria-hidden>
+                  {initials(entry.name || 'Student')}
+                </span>
+              ) : null}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{entry.name || 'Student'}</p>
+                {screen.showSubmittedTime ? (
+                  <p className="text-[10.5px] text-ink-500">{formatISTDateTime(entry.submittedAt)}</p>
+                ) : null}
               </div>
-              {e.rank<=3 && <Badge variant={e.rank===1?'warning': e.rank===2?'default':'info'}>{e.rank===1?'🥇': e.rank===2?'🥈':'🥉'}</Badge>}
-            </Card>
+              <div className="shrink-0 text-right">
+                <p className="text-sm font-bold text-ink-900">
+                  {entry.score}/{entry.maxScore}
+                </p>
+                <p className="text-[10.5px] text-ink-500">
+                  {entry.maxScore ? Math.round((entry.score / entry.maxScore) * 100) : 0}%
+                </p>
+              </div>
+              {entry.rank <= 3 ? (
+                <Badge variant={entry.rank === 1 ? 'warning' : entry.rank === 2 ? 'default' : 'info'}>
+                  {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : '🥉'}
+                </Badge>
+              ) : null}
+            </div>
           ))}
         </div>
-      )}
+      );
+    }
+    if (id === 'info') {
+      if (!screen.infoTitle && !screen.infoBody) return null;
+      return (
+        <ScreenSection key={id} title={screen.infoTitle}>
+          <p className="rounded-[var(--ec-radius)] border border-ink-100 bg-[var(--ec-surface)] p-4 text-[11.5px] leading-relaxed text-ink-500">
+            {screen.infoBody}
+          </p>
+        </ScreenSection>
+      );
+    }
+    return null;
+  }
 
-      <Card className="p-4 bg-ink-50 border-dashed text-xs text-ink-500">
-        <p>Never exposes student email or private fields. Data from GET /leaderboard?testId=uuid. Empty states handled; no fabricated scores.</p>
-      </Card>
+  return (
+    <div className="mx-auto max-w-4xl space-y-4">
+      <ScreenPageHeader
+        showHeader={screen.showHeader}
+        eyebrow={screen.eyebrow}
+        title={screen.pageTitle}
+        description={screen.pageSubtitle}
+      />
+      <ScreenAnnouncementBanner announcement={screen.announcement} />
+      {sections.map((id) => renderSection(id))}
+      <ScreenHelpNote help={screen.help} />
     </div>
   );
 }
 
-export default function LeaderboardPage(){
+export default function LeaderboardPage() {
   return (
-    <Suspense fallback={<div className="max-w-4xl mx-auto p-6 text-sm text-ink-500">Loading leaderboard…</div>}>
+    <Suspense fallback={<div className="mx-auto max-w-4xl p-6 text-sm text-ink-500">Loading leaderboard…</div>}>
       <LeaderboardContent />
     </Suspense>
   );
