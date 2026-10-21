@@ -30,11 +30,24 @@ describe('final architecture', () => {
     expect(read('src/lib/firebase.ts')).toContain('getFirebaseAuth');
   });
 
-  it('talks to the Worker through the same-origin /api/ec proxy', () => {
+  it('uses a same-origin API path and runs production API requests directly against Pages D1', () => {
     expect(read('src/lib/config.ts')).toMatch(/apiBaseUrl:\s*'\/api\/ec'/);
-    const proxy = read('src/app/api/ec/[...path]/route.ts');
-    expect(proxy).toContain('handleApiRequest');
-    expect(proxy).not.toMatch(/https?:\/\//);
+
+    // Local Next.js still uses the canonical handler; deployed Pages Functions
+    // use that same handler with the Pages DB binding, without calling the
+    // EXAM_CRACKER_WEB service binding for API traffic.
+    const nextProxy = read('src/app/api/ec/[...path]/route.ts');
+    expect(nextProxy).toContain('handleApiRequest');
+    expect(nextProxy).not.toMatch(/https?:\/\//);
+
+    const pagesApi = read('cloudflare-pages/functions/api/ec/[[path]].js');
+    expect(pagesApi).toContain('handleApiRequest');
+    expect(pagesApi).toContain('env.DB');
+    expect(pagesApi).not.toContain('EXAM_CRACKER_WEB');
+
+    const buildScript = read('cloudflare-pages/build.sh');
+    expect(buildScript).toContain('workers/ec-api/src/index.js');
+    expect(buildScript).toContain('workers/ec-api/src/drive.js');
   });
 
   it('keeps the YouTube metadata Worker separate from the D1 API Worker', () => {
