@@ -63,6 +63,11 @@ jobs:
           NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${{ vars.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED || 'true' }}
           NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://examcrack.pages.dev' }}
 
+      - name: Verify Firebase public config was inlined in client JavaScript
+        env:
+          EXPECTED_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyA1fiEviIdG5_yi7AcyxC3m9sec-AdkOfU' }}
+        run: node .github/scripts/verify-public-env-bundle.mjs
+
       - name: Build OpenNext Cloudflare bundle
         run: npm run build:cloudflare
         env:
