@@ -3,7 +3,8 @@ main = "custom-worker.mjs"
 compatibility_date = "2026-10-17"
 compatibility_flags = ["nodejs_compat", "enable_nodejs_process_v2"]
 account_id = "93f8cbbe79e248f8d1db9fccc586f0c3"
-workers_dev = true
+# The public site is the Pages front door. Pages reaches this Worker by service binding.
+workers_dev = false
 upload_source_maps = true
 
 # OpenNext/Next.js 15 can attempt a dynamic middleware-manifest require on Workers,
