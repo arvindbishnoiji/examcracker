@@ -1,4 +1,4 @@
-const FALLBACK_SITE_URL = 'https://exam-cracker-web.arvinddara0290.workers.dev';
+const FALLBACK_SITE_URL = 'https://examcrack.pages.dev';
 
 /** Canonical public origin used by metadata, robots and the sitemap. */
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || FALLBACK_SITE_URL).replace(/\/+$/, '');
