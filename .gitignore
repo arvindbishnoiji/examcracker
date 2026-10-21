@@ -49,3 +49,6 @@ Thumbs.db
 tsconfig.tsbuildinfo
 .open-next
 .vercel
+
+# Generated deployment copy of the canonical API module for Pages Functions
+cloudflare-pages/functions/_shared/ec-api/
