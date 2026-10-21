@@ -144,7 +144,6 @@ const CORS_HEADERS = {
 const DEFAULT_ALLOWED_ORIGINS = [
   // Production Pages front door: preserve the browser Origin through the service binding.
   "https://examcrack.pages.dev",
-  "https://exam-cracker-web.arvinddara0290.workers.dev",
   "http://localhost:3000",
   "http://localhost:8787",
   "http://127.0.0.1:3000",
