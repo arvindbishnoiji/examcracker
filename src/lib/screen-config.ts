@@ -217,16 +217,16 @@ export const SCREEN_DEFINITIONS: ScreenDefinition[] = [
   {
     key: 'chat',
     slug: 'chat',
-    label: 'Student chat',
-    route: '/chat',
-    description: 'The private doubt thread between a student and the mentor.',
+    label: 'Feedback & help',
+    route: '/feedback',
+    description: 'Send suggestions and report issues, then track the team response.
     icon: '✉',
     group: 'Communication',
     sections: [
-      { id: 'thread', label: 'Message thread and composer', description: 'Live Firestore conversation.', required: true },
+      { id: 'thread', label: 'Message thread and composer', description: 'D1-backed feedback form, inbox and response history.', required: true },
       { id: 'help', label: 'Privacy note', description: 'Explains that only the student’s own thread is visible.' },
     ],
-    locked: 'Firestore security rules, sender identity and per-student thread isolation.',
+    locked: 'Firebase-authenticated ownership checks and per-student D1 feedback isolation.',
   },
   {
     key: 'notifications',
@@ -566,7 +566,7 @@ export const DEFAULT_CHALLENGES_SCREEN: ChallengesScreenConfig = {
 
 export const DEFAULT_CHAT_SCREEN: ChatScreenConfig = {
   ...baseScreen('chat', {
-    pageTitle: 'Doubt chat',
+    pageTitle: 'Feedback & help',
     pageSubtitle: 'Ask your mentor directly. Only your own thread is visible to you.',
     eyebrow: 'Mentor support',
     showSearch: false,
@@ -575,7 +575,7 @@ export const DEFAULT_CHAT_SCREEN: ChatScreenConfig = {
     emptyTitle: 'No messages yet',
     emptyBody: 'Say hello to your mentor and ask your first doubt.',
   }),
-  composerPlaceholder: 'Type your doubt…',
+  composerPlaceholder: 'Add details to your feedback…',
   sendLabel: 'Send',
   emptyTitle: 'No messages yet',
   emptyBody: 'Say hello to your mentor and ask your first doubt.',
