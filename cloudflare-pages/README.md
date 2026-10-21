@@ -14,15 +14,9 @@ Create/import the `arvindbishnoiji/examcracker` repository as a **Pages** projec
 
 Do not choose Next.js Static HTML Export for this project: this folder proxies to the dynamic app instead of trying to export its dynamic lecture/test routes as static files.
 
-## Required service binding
+## Service binding
 
-After the Pages project is created:
-
-1. Open **Workers & Pages → examcrack → Settings → Functions → Bindings**.
-2. Add a **Service binding** for the **Production** environment (and Preview too if preview deployments should work).
-3. Set **Variable name** to `EXAM_CRACKER_WEB`.
-4. Select Worker **`exam-cracker-web`**.
-5. Save and redeploy the Pages project.
+The included `wrangler.toml` declares the Pages service binding `EXAM_CRACKER_WEB` → Worker `exam-cracker-web`. When the Pages project uses this Wrangler file as its configuration source of truth, the binding is versioned with the code. If the dashboard project is not using the Wrangler configuration, add the same binding manually at **Workers & Pages → examcrack → Settings → Functions → Bindings** for Production (and Preview if needed), then redeploy.
 
 The backend Worker must already have been deployed. The repository's existing deploy workflow expects the GitHub Actions Cloudflare credentials to be configured.
 
