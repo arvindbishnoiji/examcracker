@@ -286,10 +286,25 @@ describe('public Worker routes', () => {
     expect(forbidden.status).toBe(403);
   });
 
-  it('fails closed when the Pages D1 binding is missing', async () => {
+  it('falls back to the authenticated Worker when the Pages D1 binding is missing', async () => {
+    const upstream = Response.json({ ok: true, storage: 'worker-fallback' });
+    const fetch = vi.fn(async () => upstream);
+    const response = await onPagesApiRequest({
+      request: request('/health'),
+      env: { EXAM_CRACKER_WEB: { fetch } },
+    });
+    expect(response.status).toBe(200);
+    expect(await body(response)).toMatchObject({ ok: true, storage: 'worker-fallback' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('explains the missing API bindings when neither direct D1 nor the Worker is configured', async () => {
     const response = await onPagesApiRequest({ request: request('/health'), env: {} });
     expect(response.status).toBe(503);
-    expect(await body(response)).toMatchObject({ error: expect.stringContaining('D1 database is not bound') });
+    expect(await body(response)).toMatchObject({
+      error: expect.stringContaining('database is not configured'),
+      detail: expect.stringContaining('EXAM_CRACKER_WEB'),
+    });
   });
 
   it('fails closed when the canonical Worker D1 binding is missing', async () => {
