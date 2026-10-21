@@ -21,15 +21,21 @@ try {
   console.log('Could not read google-services.json:', error instanceof Error ? error.message : String(error));
 }
 
-async function probe(candidate) {
+async function probe(candidate, origin) {
   try {
     const url = new URL('https://identitytoolkit.googleapis.com/v1/accounts:lookup');
     url.searchParams.set('key', candidate.key);
     // Deliberately invalid token: this validates API-key acceptance without
     // creating an account, sending an email or changing any Firebase data.
+    // Sending the real browser origin is necessary to detect HTTP-referrer
+    // restrictions that a server-side request without Referer would miss.
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        origin,
+        referer: origin + '/login',
+      },
       body: JSON.stringify({ idToken: 'diagnostic-invalid-token' }),
     });
     const payload = await response.json().catch(() => ({}));
@@ -45,14 +51,15 @@ async function probe(candidate) {
       'PERMISSION_DENIED',
     ];
     const status = blockedCodes.some((item) => code.includes(item))
-      ? 'NOT_USABLE_FOR_WEB_AUTH'
+      ? 'NOT_USABLE_FOR_THIS_BROWSER_ORIGIN'
       : code.includes('INVALID_ID_TOKEN') || code.includes('MISSING_ID_TOKEN') || response.ok
-      ? 'KEY_ACCEPTED_BY_IDENTITY_TOOLKIT'
+      ? 'KEY_ACCEPTED_FOR_THIS_ORIGIN'
       : 'INCONCLUSIVE';
-    return { label: candidate.label, httpStatus: response.status, responseCode: code, status };
+    return { label: candidate.label, origin, httpStatus: response.status, responseCode: code, status };
   } catch (error) {
     return {
       label: candidate.label,
+      origin,
       status: 'NETWORK_ERROR',
       error: error instanceof Error ? error.message : String(error),
     };
@@ -75,11 +82,14 @@ try {
   }
 
   const results = [];
-  for (const candidate of report) results.push(await probe(candidate));
-  console.log('Firebase API key diagnosis (keys are never printed):');
+  const origins = ['https://examcrack.pages.dev', 'https://exam-cracker-web.arvinddara0290.workers.dev'];
+  for (const candidate of report) {
+    for (const origin of origins) results.push(await probe(candidate, origin));
+  }
+  console.log('Firebase API key diagnosis with real browser origins (keys are never printed):');
   console.log(JSON.stringify(results, null, 2));
-  if (!results.some((item) => item.status === 'KEY_ACCEPTED_BY_IDENTITY_TOOLKIT')) {
-    console.log('No existing candidate key was validated for Identity Toolkit. A fresh Web app config from Firebase Console will be required.');
+  if (!results.some((item) => item.status === 'KEY_ACCEPTED_FOR_THIS_ORIGIN')) {
+    console.log('No existing candidate key was validated with the deployed browser origins. Check the API key application restrictions in Google Cloud Console or obtain the correct Web app config from Firebase Console.');
   }
 } catch (error) {
   console.error('Firebase key diagnosis failed:', error instanceof Error ? error.message : String(error));
