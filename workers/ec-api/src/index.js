@@ -1203,7 +1203,11 @@ async function initializeRuntimeSchemaIfNeeded(db) {
     "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
   );
   let tableNames = new Set(tableRows.map((row) => String(row.name)));
-  const appTables = [...tableNames].filter((name) => name !== "d1_migrations");
+  // D1's internal _cf_KV table is maintained by Cloudflare, not by this app.
+  // It can exist even in a brand-new database, so it must not block safe
+  // first-time application schema initialization.
+  const runtimeMetadataTables = new Set(["d1_migrations", "_cf_kv"]);
+  const appTables = [...tableNames].filter((name) => !runtimeMetadataTables.has(name.toLowerCase()));
   const missing = RUNTIME_REQUIRED_TABLES.filter((name) => !tableNames.has(name));
 
   if (missing.length === 0) return;
