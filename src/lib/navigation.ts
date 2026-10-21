@@ -6,7 +6,7 @@ export function featureForPath(pathname: string): keyof FeatureFlags | null {
   if (path === '/lectures' || path.startsWith('/lectures/')) return 'lectures';
   if (path === '/tests' || path.startsWith('/tests/')) return 'tests';
   if (path === '/leaderboard') return 'leaderboard';
-  if (path === '/chat') return 'chat';
+  if (path === '/feedback' || path === '/chat') return 'chat';
   if (path === '/notifications') return 'notifications';
   if (path === '/events') return 'events';
   if (path === '/challenges') return 'challenges';
