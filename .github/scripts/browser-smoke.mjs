@@ -1,8 +1,10 @@
 import { chromium } from 'playwright';
 
+// The backend Worker is intentionally private (workers_dev=false) and is
+// only reachable through the Pages service binding. Verify the public Pages
+// origin instead of expecting the private Worker URL to return a public UI.
 const targets = [
   { name: 'Cloudflare Pages', origin: 'https://examcrack.pages.dev' },
-  { name: 'Cloudflare Worker', origin: 'https://exam-cracker-web.arvinddara0290.workers.dev' },
 ];
 
 const browser = await chromium.launch({ headless: true });
