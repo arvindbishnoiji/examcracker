@@ -3,7 +3,7 @@
 **JEE & NEET coaching web app** built with **Next.js App Router + TypeScript + Tailwind CSS**, connected to the existing **Firebase (darvo1)**, **Supabase Edge Function** and **Cloudflare ec-content-api Worker**. Mobile-first design with bottom nav, admin dashboard, YouTube playlist import (no Data API key) and real-time Firestore chat.
 
 - **App name:** Exam Cracker
-- **Firebase project:** `darvo1` (web API key `AIzaSyDuvN6q4ybHc6rLTHlYdhSs5_rzvc8nhTA`)
+- **Firebase project:** `darvo1` (configure `NEXT_PUBLIC_FIREBASE_API_KEY` with the Web app key from Firebase Console → Project settings → Your apps; the deploy workflow temporarily falls back to the project key bundled in `google-services.json` if the repository variable is unset.)
 - **Supabase project ref:** `kncbvcozpcrfvxdbkbtf` — Edge Function `exam-cracker-api`
 - **Cloudflare Worker (media proxy):** `https://ec-content-api.arvinddara0290.workers.dev` (separate from website Worker)
 - **Website Worker:** `exam-cracker-web` (see `wrangler.toml` @ root)
