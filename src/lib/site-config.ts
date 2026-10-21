@@ -165,7 +165,7 @@ export const DEFAULT_LOGIN: LoginConfig = {
   heroImageUrl: '',
   heroTitle: 'Crack JEE & NEET with focused lectures and real tests',
   heroSubtitle:
-    'A personalised dashboard, chapter-wise lectures, timed tests and live doubt chat — filtered for your exam and class.',
+    'A personalised dashboard, chapter-wise lectures, timed tests and a private feedback channel — filtered for your exam and class.',
   highlights: [
     'Email and Google sign-in secured by Firebase',
     'Personalised JEE / NEET content for Class 11 and 12',
