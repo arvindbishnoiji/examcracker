@@ -6,8 +6,11 @@ const report = [];
 function addCandidate(label, key) {
   if (!key || !key.trim()) return;
   const normalized = key.trim();
-  if (!report.some((item) => item.key === normalized)) {
-    report.push({ label, key: normalized });
+  const existing = report.find((item) => item.key === normalized);
+  if (existing) {
+    existing.labels.push(label);
+  } else {
+    report.push({ labels: [label], key: normalized });
   }
 }
 
@@ -19,6 +22,27 @@ try {
   addCandidate('google-services.json Android key', googleServices?.client?.[0]?.api_key?.[0]?.current_key || '');
 } catch (error) {
   console.log('Could not read google-services.json:', error instanceof Error ? error.message : String(error));
+}
+
+async function getPublicProjectConfig(candidate) {
+  try {
+    const url = new URL('https://identitytoolkit.googleapis.com/v1/projects');
+    url.searchParams.set('key', candidate.key);
+    const response = await fetch(url, { headers: { 'content-type': 'application/json' } });
+    const payload = await response.json().catch(() => ({}));
+    return {
+      labels: candidate.labels.join(' / '),
+      httpStatus: response.status,
+      projectId: payload.projectId || null,
+      authorizedDomains: Array.isArray(payload.authorizedDomains) ? payload.authorizedDomains : [],
+      errorCode: payload?.error?.message || null,
+    };
+  } catch (error) {
+    return {
+      labels: candidate.labels.join(' / '),
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 async function probe(candidate, origin) {
@@ -55,10 +79,10 @@ async function probe(candidate, origin) {
       : code.includes('INVALID_ID_TOKEN') || code.includes('MISSING_ID_TOKEN') || response.ok
       ? 'KEY_ACCEPTED_FOR_THIS_ORIGIN'
       : 'INCONCLUSIVE';
-    return { label: candidate.label, origin, httpStatus: response.status, responseCode: code, status };
+    return { label: candidate.labels.join(' / '), origin, httpStatus: response.status, responseCode: code, status };
   } catch (error) {
     return {
-      label: candidate.label,
+      label: candidate.labels.join(' / '),
       origin,
       status: 'NETWORK_ERROR',
       error: error instanceof Error ? error.message : String(error),
@@ -81,11 +105,15 @@ try {
     }
   }
 
+  const projectConfigs = [];
   const results = [];
   const origins = ['https://examcrack.pages.dev', 'https://exam-cracker-web.arvinddara0290.workers.dev'];
+  for (const candidate of report) projectConfigs.push(await getPublicProjectConfig(candidate));
   for (const candidate of report) {
     for (const origin of origins) results.push(await probe(candidate, origin));
   }
+  console.log('Firebase public project config by key (keys are never printed):');
+  console.log(JSON.stringify(projectConfigs, null, 2));
   console.log('Firebase API key diagnosis with real browser origins (keys are never printed):');
   console.log(JSON.stringify(results, null, 2));
   if (!results.some((item) => item.status === 'KEY_ACCEPTED_FOR_THIS_ORIGIN')) {
