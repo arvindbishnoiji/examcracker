@@ -637,7 +637,10 @@ export async function handleApiRequest(request, env) {
         await run(db,"UPDATE enrollments SET active=1,status='active',revoked_at=NULL,updated_at=? WHERE id=?",now(),id);
         return json({item:await first(db,"SELECT * FROM enrollments WHERE id=?",id)});
       }
-      if ((path === "/admin/enrollment-history" || path === "/admin/enrollments/history") && method === "GET") {\n        const limitN=Math.min(500,Math.max(1,Number(url.searchParams.get("limit")||120)));\n        return json({items:await all(db,"SELECT * FROM enrollment_events ORDER BY created_at DESC LIMIT ?",limitN)});\n      }
+      if ((path === "/admin/enrollment-history" || path === "/admin/enrollments/history") && method === "GET") {
+        const limitN=Math.min(500,Math.max(1,Number(url.searchParams.get("limit")||120)));
+        return json({items:await all(db,"SELECT * FROM enrollment_events ORDER BY created_at DESC LIMIT ?",limitN)});
+      }
       if (path === "/admin/enrollment-rules" && method === "GET") return json({items:await all(db,"SELECT * FROM enrollment_rules ORDER BY created_at DESC")});
       if (segments[1] === "enrollment-rules" && segments.length === 3 && method === "PATCH") {
         const b=await readBody(request); await run(db,"UPDATE enrollment_rules SET active=?,updated_at=? WHERE id=?",b.active?1:0,now(),segments[2]);
