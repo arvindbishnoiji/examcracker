@@ -42,17 +42,10 @@ No remote Cloudflare deployment, Firebase login, Supabase database/function requ
 GitHub Actions **secrets**:
 
 - `CLOUDFLARE_API_TOKEN`: token with Workers deployment permissions.
-- `CLOUDFLARE_ACCOUNT_ID`: account identifier.
-- `NEXT_PUBLIC_FIREBASE_API_KEY`: browser-visible Firebase Web App config; put in Actions secret as requested, restrict its API/referrer use in Google Cloud.
+- `CLOUDFLARE_ACCOUNT_ID`: Cloudflare account identifier.
 - Optional `NEXT_PUBLIC_FIREBASE_VAPID_KEY` for web push.
 
-GitHub Actions **repository variables** (public configuration, embedded into the client bundle):
-
-- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`, `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`, `NEXT_PUBLIC_FIREBASE_APP_ID`.
-- Optional `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID`.
-- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SUPABASE_FUNCTION_URL`, `NEXT_PUBLIC_SUPABASE_SITE_FUNCTION_URL`.
-- `NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL`.
-- `CLOUDFLARE_WEB_HEALTH_URL`: actual deployed website `/login` URL for post-deploy health check.
+The deploy workflow contains fallbacks for the previously configured browser-visible Firebase `darvo1` app, Supabase project, and media proxy. You do not need to create 11 GitHub variables just to restore the existing deployment. Public values can be overridden with repository variables when intentionally changing the backend/domain, including `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL`, and `CLOUDFLARE_WEB_HEALTH_URL`. The default website health check targets the existing Worker `/login` URL so deployment can proceed before the Pages front door is created.
 
 Never supply a Supabase service-role key to Next.js, `NEXT_PUBLIC_*`, GitHub build environment, or the browser. Configure Supabase service credentials only as Supabase Edge Function secrets. Confirm the Supabase migrations are applied and RLS/function authorization policies remain enabled.
 
