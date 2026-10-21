@@ -22,9 +22,10 @@ The backend Worker must already be deployed. The repository's deployment workflo
 
 ## Auth/API origin setup
 
-After `https://examcrack.pages.dev` is live:
+The production origin `https://examcrack.pages.dev` is included in `supabase/functions/ec-site-api/index.ts` as a default allowed origin. The Pages front door forwards the visitor's original `Origin` header to the upstream Worker, so the site API must allow this exact origin for CORS preflight and settings writes.
 
 - Add `examcrack.pages.dev` to Firebase Authentication → Settings → Authorized domains.
-- Add `https://examcrack.pages.dev` to the Supabase Edge Function's `ALLOWED_ORIGINS` secret, preserving existing allowed origins.
-
-The separate `ec-content-api` media proxy remains unchanged.
+- `ALLOWED_ORIGINS` is additive and is only needed for other custom/preview origins; preserve existing values when updating that secret.
+- The Supabase source change must be deployed separately to activate the allowlist fix. The website deployment workflow does not deploy Supabase functions.
+- Public website URL: `https://examcrack.pages.dev`. The internal `exam-cracker-web` Worker is reached through the Pages `EXAM_CRACKER_WEB` service binding and must not expose a separate workers.dev URL.
+- The separate `ec-content-api` media proxy remains unchanged.
