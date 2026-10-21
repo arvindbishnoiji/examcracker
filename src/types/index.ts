@@ -319,7 +319,7 @@ export interface AppNotification {
   createdAt: string;
   readAt?: string | null;
   isRead?: boolean;
-  type?: 'info' | 'test' | 'lecture' | 'chat' | 'announcement' | 'goal';
+  type?: 'info' | 'test' | 'lecture' | 'feedback' | 'chat' | 'announcement' | 'goal';
 }
 
 export interface BroadcastNotice {
