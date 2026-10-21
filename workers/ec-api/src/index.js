@@ -599,6 +599,9 @@ async function validateCourseRelations(db, kind, parentId, subjectId, existing =
     if (!["batch", "series"].includes(parent.kind)) {
       throw httpError("Lectures and resources can only be attached to a batch or series.");
     }
+    if (!subjectId) {
+      throw httpError("Choose a subject assigned to the selected batch or series.");
+    }
   }
   if (subjectId) {
     if (!parentId) {

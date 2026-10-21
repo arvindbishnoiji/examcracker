@@ -142,6 +142,10 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
     images:'', subtitle:'',
   });
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [examFilter, setExamFilter] = useState('all');
+  const [classFilter, setClassFilter] = useState('all');
+  const [stateFilter, setStateFilter] = useState('all');
 
   const load = useCallback(async()=>{
     setLoading(true); setError(null);
@@ -152,6 +156,16 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
     finally{ setLoading(false); }
   },[kind]);
   useEffect(()=>{ load(); },[load]);
+
+  const visibleItems = items.filter((item) => {
+    const query = search.trim().toLowerCase();
+    if (query && !`${item.title} ${item.description}`.toLowerCase().includes(query)) return false;
+    if (examFilter !== 'all' && item.exam !== examFilter && item.exam !== 'Both') return false;
+    if (classFilter !== 'all' && !item.classes.includes(classFilter as '11' | '12')) return false;
+    if (stateFilter === 'active' && !item.active) return false;
+    if (stateFilter === 'disabled' && item.active) return false;
+    return true;
+  });
 
   function openCreate(){
     setEditing(null);
@@ -216,14 +230,35 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
         push('Created','success');
       }
       setShowForm(false);
-      load();
+      await load();
     }catch(err){ push(err instanceof Error? err.message:'Save failed','error'); }
     finally{ setSaving(false); }
   }
 
-  async function handleDisable(id:string){
-    if(!confirm('Disable (active=false) this item? This is soft-disable, not delete.')) return;
-    try{ await disableAdminContent(id); push('Disabled','success'); load(); }catch(err){ push(err instanceof Error? err.message:'Failed','error'); }
+  async function handleToggleActive(item: CourseCatalogItem){
+    if(item.active && !confirm(`Disable “${item.title}”? Its data and relationships will be preserved.`)) return;
+    try{
+      if(item.active){
+        await disableAdminContent(item.id);
+        push('Disabled. You can restore it from this list.','success');
+      } else {
+        await updateAdminContent(item.id, {
+          kind: item.kind as any,
+          title: item.title,
+          description: item.description,
+          exam: item.exam,
+          classes: item.classes,
+          active: true,
+          accessCode: (item as any).access_code ?? null,
+          metadata: item.metadata as Record<string, unknown>,
+          parentId: item.parentId,
+          subjectId: item.subjectId,
+          sortOrder: item.sortOrder,
+        });
+        push('Restored and published.','success');
+      }
+      await load();
+    }catch(err){ push(err instanceof Error? err.message:'Could not update content state.','error'); }
   }
 
   return (
@@ -237,11 +272,21 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
       </div>
 
       {loading && <Skeleton className="h-40 w-full" />}
-      {error && <div className="p-3 bg-red-50 border border-red-200 text-sm text-red-700 rounded-xl">{error}</div>}
+      {error && <div role="alert" className="p-3 bg-red-50 border border-red-200 text-sm text-red-700 rounded-xl">{error} <Button size="sm" variant="outline" className="ml-2" onClick={() => void load()}>Retry</Button></div>}
       {!loading && !error && items.length===0 && <EmptyState title={`No ${kind}s yet`} description={`Create your first ${kind} — exam, class, title, description, active flag and metadata fields.`} />}
+      {items.length > 0 && (
+        <div className="grid gap-2 rounded-2xl border border-ink-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Input label="Search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${kind}s`} />
+          <Select label="Exam" value={examFilter} onChange={(event) => setExamFilter(event.target.value)}><option value="all">All exams</option><option value="JEE">JEE</option><option value="NEET">NEET</option></Select>
+          <Select label="Class" value={classFilter} onChange={(event) => setClassFilter(event.target.value)}><option value="all">All classes</option><option value="11">Class 11</option><option value="12">Class 12</option></Select>
+          <Select label="State" value={stateFilter} onChange={(event) => setStateFilter(event.target.value)}><option value="all">Active and disabled</option><option value="active">Active</option><option value="disabled">Disabled</option></Select>
+          <p className="text-xs text-ink-500 sm:col-span-2 lg:col-span-4" aria-live="polite">Showing {visibleItems.length} of {items.length} {kind}s · disabled content remains available here to restore.</p>
+        </div>
+      )}
+      {!loading && !error && items.length > 0 && visibleItems.length === 0 && <EmptyState title="No content matches these filters" description="Try a different search, exam, class or state." />}
 
       <div className="grid gap-3">
-        {items.map(it=>{
+        {visibleItems.map(it=>{
           const meta = it.metadata as Record<string,any>;
           return (
             <Card key={it.id} className="p-4">
@@ -255,7 +300,7 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
                   <Button size="sm" variant="outline" onClick={()=> openEdit(it)}>Edit</Button>
-                  <Button size="sm" variant="danger" onClick={()=> handleDisable(it.id)}>Disable</Button>
+                  <Button size="sm" variant={it.active ? 'danger' : 'outline'} onClick={()=> handleToggleActive(it)}>{it.active ? 'Disable' : 'Restore'}</Button>
                 </div>
               </div>
             </Card>
@@ -334,6 +379,10 @@ function AdminLecturesTab(){
   const [error, setError] = useState<string|null>(null);
   const [parentFilter, setParentFilter] = useState('');
   const [subjectFilter, setSubjectFilter] = useState('');
+  const [lectureSearch, setLectureSearch] = useState('');
+  const [lectureStateFilter, setLectureStateFilter] = useState('all');
+  const [lectureExamFilter, setLectureExamFilter] = useState('all');
+  const [lectureClassFilter, setLectureClassFilter] = useState('all');
   const [pdfUploading, setPdfUploading] = useState(false);
   const [pdfProgress, setPdfProgress] = useState(0);
   const [pdfError, setPdfError] = useState<string|null>(null);
@@ -390,6 +439,11 @@ function AdminLecturesTab(){
     const itemSubject = item.subjectId || m.subjectId || '';
     if (parentFilter && itemParent !== parentFilter) return false;
     if (subjectFilter && itemSubject !== subjectFilter) return false;
+    if (lectureSearch.trim() && !`${item.title} ${item.description} ${m.lesson || ''} ${m.topic || ''}`.toLowerCase().includes(lectureSearch.trim().toLowerCase())) return false;
+    if (lectureStateFilter === 'active' && !item.active) return false;
+    if (lectureStateFilter === 'disabled' && item.active) return false;
+    if (lectureExamFilter !== 'all' && item.exam !== lectureExamFilter && item.exam !== 'Both') return false;
+    if (lectureClassFilter !== 'all' && !item.classes.includes(lectureClassFilter as '11' | '12')) return false;
     return true;
   });
 
@@ -471,11 +525,12 @@ function AdminLecturesTab(){
     if(form.thumbnailUrl && !isSafeHttpUrl(form.thumbnailUrl)){ push('Thumbnail must be http(s)','error'); return; }
     if(form.notesPdfUrl && !isSafeHttpUrl(form.notesPdfUrl)){ push('PDF URL must be http(s)','error'); return; }
     if(form.youtubeUrl && !extractYoutubeVideoId(form.youtubeUrl)){ push('Invalid YouTube URL','error'); return; }
+    if(form.subjectId && !form.parentId){ push('Choose a parent batch or series before selecting a subject.','error'); return; }
+    if(form.parentId && !form.subjectId){ push('Choose a subject assigned to this batch or series.','error'); return; }
+    if(form.notesFileId && !form.parentId){ push('A Drive PDF needs a parent batch or series.','error'); return; }
     setSaving(true);
     try{
       const vid = form.youtubeUrl ? extractYoutubeVideoId(form.youtubeUrl) : (form.videoId || '');
-      if(form.subjectId && !form.parentId){ push('Choose a parent batch or series before selecting a subject.','error'); return; }
-      if(form.notesFileId && !form.parentId){ push('A Drive PDF needs a parent batch or series.','error'); return; }
       const metadata: Record<string,unknown> = {
         youtubeUrl: form.youtubeUrl || undefined,
         videoId: vid || undefined,
@@ -509,14 +564,35 @@ function AdminLecturesTab(){
       else await createAdminContent(payload);
       invalidateAuthorizedBlobCache('/api/ec/files');
       push(editing?'Updated':'Created','success');
-      setShowForm(false); load();
+      setShowForm(false); await load();
     }catch(err){ push(err instanceof Error? err.message:'Save failed','error'); }
     finally{ setSaving(false); }
   }
 
-  async function handleDisable(id:string){
-    if(!confirm('Disable this lecture?')) return;
-    try{ await disableAdminContent(id); push('Disabled','success'); load(); }catch(err){ push(err instanceof Error? err.message:'Failed','error'); }
+  async function handleToggleActive(item: CourseCatalogItem){
+    if(item.active && !confirm(`Disable “${item.title}”? Its data and relationships will be preserved.`)) return;
+    try{
+      if(item.active){
+        await disableAdminContent(item.id);
+        push('Lecture disabled. You can restore it from this list.','success');
+      } else {
+        await updateAdminContent(item.id, {
+          kind: 'lecture',
+          title: item.title,
+          description: item.description,
+          exam: item.exam,
+          classes: item.classes,
+          active: true,
+          accessCode: (item as any).access_code ?? null,
+          metadata: item.metadata as Record<string, unknown>,
+          parentId: item.parentId,
+          subjectId: item.subjectId,
+          sortOrder: item.sortOrder,
+        });
+        push('Lecture restored and published.','success');
+      }
+      await load();
+    }catch(err){ push(err instanceof Error? err.message:'Could not update lecture state.','error'); }
   }
 
   async function handlePlaylistImport(){
@@ -562,6 +638,7 @@ function AdminLecturesTab(){
   async function handlePlaylistSave(){
     if(!playlistItems.length){ push('No items to save','error'); return; }
     if(!playlistTarget){ push('Select target batch/series','error'); return; }
+    if(!playlistSubject){ push('Select a subject assigned to the target batch/series.','error'); return; }
     const selectedItems = playlistItems.filter((i:any)=> i.selected!==false);
     if(!selectedItems.length){ push('Select at least one video','error'); return; }
     const existingVideoIds = new Set(items.map((item:any) => String((item.metadata as Record<string,any>)?.videoId || '')).filter(Boolean));
@@ -611,7 +688,7 @@ function AdminLecturesTab(){
       }
     } finally {
       setSaving(false);
-      if(ok) load();
+      if(ok) await load();
     }
   }
 
@@ -642,8 +719,8 @@ function AdminLecturesTab(){
                 {series.map(s=> <option key={s.id} value={s.id}>Series: {s.title}</option>)}
               </Select>
               <Select label="Exam" value={playlistExam} onChange={e=> setPlaylistExam(e.target.value)}><option>JEE</option><option>NEET</option><option>Both</option></Select>
-              <Select label="Subject (optional)" value={playlistSubject} onChange={e=> setPlaylistSubject(e.target.value)}>
-                <option value="">Unassigned</option>
+              <Select label="Subject*" value={playlistSubject} required onChange={e=> setPlaylistSubject(e.target.value)}>
+                <option value="">Choose a subject…</option>
                 {playlistTarget
                   ? subjectsForParent(playlistTarget).map(subject=> <option key={subject.id} value={subject.id}>{subject.name}</option>)
                   : subjects.map(subject=> <option key={subject.id} value={subject.id}>{subject.name}</option>)}
@@ -681,7 +758,8 @@ function AdminLecturesTab(){
       </Card>
 
       <Card className="p-4">
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Input label="Search lectures" type="search" value={lectureSearch} onChange={e=> setLectureSearch(e.target.value)} placeholder="Title, topic or description" />
           <Select label="Filter by course" value={parentFilter} onChange={e=> setParentFilter(e.target.value)}>
             <option value="">All batches &amp; series</option>
             {batches.map(b=> <option key={b.id} value={b.id}>Batch: {b.title}</option>)}
@@ -691,7 +769,10 @@ function AdminLecturesTab(){
             <option value="">All subjects</option>
             {subjects.map(subject=> <option key={subject.id} value={subject.id}>{subject.name}</option>)}
           </Select>
-          <p className="pb-2 text-xs text-ink-500">
+          <Select label="Exam" value={lectureExamFilter} onChange={e=> setLectureExamFilter(e.target.value)}><option value="all">All exams</option><option value="JEE">JEE</option><option value="NEET">NEET</option></Select>
+          <Select label="Class" value={lectureClassFilter} onChange={e=> setLectureClassFilter(e.target.value)}><option value="all">All classes</option><option value="11">Class 11</option><option value="12">Class 12</option></Select>
+          <Select label="State" value={lectureStateFilter} onChange={e=> setLectureStateFilter(e.target.value)}><option value="all">Active and disabled</option><option value="active">Active</option><option value="disabled">Disabled</option></Select>
+          <p className="pb-2 text-xs text-ink-500 self-end">
             {filteredItems.length} of {items.length} lecture{items.length===1?'':'s'}
             {subjects.length===0 && <> · no subjects yet — <Link href="/admin/subjects" className="font-semibold text-brand-700 hover:underline">create one</Link></>}
           </p>
@@ -727,7 +808,7 @@ function AdminLecturesTab(){
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
                   <Button size="sm" variant="outline" onClick={()=> openEdit(it)}>Edit</Button>
-                  <Button size="sm" variant="danger" onClick={()=> handleDisable(it.id)}>Disable</Button>
+                  <Button size="sm" variant={it.active ? 'danger' : 'outline'} onClick={()=> handleToggleActive(it)}>{it.active ? 'Disable' : 'Restore'}</Button>
                 </div>
               </div>
             </Card>
@@ -758,9 +839,10 @@ function AdminLecturesTab(){
                     <Select
                       label="Subject"
                       value={form.subjectId}
+                      required
                       onChange={e=> setForm((s:any)=>({...s, subjectId:e.target.value}))}
                     >
-                      <option value="">Unassigned (course-level lecture)</option>
+                      <option value="">Choose a subject…</option>
                       {subjectsForParent(form.parentId).map(subject=> (
                         <option key={subject.id} value={subject.id}>{subject.name}</option>
                       ))}

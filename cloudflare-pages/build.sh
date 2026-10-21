@@ -27,6 +27,16 @@ echo "Building Exam Cracker Next.js app and OpenNext assets from $REPO_ROOT"
 npm ci
 npm run build:cloudflare
 
+# Produce one self-contained Pages Function bundle so Pages deployment does
+# not need to resolve generated helper files outside its entry-point bundle.
+# This is the same canonical handler used by local Next.js, now called with
+# the Pages D1 binding directly instead of the EXAM_CRACKER_WEB service hop.
+echo "Bundling the direct-D1 Pages API handler"
+npx esbuild "$PAGES_DIR/pages-api-entry.mjs" \
+  --bundle --format=esm --platform=browser --target=es2022 \
+  --outfile="$PAGES_DIR/functions/api/ec/[[path]].js"
+node --check "$PAGES_DIR/functions/api/ec/[[path]].js"
+
 echo "Staging static assets for Cloudflare Pages"
 node "$PAGES_DIR/stage-assets.mjs"
 
