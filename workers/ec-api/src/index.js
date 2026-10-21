@@ -1191,7 +1191,7 @@ function migrationStatements(sql) {
   // The checked-in migration files use ordinary SQLite statements and line
   // comments (no trigger bodies or semicolons embedded in quoted values).
   return sql
-    .replace(/^[ \\t]*--.*$/gm, "")
+    .replace(/^[ \t]*--.*$/gm, "")
     .split(";")
     .map((statement) => statement.trim())
     .filter(Boolean);
