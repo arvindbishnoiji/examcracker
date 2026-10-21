@@ -163,30 +163,43 @@ CREATE TABLE IF NOT EXISTS student_library (
 );
 CREATE INDEX IF NOT EXISTS student_library_uid_idx ON student_library(firebase_uid, updated_at DESC);
 
--- Firestore application-data replacements. Payload JSON preserves legacy fields
--- while commonly used fields can be queried without scanning each payload.
-CREATE TABLE IF NOT EXISTS chat_threads (
-  firebase_uid TEXT PRIMARY KEY NOT NULL,
-  created_at TEXT,
-  updated_at TEXT,
-  payload TEXT NOT NULL DEFAULT '{}'
-);
-
-CREATE TABLE IF NOT EXISTS chat_messages (
+-- Student feedback is persisted in D1, not Firestore chat.
+CREATE TABLE IF NOT EXISTS feedback_threads (
   id TEXT PRIMARY KEY NOT NULL,
   firebase_uid TEXT NOT NULL,
-  sender_role TEXT,
-  message_text TEXT,
-  created_at TEXT,
-  payload TEXT NOT NULL DEFAULT '{}'
+  category TEXT NOT NULL DEFAULT 'general',
+  subject TEXT NOT NULL DEFAULT 'Student feedback',
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved')),
+  last_message_text TEXT NOT NULL DEFAULT '',
+  last_message_at TEXT,
+  unread_by_admin INTEGER NOT NULL DEFAULT 0 CHECK (unread_by_admin IN (0, 1)),
+  unread_by_student INTEGER NOT NULL DEFAULT 0 CHECK (unread_by_student IN (0, 1)),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS chat_messages_thread_idx ON chat_messages(firebase_uid, created_at);
+CREATE INDEX IF NOT EXISTS feedback_threads_student_idx ON feedback_threads(firebase_uid, updated_at DESC);
+CREATE INDEX IF NOT EXISTS feedback_threads_status_idx ON feedback_threads(status, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS feedback_messages (
+  id TEXT PRIMARY KEY NOT NULL,
+  thread_id TEXT NOT NULL,
+  sender_uid TEXT NOT NULL,
+  sender_role TEXT NOT NULL CHECK (sender_role IN ('student', 'admin')),
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  is_read INTEGER NOT NULL DEFAULT 0 CHECK (is_read IN (0, 1)),
+  read_at TEXT,
+  payload TEXT NOT NULL DEFAULT '{}',
+  FOREIGN KEY(thread_id) REFERENCES feedback_threads(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS feedback_messages_thread_idx ON feedback_messages(thread_id, created_at);
 
 CREATE TABLE IF NOT EXISTS notifications (
   id TEXT PRIMARY KEY NOT NULL,
   firebase_uid TEXT NOT NULL,
   is_read INTEGER NOT NULL DEFAULT 0 CHECK (is_read IN (0, 1)),
-  created_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  read_at TEXT,
   payload TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications(firebase_uid, is_read, created_at DESC);
@@ -195,7 +208,7 @@ CREATE TABLE IF NOT EXISTS push_tokens (
   id TEXT PRIMARY KEY NOT NULL,
   firebase_uid TEXT NOT NULL,
   token TEXT,
-  created_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   payload TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS push_tokens_user_idx ON push_tokens(firebase_uid);
