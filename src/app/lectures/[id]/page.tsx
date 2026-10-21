@@ -8,13 +8,19 @@ import { Button } from '@/components/ui/Button';
 import { useToast } from '@/hooks/useToast';
 import { getYoutubeEmbedUrl } from '@/lib/mediaProxy';
 import { isSafeHttpUrl } from '@/lib/validation';
+import { useSiteConfig } from '@/context/SiteConfigContext';
 import type { CourseCatalogItem } from '@/types';
+import { visibleSectionIds } from '@/lib/screen-config';
+import { ScreenAnnouncementBanner, ScreenHelpNote } from '@/components/student/ScreenScaffold';
 
 export default function LecturePlayerPage(){
   const params = useParams<{id:string}>();
   const id = params.id;
   const router = useRouter();
   const { push } = useToast();
+  const { config } = useSiteConfig();
+  const screen = config.lecturePlayer;
+  const sections = visibleSectionIds('lecturePlayer', screen);
   const [lecture, setLecture] = useState<CourseCatalogItem|null>(null);
   const [siblings, setSiblings] = useState<CourseCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,8 +134,9 @@ export default function LecturePlayerPage(){
   // If it's a batch/series detail, show its lectures
   if(!isLecture){
     return (
-      <div className="max-w-6xl mx-auto space-y-4">
-        <Link href="/lectures" className="text-sm text-brand-600 hover:underline">← Back to lectures</Link>
+      <div className="mx-auto max-w-6xl space-y-4">
+        <Link href="/lectures" className="text-sm font-semibold text-brand-700 hover:underline">← {screen.backLabel}</Link>
+        <ScreenAnnouncementBanner announcement={screen.announcement} />
         <Card className="overflow-hidden">
           {(meta.thumbnailUrl as string) && isSafeHttpUrl(meta.thumbnailUrl as string) && <img src={meta.thumbnailUrl as string} alt={lecture.title} className="w-full h-48 object-cover" />}
           <CardBody>
@@ -145,7 +152,12 @@ export default function LecturePlayerPage(){
 
         <div className="space-y-3">
           <h2 className="font-bold">Lessons in this {lecture.kind} • {siblings.length} items</h2>
-          {siblings.length===0 ? <Card className="p-6 text-center text-sm text-ink-500">No lessons yet. Admin can add via Dashboard → Lectures.</Card> :
+          {siblings.length===0 ? (
+            <Card className="p-6 text-center">
+              <p className="text-sm font-semibold">{screen.relatedEmptyTitle}</p>
+              <p className="mt-1 text-xs text-ink-500">{screen.relatedEmptyBody}</p>
+            </Card>
+          ) :
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {siblings.map(s=>{
                 const m = s.metadata as Record<string,string>;
@@ -172,8 +184,12 @@ export default function LecturePlayerPage(){
   const embedUrl = videoId ? getYoutubeEmbedUrl(videoId) : '';
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4">
-      <Link href={parentId ? `/lectures/${parentId}` : '/lectures'} className="text-sm text-brand-600 hover:underline">← Back</Link>
+    <div className="mx-auto max-w-6xl space-y-4">
+      <Link href={parentId ? `/lectures/${parentId}` : '/lectures'} className="text-sm font-semibold text-brand-700 hover:underline">
+        ← {screen.backLabel}
+      </Link>
+
+      <ScreenAnnouncementBanner announcement={screen.announcement} />
 
       <div className="grid lg:grid-cols-[1fr_360px] gap-4">
         <div className="space-y-4">
@@ -208,33 +224,39 @@ export default function LecturePlayerPage(){
               <div className="flex flex-wrap gap-1 mt-2"><Badge>{lecture.exam}</Badge><Badge>Class {lecture.classes.join('/')}</Badge>{(meta.topic as string) && <Badge>{meta.topic as string}</Badge>}<Badge variant="default">{watched}s watched</Badge>{completed && <Badge variant="success">Completed</Badge>}</div>
 
               <div className="flex flex-wrap gap-2 mt-4">
-                <Button size="sm" variant="outline" onClick={()=> setCompleted(c=>!c)}>{completed? 'Mark incomplete':'Mark completed'}</Button>
-                <Button size="sm" onClick={flushProgress} loading={saving}>Save progress</Button>
+                <Button size="sm" variant="outline" onClick={()=> setCompleted(c=>!c)}>
+                  {completed ? screen.markIncompleteLabel : screen.markCompleteLabel}
+                </Button>
+                <Button size="sm" onClick={flushProgress} loading={saving}>{screen.saveProgressLabel}</Button>
                 {notesPdfUrl && isSafeHttpUrl(notesPdfUrl) && <a href={notesPdfUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-2 bg-white border border-ink-200 rounded-xl text-sm font-semibold">View PDF</a>}
-                <span className="text-xs text-ink-400 self-center">Progress saved via POST /progress (debounced). Flush on exit.</span>
+                <span className="text-xs text-ink-400 self-center">Watch time saves automatically to your account.</span>
               </div>
 
               <div className="flex gap-2 mt-4">
-                {prev ? <Link href={`/lectures/${prev.id}`} className="px-4 py-2 bg-ink-900 text-white rounded-xl text-sm font-semibold">← Previous</Link> : <span className="px-4 py-2 bg-ink-100 text-ink-400 rounded-xl text-sm font-semibold">← Previous</span>}
-                {next ? <Link href={`/lectures/${next.id}`} className="px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-semibold">Next →</Link> : <span className="px-4 py-2 bg-ink-100 text-ink-400 rounded-xl text-sm font-semibold">Next →</span>}
+                {prev ? <Link href={`/lectures/${prev.id}`} className="ec-btn bg-ink-900 px-4 py-2 text-sm font-semibold text-white">← {screen.previousLabel}</Link> : <span className="ec-btn bg-ink-100 px-4 py-2 text-sm font-semibold text-ink-400">← {screen.previousLabel}</span>}
+                {next ? <Link href={`/lectures/${next.id}`} className="ec-btn bg-brand-600 px-4 py-2 text-sm font-semibold text-white">{screen.nextLabel} →</Link> : <span className="ec-btn bg-ink-100 px-4 py-2 text-sm font-semibold text-ink-400">{screen.nextLabel} →</span>}
               </div>
 
-              {notesPdfUrl && isSafeHttpUrl(notesPdfUrl) && (
-                <div className="mt-4 border border-ink-200 rounded-xl overflow-hidden">
-                  <div className="p-2 bg-ink-50 text-xs font-semibold">PDF Preview</div>
-                  <iframe src={notesPdfUrl} title="Notes PDF" className="w-full h-[500px]" />
+              {screen.showNotes && sections.includes('notes') && notesPdfUrl && isSafeHttpUrl(notesPdfUrl) && (
+                <div className="mt-4 overflow-hidden rounded-xl border border-ink-200">
+                  <div className="flex items-center justify-between bg-ink-50 p-2 text-xs font-semibold">
+                    <span>{screen.notesTitle}</span>
+                    <a href={notesPdfUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] font-bold text-brand-700">
+                      Open in a new tab ↗
+                    </a>
+                  </div>
+                  <iframe src={notesPdfUrl} title={screen.notesTitle} className="h-[500px] w-full" />
                 </div>
               )}
             </CardBody>
           </Card>
 
-          <Card className="p-3 bg-ink-50 border-dashed text-xs text-ink-500">
-            <p>Autoplay may be blocked by browser — click Play to start. Progress persists via Supabase Edge Function; not faked locally.</p>
-          </Card>
+          {sections.includes('help') ? <ScreenHelpNote help={{ title: screen.help.title || 'Player tips', body: screen.progressNote || screen.help.body }} /> : null}
         </div>
 
+        {screen.showRelated && sections.includes('related') ? (
         <div className="space-y-3">
-          <h2 className="font-bold">Up next • {siblings.length} lessons</h2>
+          <h2 className="font-bold">{screen.relatedTitle} · {siblings.length} lessons</h2>
           <div className="space-y-2 max-h-[70vh] overflow-auto pr-1">
             {siblings.map(s=>{
               const m = s.metadata as Record<string,string>;
@@ -251,9 +273,15 @@ export default function LecturePlayerPage(){
                 </Link>
               );
             })}
-            {siblings.length===0 && <p className="text-sm text-ink-500">No sibling lessons found.</p>}
+            {siblings.length===0 && (
+              <div className="rounded-xl border border-dashed border-ink-200 p-3">
+                <p className="text-sm font-semibold">{screen.relatedEmptyTitle}</p>
+                <p className="mt-1 text-xs text-ink-500">{screen.relatedEmptyBody}</p>
+              </div>
+            )}
           </div>
         </div>
+        ) : null}
       </div>
     </div>
   );

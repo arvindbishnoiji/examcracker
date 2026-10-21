@@ -126,7 +126,7 @@ export function AppearanceSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Design studio"
+        eyebrow="Website settings"
         title="Website Appearance"
         description="Publish a real, global design system: colours, typography, shape, density, header and motion. Every preset updates actual theme tokens used by the student site."
         meta={

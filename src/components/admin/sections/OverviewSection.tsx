@@ -5,16 +5,16 @@ import { useCallback, useEffect, useState } from 'react';
 import type { AdminActivityEntry, AdminAnalyticsResponse, AdminOverviewResponse } from '@/types';
 import { getAdminActivity, getAdminAnalytics, getAdminOverview } from '@/lib/api';
 import { formatISTDateTime } from '@/lib/date';
-import { ADMIN_SECTIONS, adminSectionHref } from '@/lib/admin-sections';
+import { ADMIN_GROUPS, ADMIN_SECTIONS, adminSectionHref } from '@/lib/admin-sections';
 import { AdminPageHeader, Banner, BarChart, Panel, ProgressBar, Spinner, StatCard, StatusPill } from '../ui';
 
 const QUICK_ACTIONS = [
-  { label: 'Create a banner', href: '/admin/banners', icon: '▰', tone: 'from-brand-500 to-brand-700' },
+  { label: 'Edit a student screen', href: '/admin/screens', icon: '▭', tone: 'from-brand-500 to-brand-700' },
+  { label: 'Create a banner', href: '/admin/banners', icon: '▰', tone: 'from-rose-500 to-rose-700' },
   { label: 'Schedule an event', href: '/admin/events', icon: '▦', tone: 'from-violet-500 to-violet-700' },
   { label: 'Add a test', href: '/admin/tests', icon: '✎', tone: 'from-emerald-500 to-emerald-700' },
   { label: 'Post an announcement', href: '/admin/announcements', icon: '◔', tone: 'from-amber-500 to-amber-600' },
   { label: "Set today's goal", href: '/admin/goals', icon: '◎', tone: 'from-sky-500 to-sky-700' },
-  { label: 'Tune the theme', href: '/admin/appearance', icon: '◐', tone: 'from-rose-500 to-rose-700' },
 ];
 
 function greeting() {
@@ -66,7 +66,7 @@ export function OverviewSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Command centre"
+        eyebrow="Overview"
         title={`${greeting()}, Admin`}
         description="Everything that is live, everything that needs attention, and the fastest route to each tool — all driven by real platform data."
         actions={
@@ -227,9 +227,9 @@ export function OverviewSection() {
             </Panel>
           </div>
 
-          <Panel className="mt-4" title="Every workspace" description="30 dedicated tools, grouped by intent.">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {['Design studio', 'Learning', 'Students', 'Growth', 'System'].map((group) => (
+          <Panel className="mt-4" title="Every workspace" description={`${ADMIN_SECTIONS.length} dedicated tools, grouped by intent.`}>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {ADMIN_GROUPS.map((group) => (
                 <div key={group}>
                   <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-400 mb-2">{group}</p>
                   <div className="space-y-1.5">
@@ -255,7 +255,7 @@ export function OverviewSection() {
                     <StatusPill tone="success">Live</StatusPill>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-ink-600">Login designer</span>
+                    <span className="text-[11px] text-ink-600">Screen Studio</span>
                     <StatusPill tone="success">Live</StatusPill>
                   </div>
                   <div className="flex items-center justify-between">

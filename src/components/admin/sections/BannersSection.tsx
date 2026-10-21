@@ -138,7 +138,7 @@ export function BannersSection({ autoCreate = false }: { autoCreate?: boolean })
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Design studio"
+        eyebrow="Website settings"
         title="Banners & Hero Slides"
         description="Schedule targeted hero slides for the homepage, dashboard and login page. Images are optional; every banner has a branded fallback."
         meta={

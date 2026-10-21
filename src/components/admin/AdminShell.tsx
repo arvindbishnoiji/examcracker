@@ -18,12 +18,12 @@ import { readAdminPreferences, writeAdminPreferences } from '@/lib/admin-prefs';
 import { AdminSectionIcon } from '@/components/ui/AppIcon';
 
 const QUICK_ACTIONS: Array<{ label: string; href: string; hint: string; icon: string }> = [
-  { label: 'Create a banner', href: '/admin/banners', hint: 'Design studio', icon: '▰' },
-  { label: 'Create an event', href: '/admin/events', hint: 'Learning', icon: '▦' },
-  { label: 'Create a test', href: '/admin/tests', hint: 'Learning', icon: '✎' },
-  { label: 'Post an announcement', href: '/admin/announcements', hint: 'Learning', icon: '◔' },
-  { label: 'Publish a theme', href: '/admin/appearance', hint: 'Design studio', icon: '◐' },
-  { label: 'Inspect student analytics', href: '/admin/analytics', hint: 'Students', icon: '▧' },
+  { label: 'Edit a student screen', href: '/admin/screens', hint: 'Screen Studio', icon: '▭' },
+  { label: 'Create a banner', href: '/admin/banners', hint: 'Website settings', icon: '▰' },
+  { label: 'Create an event', href: '/admin/events', hint: 'Communication', icon: '▦' },
+  { label: 'Create a test', href: '/admin/tests', hint: 'Tests & performance', icon: '✎' },
+  { label: 'Post an announcement', href: '/admin/announcements', hint: 'Communication', icon: '◔' },
+  { label: 'Inspect student analytics', href: '/admin/analytics', hint: 'Tests & performance', icon: '▧' },
 ];
 
 function isActive(pathname: string | null, slug: string): boolean {
@@ -50,6 +50,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   const activeSlug = pathname === '/admin' ? 'overview' : pathname?.split('/')[2] || 'overview';
   const activeSection = findAdminSection(activeSlug);
+  const isNestedPage = Boolean(pathname && pathname.split('/').filter(Boolean).length > 2);
 
   useEffect(() => {
     const prefs = readAdminPreferences();
@@ -290,7 +291,18 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="px-3 sm:px-5 lg:px-7 py-5 sm:py-7 max-w-[1560px] mx-auto">{children}</main>
+        <main className="px-3 sm:px-5 lg:px-7 py-5 sm:py-7 max-w-[1560px] mx-auto">
+          {isNestedPage && activeSection ? (
+            <nav aria-label="Breadcrumb" className="mb-3 flex flex-wrap items-center gap-1 text-[11px] text-ink-500">
+              <Link href="/admin" className="hover:text-ink-800">Admin</Link>
+              <span aria-hidden>/</span>
+              <Link href={adminSectionHref(activeSection.slug)} className="hover:text-ink-800">
+                {activeSection.label}
+              </Link>
+            </nav>
+          ) : null}
+          {children}
+        </main>
       </div>
 
       {/* Command palette */}
@@ -516,7 +528,7 @@ function SidebarContent({
             <p className="text-[10px] text-ink-400 px-2 pt-1 truncate" title={email}>
               {email}
             </p>
-            <p className="text-[9px] text-ink-400 px-2">Admin console · v2.0</p>
+            <p className="text-[9px] text-ink-400 px-2">Admin console · v3</p>
           </>
         ) : (
           <Link href="/home" target="_blank" className="ec-admin-link justify-center px-0" title="View student site">

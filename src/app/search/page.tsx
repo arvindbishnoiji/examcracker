@@ -6,6 +6,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import type { CourseCatalogItem, TestCardItem } from '@/types';
 import { getStudentTests } from '@/lib/api';
+import { useSiteConfig } from '@/context/SiteConfigContext';
+import { visibleSectionIds } from '@/lib/screen-config';
+import {
+  ScreenAnnouncementBanner,
+  ScreenEmpty,
+  ScreenHelpNote,
+  ScreenPageHeader,
+} from '@/components/student/ScreenScaffold';
 
 type ResultKind = 'lecture' | 'test' | 'batch' | 'series' | 'event' | 'announcement';
 
@@ -55,6 +63,8 @@ function SearchScreen() {
   const router = useRouter();
   const params = useSearchParams();
   const { bootstrap, profile, initializing, user } = useAuth();
+  const { config } = useSiteConfig();
+  const screen = config.search;
   const [query, setQuery] = useState(params?.get('q') || '');
   const [committed, setCommitted] = useState(params?.get('q') || '');
   const [kind, setKind] = useState<'all' | ResultKind>('all');
@@ -189,38 +199,42 @@ function SearchScreen() {
     [query, router]
   );
 
-  const suggestions = ['Mechanics', 'Organic chemistry', 'Calculus', 'Mock test', 'Batch', 'Revision'];
+  const suggestions = screen.suggestions;
+  const sections = visibleSectionIds('search', screen);
+  const resultLimit = screen.itemLimit > 0 ? screen.itemLimit : filtered.length;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-5">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">Search everything</h1>
-        <p className="text-sm text-ink-500 mt-1">
-          Lectures, tests, batches, series, events and notices across Exam Cracker.
-          {profile ? ` Filtered for ${profile.exam} · Class ${profile.class_level}.` : ''}
-        </p>
-      </div>
+    <div className="mx-auto max-w-4xl space-y-5">
+      <ScreenPageHeader
+        showHeader={screen.showHeader}
+        eyebrow={screen.eyebrow}
+        title={screen.pageTitle}
+        description={screen.pageSubtitle}
+        meta={profile ? <span className="ec-chip">Filtered for {profile.exam} · Class {profile.class_level}</span> : null}
+      />
 
-      <form onSubmit={submit} className="flex flex-col sm:flex-row gap-2">
+      <ScreenAnnouncementBanner announcement={screen.announcement} />
+
+      <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row" role="search">
         <label className="relative flex-1">
           <span className="sr-only">Search</span>
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400">⌕</span>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search lectures, subjects, tests, batches…"
+            placeholder={screen.searchPlaceholder}
             className="ec-field pl-8"
             autoFocus
           />
         </label>
         <button type="submit" className="ec-btn px-4 py-2.5 text-sm font-bold bg-[var(--ec-brand)] text-[var(--ec-on-brand)]">
-          Search
+          {screen.searchCtaLabel}
         </button>
       </form>
 
-      {!committed.trim() && (
-        <div className="flex flex-wrap gap-2 items-center">
-          <span className="text-[11px] font-semibold text-ink-500">Try:</span>
+      {!committed.trim() && sections.includes('suggestions') && screen.showSuggestions && suggestions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-semibold text-ink-500">{screen.suggestionsTitle}:</span>
           {suggestions.map((suggestion) => (
             <button
               key={suggestion}
@@ -238,6 +252,7 @@ function SearchScreen() {
         </div>
       )}
 
+      {sections.includes('kind_filters') && screen.showKindFilters && (
       <div className="flex flex-wrap items-center gap-2">
         {(['all', 'lecture', 'test', 'batch', 'series', 'event', 'announcement'] as const).map((option) => {
           const count = option === 'all' ? results.length : kindCounts[option] || 0;
@@ -263,6 +278,7 @@ function SearchScreen() {
           </select>
         </label>
       </div>
+      )}
 
       <p className="text-[11px] text-ink-500">
         {committed.trim()
@@ -271,32 +287,34 @@ function SearchScreen() {
         {testsLoading ? ' · loading tests…' : ''}
       </p>
 
-      {filtered.length === 0 ? (
-        <div className="ec-card p-10 text-center">
-          <p className="text-3xl">🔍</p>
-          <p className="text-sm font-bold mt-2">No matches</p>
-          <p className="text-xs text-ink-500 mt-1">Try a shorter query, a subject name, or clear the filters.</p>
-          <div className="flex justify-center gap-2 mt-4">
-            <button
-              type="button"
-              onClick={() => {
-                setQuery('');
-                setCommitted('');
-                setKind('all');
-                router.replace('/search');
-              }}
-              className="px-3 py-1.5 text-xs font-bold border border-ink-200 rounded-full bg-white"
-            >
-              Clear search
-            </button>
-            <Link href="/lectures" className="px-3 py-1.5 text-xs font-bold rounded-full bg-[var(--ec-brand)] text-[var(--ec-on-brand)]">
-              Browse lectures
-            </Link>
-          </div>
-        </div>
+      {sections.includes('results') ? (filtered.length === 0 ? (
+        <ScreenEmpty
+          icon={<span aria-hidden>🔍</span>}
+          title={screen.noResultsTitle}
+          body={screen.noResultsBody}
+          action={
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery('');
+                  setCommitted('');
+                  setKind('all');
+                  router.replace('/search');
+                }}
+                className="ec-btn border border-ink-200 px-3 py-1.5 text-xs font-bold"
+              >
+                Clear search
+              </button>
+              <Link href="/lectures" className="ec-btn bg-[var(--ec-brand)] px-3 py-1.5 text-xs font-bold text-[var(--ec-on-brand)]">
+                Browse lectures
+              </Link>
+            </>
+          }
+        />
       ) : (
         <ul className="space-y-2">
-          {filtered.slice(0, 60).map((item) => (
+          {filtered.slice(0, resultLimit).map((item) => (
             <li key={`${item.kind}-${item.id}`}>
               <Link href={item.href} className="ec-card flex items-start gap-3 p-3.5 hover:-translate-y-0.5 transition">
                 <span className="shrink-0 rounded-lg bg-brand-50 text-brand-700 text-[10px] font-bold px-2 py-1">
@@ -318,8 +336,21 @@ function SearchScreen() {
             </li>
           ))}
         </ul>
+      )) : null}
+
+      {filtered.length > resultLimit && (
+        <p className="text-center text-[11px] text-ink-400">
+          Showing the first {resultLimit} of {filtered.length} matches. Refine your search to narrow it down.
+        </p>
       )}
-      {filtered.length > 60 && <p className="text-[11px] text-ink-400 text-center">Showing the first 60 of {filtered.length} matches.</p>}
+
+      {sections.includes('info') && screen.infoNote ? (
+        <p className="rounded-[var(--ec-radius)] border border-ink-100 bg-[var(--ec-surface)] p-3 text-[11px] leading-relaxed text-ink-500">
+          {screen.infoNote}
+        </p>
+      ) : null}
+
+      <ScreenHelpNote help={screen.help} />
     </div>
   );
 }

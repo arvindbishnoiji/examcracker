@@ -1,11 +1,13 @@
 # MASTER PROMPT — Exam Cracker Next.js Web App
 
-You are the implementation agent for **Exam Cracker (EC)**. Build a complete, production-minded, mobile-first **Next.js web application from scratch** in the currently empty repository arvindbishnoiji/examcracker. The repository contains service configuration and backend source files copied from the prepared iio repository, but it does NOT contain the student/admin frontend. Create the entire frontend and project scaffolding from zero, connecting to the existing Firebase project, Supabase backend and Cloudflare YouTube metadata Worker. Read this entire prompt before editing. This is the source of truth for architecture and requirements.
+> **Status (updated 2026-10-21).** This repository is **not empty** and this document is **not a greenfield build order**. `arvindbishnoiji/examcracker` already contains the complete Next.js App Router application (student app, admin control centre, Firebase auth, Supabase Edge Functions, Cloudflare Worker integration, migrations and a Vitest suite). The statements in earlier revisions that described an empty repository or named `arvindbishnoiji/iio` as the target were outdated and have been corrected. Treat the **actual source tree as the source of truth** and extend it; never rebuild it from scratch or overwrite working services.
+
+You are the implementation agent for **Exam Cracker (EC)**, a production-minded, mobile-first **Next.js web application** in the repository `arvindbishnoiji/examcracker`. It connects to the existing Firebase project, the Supabase Edge Functions and the Cloudflare YouTube metadata Worker. Read this entire prompt before editing. The architecture and security rules below remain binding; current route names, contracts and components live in `src/`.
 
 ## 1. Goal and non-negotiable rules
 
 - App name: Exam Cracker
-- Repository: arvindbishnoiji/iio, default branch main
+- Repository: arvindbishnoiji/examcracker, default branch main
 - Product: JEE and NEET student learning web app with a protected admin dashboard
 - Admin email: arvinddarabishnoi@gmail.com
 - Firebase project ID: darvo1
@@ -20,24 +22,39 @@ You are the implementation agent for **Exam Cracker (EC)**. Build a complete, pr
 - Use ISO UTC timestamps in storage and show all user-facing schedules in Asia/Kolkata.
 - Maintain a readable codebase, lockfile, TypeScript checks, production build and GitHub Actions verification.
 
-## 2. Before implementation: inspect the prepared blank repository
+## 2. Inspect the existing application before making changes
 
-This repository was intentionally started empty. Service-only files were copied into it:
-- MASTER_PROMPT.md, README.md, .env.example and .gitignore
-- google-services.json, firebase.json and firestore.rules
-- reference/iio/src/types/index.ts, reference/iio/src/lib/{config,validation,date,api,firebase,firestore,mediaProxy}.ts and reference/iio/src/__tests__/examCracker.test.ts (adapt these; do not blindly import them)
-- supabase/functions/exam-cracker-api/index.ts
-- supabase/migrations/20261017000000_ec_query_indexes.sql
-- workers/ec-content-api/src/index.js
-- workers/ec-content-api/wrangler.toml
+The application already exists. Start by reading the real implementation rather than assuming a blank project:
 
-There is no finished Vite/React app and no existing student/admin UI to migrate. A curated, read-only-style reference copy of core iio modules exists under reference/iio/ (types, API client, Firebase/Firestore helpers, media proxy, validation/date helpers and tests). Inspect these as implementation references for expected data shapes and behaviour, but do not directly import them into the new Next.js app without reviewing and adapting them; they may contain Vite-specific assumptions. Do not depend on the iio repository being available at build time. Build the complete Next.js App Router project in this repository: package.json and lockfile, app routes/layouts, src components/features, Firebase client setup, Supabase API client, Cloudflare Worker integration, tests, lint/typecheck scripts, deployment config and CI workflows.
+- `src/app/` — App Router routes: `/` (entry redirect), `/login`, `/onboarding`, `/home`, `/lectures`, `/lectures/[id]`, `/tests`, `/tests/[id]`, `/leaderboard`, `/profile`, `/events`, `/challenges`, `/chat`, `/notifications`, `/search`, `/admin`, `/admin/[section]`, `/admin/screens`, `/admin/screens/[screen]`.
+- `src/components/` — UI primitives, layout chrome, student screen scaffold, auth gate and every admin section.
+- `src/context/` — `AuthContext` (Firebase session + bootstrap) and `SiteConfigContext` (published site/screen configuration).
+- `src/hooks/` — `useSettingWorkspace` (draft → save → publish → reset for one settings key), `useToast`, `usePrefersDark`.
+- `src/lib/` — `api.ts`, `site-config.ts`, `screen-config.ts`, `site-validation.ts`, `admin-sections.ts`, `theme.ts`, `auth-gate.ts`, `validation.ts`, `date.ts`, `firebase.ts`, `firestore.ts`, `mediaProxy.ts`.
+- `src/types/` — shared data contracts, including `site.ts` and `screens.ts`.
+- `supabase/functions/exam-cracker-api/` (content, tests, progress, leaderboard) and `supabase/functions/ec-site-api/` (site settings, activity, analytics, enrollments, library).
+- `supabase/migrations/` — additive SQL, including the `site_settings` draft/published store.
+- `workers/ec-content-api/` — the separate YouTube metadata media proxy. It must keep its name, URL and `workers/ec-content-api/wrangler.toml` (`main = "src/index.js"`).
+- `cloudflare-pages/`, `wrangler.toml`, `firestore.rules`, `.github/workflows/` and the Vitest suite in `src/__tests__/`.
 
-Before coding, inspect every service/config file copied above and the curated reference files under reference/iio/. Reuse the reference types and business logic where appropriate after checking compatibility, and port/adapt them into the new Next.js source tree. The reference folder is guidance, not the production source path. Preserve and test the existing Supabase Edge Function and Cloudflare Worker source. Never overwrite a service with a mock implementation just to make the frontend work. Keep the media proxy Worker named ec-content-api and deployed at its existing URL. Its Wrangler config must stay at workers/ec-content-api/wrangler.toml with main = "src/index.js" relative to that config directory. Create a separate root configuration for the Next.js website so website deploys can never overwrite the media proxy.
+`reference/iio/` is a historical, read-only reference copy of earlier Vite modules. It is guidance only; never import it at build time and never treat it as the production source path. `google-services.json` is Android client configuration retained for a future wrapper — it is not the web configuration and not an admin key.
 
-Do not copy the old Android/Vite app into this repository. This deliverable is a Next.js web app. The Firebase google-services.json is Android client configuration retained for reference/future native packaging; it is not the Next.js web configuration and is not a Firebase Admin service-account key.
+Preserve the existing service names, endpoint URLs, authentication contract and data shapes. Extend the current architecture instead of adding a second parallel system, and never replace a working service with a mock just to simplify the UI.
 
-Since the repository starts without frontend source, implement all student and admin screens from the requirements below rather than writing a migration plan. You may use reference/iio files to preserve proven data contracts and logic, but the resulting code must be self-contained and build inside examcracker.
+## 2a. Admin-managed screens (Screen Studio)
+
+Every student-facing screen except **Login** and **Signup** has a persisted presentation document managed from `/admin/screens`:
+
+`lectures`, `lecturePlayer`, `tests`, `testPlayer`, `leaderboard`, `profile`, `eventsScreen`, `challengesScreen`, `chat`, `notifications`, `search`, `onboarding` — plus the existing `homepage`, `navigation`, `footer`, `banners`, `popups`, `testimonials`, `challenges` (content) and `theme` documents.
+
+Rules for this system:
+
+- One settings key per screen in the `site_settings` table, using the existing `draft`/`published` columns and the public `/public/site` endpoint.
+- Validation lives in `src/lib/site-validation.ts` and is mirrored in `supabase/functions/ec-site-api`. Both must be updated together.
+- Only allowlisted section ids may be stored. Required blocks cannot be hidden (the server rejects such a document).
+- Screen configuration is presentation only. It can never change authentication, onboarding requirements (name, exam, class), enrolment rules, timers, server-side scoring, duplicate-attempt protection, answer-key release, route protection or RLS.
+- Student pages must render safe built-in defaults while loading or after a network failure. Drafts are never served to students.
+- Login and Signup stay code-managed. The stored `login` contract is still honoured by the sign-in screen, but `/admin/login` is not an editor and authentication screens must not be added to the Screen Studio.
 
 
 ## 3. Next.js and Cloudflare hosting

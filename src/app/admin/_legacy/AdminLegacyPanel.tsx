@@ -907,7 +907,7 @@ function AdminStudentsTab(){
   );
 }
 
-function AdminChatTab(){
+export function AdminChatTab(){
   const { user } = useAuth();
   const { push } = useToast();
   const [threads, setThreads] = useState<any[]>([]);

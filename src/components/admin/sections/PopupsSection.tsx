@@ -85,7 +85,7 @@ export function PopupsSection() {
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Design studio"
+        eyebrow="Website settings"
         title="Popup & Notice Manager"
         description="Publish targeted popups with real frequency control. Frequency is stored on the student's browser — no fabricated impressions or click analytics."
         meta={

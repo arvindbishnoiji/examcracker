@@ -30,7 +30,103 @@ const ADMIN_EMAIL = (Deno.env.get("ADMIN_EMAIL") || "arvinddarabishnoi@gmail.com
 const MAX_BODY_BYTES = 512 * 1024;
 const PAGE_SIZE_DEFAULT = 25;
 const PAGE_SIZE_MAX = 100;
-const SITE_SETTING_KEYS = ["theme", "login", "homepage", "navigation", "footer", "banners", "popups", "testimonials", "challenges", "features", "seo", "media"];
+const SCREEN_SETTING_KEYS = [
+  "lectures",
+  "lecturePlayer",
+  "tests",
+  "testPlayer",
+  "leaderboard",
+  "profile",
+  "eventsScreen",
+  "challengesScreen",
+  "chat",
+  "notifications",
+  "search",
+  "onboarding",
+];
+const SITE_SETTING_KEYS = [
+  "theme",
+  "login",
+  "homepage",
+  "navigation",
+  "footer",
+  "banners",
+  "popups",
+  "testimonials",
+  "challenges",
+  "features",
+  "seo",
+  "media",
+  ...SCREEN_SETTING_KEYS,
+];
+/**
+ * Server-side section allowlist for each Screen Studio document. Mirror of
+ * `SCREEN_DEFINITIONS` in src/lib/screen-config.ts. `r` marks a required block
+ * that can never be hidden, so the server rejects a document that removes it.
+ */
+const SCREEN_SECTIONS = {
+  lectures: [
+    { id: "tabs", required: true },
+    { id: "filters", required: false },
+    { id: "catalogue", required: true },
+    { id: "access_note", required: false },
+  ],
+  lecturePlayer: [
+    { id: "video", required: true },
+    { id: "notes", required: false },
+    { id: "related", required: false },
+    { id: "help", required: false },
+  ],
+  tests: [
+    { id: "filters", required: false },
+    { id: "catalogue", required: true },
+    { id: "info", required: false },
+  ],
+  testPlayer: [
+    { id: "instructions", required: false },
+    { id: "attempt", required: true },
+    { id: "warning", required: false },
+    { id: "review", required: false },
+  ],
+  leaderboard: [
+    { id: "selector", required: true },
+    { id: "ranking", required: true },
+    { id: "info", required: false },
+  ],
+  profile: [
+    { id: "identity", required: true },
+    { id: "stats", required: false },
+    { id: "level", required: false },
+    { id: "recent_attempts", required: false },
+    { id: "lesson_progress", required: false },
+    { id: "score_summary", required: false },
+    { id: "quick_links", required: false },
+  ],
+  eventsScreen: [
+    { id: "calendar", required: false },
+    { id: "list", required: true },
+    { id: "info", required: false },
+  ],
+  challengesScreen: [
+    { id: "list", required: true },
+    { id: "info", required: false },
+  ],
+  chat: [
+    { id: "thread", required: true },
+    { id: "help", required: false },
+  ],
+  notifications: [
+    { id: "list", required: true },
+    { id: "info", required: false },
+  ],
+  search: [
+    { id: "suggestions", required: false },
+    { id: "kind_filters", required: false },
+    { id: "results", required: true },
+    { id: "info", required: false },
+  ],
+  onboarding: [],
+};
 const LIBRARY_ITEM_TYPES = new Set(["bookmark", "note", "recent", "challenge", "revision"]);
 const MAX_SETTING_BYTES = 512 * 1024;
 const CORS_HEADERS = {
@@ -146,7 +242,7 @@ Deno.serve(async (req) => {
       return json({ items: data || [] });
     }
 
-    const settingMatch = path.match(/^\/admin\/site-settings\/([a-z-]+)(?:\/(publish))?$/);
+    const settingMatch = path.match(/^\/admin\/site-settings\/([A-Za-z0-9-]+)(?:\/(publish))?$/);
     if (settingMatch) {
       if (!isAdmin) return json({ error: "Admin access denied." }, 403);
       const key = settingMatch[1];
@@ -442,8 +538,96 @@ function validateSettingDraft(key, draft) {
     if (isArray(draft.keywords) && draft.keywords.length > 20) return "Keep keywords to 20 items or fewer.";
   } else if (key === "media") {
     if (!isArray(draft.items) || draft.items.length > 300) return "Media library must be an items array (300 max).";
+  } else if (SCREEN_SETTING_KEYS.includes(key)) {
+    return validateScreenDraft(key, draft);
   }
   return "";
+}
+
+/**
+ * Server-side validation for Screen Studio documents. Presentation only: the
+ * server never lets a UI document change scoring, enrolment or access rules, it
+ * simply refuses malformed or oversized presentation payloads.
+ */
+function validateScreenDraft(key, draft) {
+  const sections = SCREEN_SECTIONS[key] || [];
+  if (typeof draft.pageTitle !== "string" || !draft.pageTitle.trim()) return "The page heading is required.";
+  if (draft.pageTitle.length > 120) return "The page heading must be 120 characters or fewer.";
+  if (typeof draft.pageSubtitle === "string" && draft.pageSubtitle.length > 300) return "The page description is too long.";
+  if (typeof draft.eyebrow === "string" && draft.eyebrow.length > 60) return "The small label above the heading is too long.";
+  if (draft.itemLimit !== undefined) {
+    const limit = Number(draft.itemLimit);
+    if (!Number.isFinite(limit) || limit < 0 || limit > 48) return "The item limit must be between 0 and 48.";
+  }
+  if (draft.layout !== undefined && !["grid", "list", "compact"].includes(String(draft.layout))) {
+    return "Choose a supported layout.";
+  }
+  if (draft.announcement !== undefined) {
+    const announcement = draft.announcement;
+    if (!announcement || typeof announcement !== "object" || isArray(announcement)) return "The announcement banner is malformed.";
+    if (announcement.enabled === true) {
+      if (typeof announcement.title !== "string" || !announcement.title.trim()) {
+        return "Announcement title is required when the banner is enabled.";
+      }
+      if (announcement.title.length > 140) return "Announcement titles must be 140 characters or fewer.";
+      if (typeof announcement.body === "string" && announcement.body.length > 600) return "Announcement text is too long.";
+      const ctaLabel = typeof announcement.ctaLabel === "string" ? announcement.ctaLabel.trim() : "";
+      const ctaHref = typeof announcement.ctaHref === "string" ? announcement.ctaHref.trim() : "";
+      if (ctaLabel && !ctaHref) return "The announcement button needs a destination.";
+      if (ctaHref && !isSafeLink(ctaHref)) return "The announcement button must use an internal route or an https:// link.";
+    }
+  }
+  if (draft.sections !== undefined) {
+    if (!isArray(draft.sections)) return "Sections must be a list.";
+    if (draft.sections.length > 24) return "Too many sections.";
+    const seen = new Set();
+    for (const item of draft.sections) {
+      if (!item || typeof item !== "object" || isArray(item)) return "A section entry is malformed.";
+      const id = String(item.id || "");
+      if (!sections.some((entry) => entry.id === id)) return `“${id || "unknown"}” is not a supported section.`;
+      if (seen.has(id)) return "Duplicate sections are not allowed.";
+      seen.add(id);
+      if (typeof item.title === "string" && item.title.length > 120) return "Section headings must be 120 characters or fewer.";
+      if (typeof item.subtitle === "string" && item.subtitle.length > 240) return "Section descriptions must be 240 characters or fewer.";
+      const required = sections.find((entry) => entry.id === id)?.required;
+      if (required && item.visible === false) return `The “${id}” section cannot be hidden.`;
+    }
+    for (const entry of sections) {
+      if (entry.required && !seen.has(entry.id)) return `The “${entry.id}” section is required.`;
+    }
+  }
+  if (key === "search" && draft.suggestions !== undefined) {
+    if (!isArray(draft.suggestions) || draft.suggestions.length > 10) return "Suggested searches must be a list (10 max).";
+    if (draft.suggestions.some((item) => typeof item !== "string" || !item.trim() || item.length > 60)) {
+      return "Every suggested search needs text (60 characters max).";
+    }
+  }
+  if (key === "testPlayer" && draft.instructions !== undefined) {
+    if (!isArray(draft.instructions) || draft.instructions.length > 8) return "Instructions must be a list (8 max).";
+    if (draft.instructions.some((item) => typeof item !== "string" || !item.trim() || item.length > 240)) {
+      return "Every instruction needs text (240 characters max).";
+    }
+  }
+  if (key === "onboarding" && draft.features !== undefined) {
+    if (!isArray(draft.features) || draft.features.length > 5) return "Highlights must be a list (5 max).";
+    for (const item of draft.features) {
+      if (!item || typeof item !== "object" || typeof item.title !== "string" || !item.title.trim()) {
+        return "Every onboarding highlight needs a title.";
+      }
+    }
+  }
+  return "";
+}
+
+function isSafeLink(value) {
+  if (typeof value !== "string" || !value.trim()) return false;
+  if (value.startsWith("/") && !value.startsWith("//")) return !/[<>"']/.test(value);
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch (_) {
+    return false;
+  }
 }
 
 async function logActivity(db, claims, action, targetType, targetId, summary) {

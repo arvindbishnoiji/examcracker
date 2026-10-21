@@ -19,18 +19,13 @@ import {
   Trophy,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useSiteConfig } from '@/context/SiteConfigContext';
 import { saveStudentProfile } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import { ScreenAnnouncementBanner, ScreenHelpNote } from '@/components/student/ScreenScaffold';
 
 type Step = 1 | 2 | 3 | 4;
 const DRAFT_KEY = 'ec-onboarding-draft-v1';
-
-const STEP_LABELS: Record<Step, string> = {
-  1: 'Your name',
-  2: 'Your exam',
-  3: 'Your class',
-  4: 'Confirm',
-};
 
 interface Draft {
   displayName: string;
@@ -41,8 +36,16 @@ interface Draft {
 
 export default function OnboardingPage() {
   const { user, profile, initializing, bootstrapStatus, bootstrapError, refresh, isAdmin, signOut } = useAuth();
+  const { config } = useSiteConfig();
+  const screen = config.onboarding;
   const router = useRouter();
   const { push } = useToast();
+  const stepLabels: Record<Step, string> = {
+    1: 'Your name',
+    2: 'Your exam',
+    3: 'Your class',
+    4: 'Confirm',
+  };
 
   const [displayName, setDisplayName] = useState('');
   const [exam, setExam] = useState<'JEE' | 'NEET'>('JEE');
@@ -221,12 +224,12 @@ export default function OnboardingPage() {
               className="grid h-10 w-10 place-items-center rounded-2xl text-sm font-extrabold shadow-sm"
               style={{ background: 'linear-gradient(135deg, var(--ec-brand), var(--ec-secondary))', color: 'var(--ec-on-brand)' }}
             >
-              EC
+              {config.theme.logoText || 'EC'}
             </span>
             <span>
-              <span className="block text-sm font-extrabold leading-tight">Exam Cracker</span>
+              <span className="block text-sm font-extrabold leading-tight">{config.theme.brandName}</span>
               <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-500">
-                JEE · NEET · Class 11 &amp; 12
+                {config.theme.tagline}
               </span>
             </span>
           </Link>
@@ -248,31 +251,21 @@ export default function OnboardingPage() {
 
         <div className="mt-6 grid flex-1 items-stretch gap-5 lg:mt-10 lg:grid-cols-[1.05fr_1fr]">
           {/* Brand / progression panel */}
+          {screen.showBrandPanel ? (
           <section className="relative hidden overflow-hidden rounded-[28px] border border-ink-100 p-8 lg:flex lg:flex-col ec-hero-gradient">
             <div className="ec-hero-lines pointer-events-none absolute inset-0 opacity-60" aria-hidden />
             <div className="relative">
               <span className="ec-chip">
-                <Sparkles size={12} /> Your learning path starts here
+                <Sparkles size={12} /> {screen.brandPanelEyebrow}
               </span>
               <h1 className="mt-5 max-w-lg text-[34px] font-extrabold leading-[1.08] tracking-[-0.03em]">
-                One setup.
-                <br />
-                Content that actually
-                <br />
-                fits your exam.
+                {screen.brandPanelTitle}
               </h1>
-              <p className="mt-4 max-w-md text-sm leading-relaxed text-ink-600">
-                We personalise your dashboard, batches, lectures, tests and leaderboards using your exam and class.
-                This required setup keeps every student&apos;s feed focused.
-              </p>
+              <p className="mt-4 max-w-md text-sm leading-relaxed text-ink-600">{screen.brandPanelBody}</p>
             </div>
 
             <div className="relative mt-8 space-y-3">
-              {[
-                { icon: <Target size={16} />, title: 'Today’s goal', text: 'A daily target matched to your preparation track.' },
-                { icon: <GraduationCap size={16} />, title: 'Your batch & lectures', text: 'Only the material you are eligible for appears.' },
-                { icon: <Trophy size={16} />, title: 'Levels & leaderboards', text: 'Progress from your real test attempts and lesson activity.' },
-              ].map((item) => (
+              {screen.features.map((item, index) => ({ ...item, icon: [<Target key="t" size={16} />, <GraduationCap key="g" size={16} />, <Trophy key="r" size={16} />][index % 3] })).map((item) => (
                 <div key={item.title} className="flex items-start gap-3 rounded-2xl border border-white/60 bg-white/55 px-3.5 py-3 backdrop-blur-sm">
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand-600 text-white">{item.icon}</span>
                   <span>
@@ -293,13 +286,14 @@ export default function OnboardingPage() {
               </div>
             </div>
           </section>
+          ) : null}
 
           {/* Form panel */}
           <section className="ec-card flex flex-col p-5 sm:p-7 lg:p-8">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-brand-600">Required setup</p>
-                <h2 className="mt-1 text-2xl font-extrabold tracking-tight">Complete your profile</h2>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-brand-600">{screen.formEyebrow}</p>
+                <h2 className="mt-1 text-2xl font-extrabold tracking-tight">{screen.formTitle}</h2>
               </div>
               <span className="rounded-full border border-ink-200 bg-ink-50 px-3 py-1 text-[11px] font-bold text-ink-600">
                 Step {step} of 4
@@ -324,13 +318,17 @@ export default function OnboardingPage() {
                 </div>
               ))}
             </div>
-            <p className="mt-2 text-[11px] font-medium text-ink-500">{STEP_LABELS[step]}</p>
+            <p className="mt-2 text-[11px] font-medium text-ink-500">{stepLabels[step]}</p>
 
-            {restored && step === 1 && (
+            <div className="mt-3 empty:hidden">
+              <ScreenAnnouncementBanner announcement={screen.announcement} />
+            </div>
+
+            {restored && step === 1 && screen.restoreNote ? (
               <p className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] text-sky-800">
-                We restored your previous setup draft. You can change anything before finishing.
+                {screen.restoreNote}
               </p>
-            )}
+            ) : null}
 
             <form onSubmit={handleSubmit} className="mt-5 flex flex-1 flex-col">
               {error && (
@@ -349,9 +347,9 @@ export default function OnboardingPage() {
                   <div className="ec-fade-in space-y-4">
                     <div>
                       <label htmlFor="onboarding-name" className="block text-sm font-semibold text-ink-800">
-                        What should we call you?
+                        {screen.nameQuestion}
                       </label>
-                      <p className="mt-1 text-xs text-ink-500">This appears on your profile, leaderboard and doubt chat.</p>
+                      <p className="mt-1 text-xs text-ink-500">{screen.nameHelp}</p>
                       <input
                         id="onboarding-name"
                         value={displayName}
@@ -359,7 +357,7 @@ export default function OnboardingPage() {
                           setDisplayName(event.target.value);
                           setFieldError(null);
                         }}
-                        placeholder="Your full name"
+                        placeholder={screen.namePlaceholder}
                         autoComplete="name"
                         autoFocus
                         maxLength={80}
@@ -378,8 +376,8 @@ export default function OnboardingPage() {
 
                 {step === 2 && (
                   <fieldset className="ec-fade-in">
-                    <legend className="text-sm font-semibold text-ink-800">Which exam are you preparing for?</legend>
-                    <p className="mt-1 text-xs text-ink-500">This controls your lectures, batches, tests and leaderboard.</p>
+                    <legend className="text-sm font-semibold text-ink-800">{screen.examQuestion}</legend>
+                    <p className="mt-1 text-xs text-ink-500">{screen.examHelp}</p>
                     <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
                       {[
                         { value: 'JEE' as const, title: 'JEE', subtitle: 'Engineering', icon: <Atom size={20} /> },
@@ -415,8 +413,8 @@ export default function OnboardingPage() {
 
                 {step === 3 && (
                   <fieldset className="ec-fade-in">
-                    <legend className="text-sm font-semibold text-ink-800">Which class are you in?</legend>
-                    <p className="mt-1 text-xs text-ink-500">Choose your current academic year.</p>
+                    <legend className="text-sm font-semibold text-ink-800">{screen.classQuestion}</legend>
+                    <p className="mt-1 text-xs text-ink-500">{screen.classHelp}</p>
                     <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
                       {[
                         { value: '11' as const, title: 'Class 11', subtitle: 'First year of preparation' },
@@ -479,10 +477,7 @@ export default function OnboardingPage() {
                         </li>
                       ))}
                     </ul>
-                    <p className="text-[10px] leading-relaxed text-ink-400">
-                      By continuing you confirm this setup is yours. Access is verified against your signed Firebase
-                      session and enforced by the server.
-                    </p>
+                    <p className="text-[10px] leading-relaxed text-ink-400">{screen.confirmNote}</p>
                   </div>
                 )}
               </div>
@@ -494,10 +489,10 @@ export default function OnboardingPage() {
                     onClick={back}
                     className="ec-btn inline-flex items-center gap-1.5 border border-ink-200 bg-[var(--ec-surface)] px-4 py-2.5 text-sm font-semibold"
                   >
-                    <ArrowLeft size={15} /> Back
+                    <ArrowLeft size={15} /> {screen.backLabel}
                   </button>
                 ) : (
-                  <span className="text-[11px] text-ink-400">Required — no skip</span>
+                  <span className="text-[11px] text-ink-400">{screen.requiredNotice}</span>
                 )}
                 {step < 4 ? (
                   <button
@@ -505,7 +500,7 @@ export default function OnboardingPage() {
                     onClick={next}
                     className="ec-btn inline-flex items-center gap-1.5 bg-brand-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-brand-700"
                   >
-                    Continue <ArrowRight size={15} />
+                    {screen.continueLabel} <ArrowRight size={15} />
                   </button>
                 ) : (
                   <button
@@ -514,7 +509,7 @@ export default function OnboardingPage() {
                     className="ec-btn inline-flex items-center gap-2 bg-brand-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-brand-700 disabled:opacity-60"
                   >
                     {loading ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-                    {loading ? 'Building your dashboard…' : 'Enter my dashboard'}
+                    {loading ? screen.finishingLabel : screen.finishLabel}
                   </button>
                 )}
               </div>
@@ -522,9 +517,10 @@ export default function OnboardingPage() {
           </section>
         </div>
 
-        <p className="mt-4 text-center text-[10px] text-ink-400">
-          Your exam and class choices are required to unlock personalised student content.
-        </p>
+        <p className="mt-4 text-center text-[10px] text-ink-400">{screen.footerNote}</p>
+        <div className="mx-auto mt-4 w-full max-w-3xl">
+          <ScreenHelpNote help={screen.help} />
+        </div>
       </div>
     </div>
   );

@@ -16,6 +16,11 @@ import type {
 import { isSafeHttpUrl, isValidInternalDeepLink } from './validation';
 import { isHexColor } from './theme';
 import { parseSchedule } from './site-config';
+import {
+  SCREEN_DEFINITIONS,
+  type ScreenKey,
+  screenDefinition,
+} from './screen-config';
 
 export interface ValidationResult {
   ok: boolean;
@@ -312,6 +317,356 @@ export function validateMedia(config: MediaConfig): ValidationResult {
   return result(errors);
 }
 
+
+// ---------------------------------------------------------------------------
+// Screen Studio documents
+// ---------------------------------------------------------------------------
+
+const SCREEN_KEYS: ScreenKey[] = SCREEN_DEFINITIONS.map((definition) => definition.key);
+
+export function isScreenSettingKey(key: SiteSettingKey): key is ScreenKey {
+  return (SCREEN_KEYS as SiteSettingKey[]).includes(key);
+}
+
+function validateScreenAnnouncement(value: unknown, label: string): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return [`${label}: the announcement banner is malformed.`];
+  }
+  const raw = value as Record<string, unknown>;
+  const errors: string[] = [];
+  if (raw.enabled !== true) return errors;
+  const title = typeof raw.title === 'string' ? raw.title.trim() : '';
+  if (!title) errors.push(`${label}: announcement title is required when the banner is enabled.`);
+  if (title.length > 140) errors.push(`${label}: announcement title must be 140 characters or fewer.`);
+  if (typeof raw.body === 'string' && raw.body.length > 600) {
+    errors.push(`${label}: announcement message must be 600 characters or fewer.`);
+  }
+  const ctaLabel = typeof raw.ctaLabel === 'string' ? raw.ctaLabel.trim() : '';
+  if (ctaLabel && !isEmptyOrInternalLink(raw.ctaHref)) {
+    errors.push(`${label}: announcement button needs a valid internal route or https:// link.`);
+  }
+  return errors;
+}
+
+function validateScreenSections(key: ScreenKey, value: unknown): string[] {
+  const definition = screenDefinition(key);
+  const errors: string[] = [];
+  if (!Array.isArray(value)) {
+    return [`${definition.label}: sections must be a list.`];
+  }
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (!item || typeof item !== 'object') {
+      errors.push(`${definition.label}: a section entry is malformed.`);
+      continue;
+    }
+    const id = String((item as Record<string, unknown>).id || '');
+    if (!definition.sections.some((entry) => entry.id === id)) {
+      errors.push(`${definition.label}: “${id || 'unknown'}” is not a supported section.`);
+      continue;
+    }
+    seen.add(id);
+    const title = (item as Record<string, unknown>).title;
+    if (typeof title === 'string' && title.length > 120) {
+      errors.push(`${definition.label}: section headings must be 120 characters or fewer.`);
+    }
+    const subtitle = (item as Record<string, unknown>).subtitle;
+    if (typeof subtitle === 'string' && subtitle.length > 240) {
+      errors.push(`${definition.label}: section descriptions must be 240 characters or fewer.`);
+    }
+  }
+  for (const entry of definition.sections) {
+    if (entry.required && !seen.has(entry.id)) {
+      errors.push(`${definition.label}: the “${entry.label}” section is required.`);
+    }
+    if (entry.required) {
+      const match = value.find(
+        (item) => item && typeof item === 'object' && String((item as Record<string, unknown>).id) === entry.id
+      ) as Record<string, unknown> | undefined;
+      if (match && match.visible === false) {
+        errors.push(`${definition.label}: “${entry.label}” cannot be hidden because the screen needs it.`);
+      }
+    }
+  }
+  return errors;
+}
+
+function validateScreenCommon(key: ScreenKey, value: unknown): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return [`${screenDefinition(key).label}: the screen configuration must be an object.`];
+  }
+  const raw = value as Record<string, unknown>;
+  const definition = screenDefinition(key);
+  const errors: string[] = [];
+
+  if (typeof raw.pageTitle !== 'string' || !raw.pageTitle.trim()) {
+    errors.push(`${definition.label}: the page heading is required.`);
+  } else if (raw.pageTitle.length > 120) {
+    errors.push(`${definition.label}: the page heading must be 120 characters or fewer.`);
+  }
+  if (typeof raw.pageSubtitle === 'string' && raw.pageSubtitle.length > 300) {
+    errors.push(`${definition.label}: the page description must be 300 characters or fewer.`);
+  }
+  if (typeof raw.eyebrow === 'string' && raw.eyebrow.length > 60) {
+    errors.push(`${definition.label}: the small label above the heading must be 60 characters or fewer.`);
+  }
+  if (raw.itemLimit !== undefined) {
+    const limit = Number(raw.itemLimit);
+    if (!Number.isFinite(limit) || limit < 0 || limit > 48) {
+      errors.push(`${definition.label}: the item limit must be between 0 and 48.`);
+    }
+  }
+  if (raw.layout !== undefined && !['grid', 'list', 'compact'].includes(String(raw.layout))) {
+    errors.push(`${definition.label}: choose a supported layout.`);
+  }
+  for (const field of ['emptyTitle', 'emptyBody', 'noResultsTitle', 'noResultsBody'] as const) {
+    const limit = field.toLowerCase().includes('title') ? 120 : 400;
+    const fieldValue = raw[field];
+    if (typeof fieldValue === 'string' && fieldValue.length > limit) {
+      errors.push(`${definition.label}: “${field}” must be ${limit} characters or fewer.`);
+    }
+  }
+  if (raw.help && typeof raw.help === 'object' && !Array.isArray(raw.help)) {
+    const help = raw.help as Record<string, unknown>;
+    if (typeof help.title === 'string' && help.title.length > 120) {
+      errors.push(`${definition.label}: the help heading must be 120 characters or fewer.`);
+    }
+    if (typeof help.body === 'string' && help.body.length > 600) {
+      errors.push(`${definition.label}: the help text must be 600 characters or fewer.`);
+    }
+  }
+  errors.push(...validateScreenAnnouncement(raw.announcement, definition.label));
+  errors.push(...validateScreenSections(key, raw.sections));
+  return errors;
+}
+
+function shortText(
+  raw: Record<string, unknown>,
+  key: string,
+  label: string,
+  max = 60,
+  required = false
+): string | null {
+  const value = raw[key];
+  if (value === undefined) return null;
+  if (typeof value !== 'string') return `${label} must be text.`;
+  const trimmed = value.trim();
+  if (required && !trimmed) return `${label} is required.`;
+  if (trimmed.length > max) return `${label} must be ${max} characters or fewer.`;
+  return null;
+}
+
+function collect(errors: string[], checks: Array<string | null>): void {
+  for (const error of checks) if (error) errors.push(error);
+}
+
+function validateScreenLabels(
+  raw: Record<string, unknown>,
+  field: string,
+  label: string,
+  expectedKeys: string[]
+): string[] {
+  if (raw[field] === undefined) return [];
+  const value = raw[field];
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return [`${label}: the tab labels are malformed.`];
+  }
+  const errors: string[] = [];
+  for (const key of expectedKeys) {
+    const entry = (value as Record<string, unknown>)[key];
+    if (typeof entry !== 'string' || !entry.trim()) {
+      errors.push(`${label}: the “${key}” label is required.`);
+    } else if (entry.length > 40) {
+      errors.push(`${label}: the “${key}” label must be 40 characters or fewer.`);
+    }
+  }
+  return errors;
+}
+
+export function validateScreen(key: ScreenKey, value: unknown): ValidationResult {
+  const errors = validateScreenCommon(key, value);
+  if (errors.length && (!value || typeof value !== 'object')) return result(errors);
+  const raw = (value || {}) as Record<string, unknown>;
+  const definition = screenDefinition(key);
+
+  switch (key) {
+    case 'lectures':
+      errors.push(...validateScreenLabels(raw, 'tabLabels', definition.label, ['batches', 'series', 'lectures', 'resources']));
+      collect(errors, [
+        shortText(raw, 'mineFilterLabel', `${definition.label}: “my courses” label`, 40, true),
+        shortText(raw, 'enrolledCtaLabel', `${definition.label}: enrolled button label`, 40, true),
+        shortText(raw, 'watchCtaLabel', `${definition.label}: watch button label`, 40, true),
+        shortText(raw, 'accessNoteTitle', `${definition.label}: access note heading`, 120),
+        shortText(raw, 'accessNoteBody', `${definition.label}: access note`, 800),
+      ]);
+      break;
+    case 'lecturePlayer':
+      collect(errors, [
+        shortText(raw, 'backLabel', `${definition.label}: back link label`, 40, true),
+        shortText(raw, 'relatedTitle', `${definition.label}: related heading`, 60, true),
+        shortText(raw, 'notesTitle', `${definition.label}: notes heading`, 80, true),
+        shortText(raw, 'progressNote', `${definition.label}: player tip`, 600),
+      ]);
+      break;
+    case 'tests':
+      errors.push(...validateScreenLabels(raw, 'filterLabels', definition.label, ['all', 'live', 'upcoming', 'completed']));
+      collect(errors, [
+        shortText(raw, 'openCtaLabel', `${definition.label}: open button label`, 40, true),
+        shortText(raw, 'attemptCtaLabel', `${definition.label}: attempt button label`, 40, true),
+        shortText(raw, 'endedCtaLabel', `${definition.label}: ended button label`, 40, true),
+        shortText(raw, 'infoBody', `${definition.label}: fairness note`, 800),
+      ]);
+      break;
+    case 'testPlayer': {
+      if (raw.instructions !== undefined) {
+        if (!Array.isArray(raw.instructions)) {
+          errors.push(`${definition.label}: instructions must be a list.`);
+        } else {
+          if (raw.instructions.length > 8) errors.push(`${definition.label}: keep instructions to 8 items or fewer.`);
+          for (const item of raw.instructions) {
+            if (typeof item !== 'string' || !item.trim()) {
+              errors.push(`${definition.label}: every instruction needs text.`);
+              break;
+            }
+            if (item.length > 240) {
+              errors.push(`${definition.label}: instructions must be 240 characters or fewer.`);
+              break;
+            }
+          }
+        }
+      }
+      collect(errors, [
+        shortText(raw, 'submitLabel', `${definition.label}: submit button label`, 40, true),
+        shortText(raw, 'submitConfirm', `${definition.label}: submission confirmation`, 240, true),
+        shortText(raw, 'paletteTitle', `${definition.label}: palette heading`, 60, true),
+        shortText(raw, 'reviewTitle', `${definition.label}: review heading`, 80, true),
+      ]);
+      if (raw.timerWarningMinutes !== undefined) {
+        const minutes = Number(raw.timerWarningMinutes);
+        if (!Number.isFinite(minutes) || minutes < 1 || minutes > 30) {
+          errors.push(`${definition.label}: the timer warning must be between 1 and 30 minutes.`);
+        }
+      }
+      break;
+    }
+    case 'leaderboard':
+      collect(errors, [
+        shortText(raw, 'selectorLabel', `${definition.label}: test selector label`, 60, true),
+        shortText(raw, 'refreshLabel', `${definition.label}: refresh label`, 40, true),
+        shortText(raw, 'browseCtaLabel', `${definition.label}: browse button label`, 40, true),
+        shortText(raw, 'noTestTitle', `${definition.label}: empty-state heading`, 120, true),
+        shortText(raw, 'noAttemptsTitle', `${definition.label}: no-attempts heading`, 120, true),
+      ]);
+      break;
+    case 'profile':
+      collect(errors, [
+        shortText(raw, 'askDoubtLabel', `${definition.label}: chat button label`, 40, true),
+        shortText(raw, 'signOutLabel', `${definition.label}: sign-out label`, 40, true),
+        shortText(raw, 'editLabel', `${definition.label}: edit button label`, 40, true),
+        shortText(raw, 'recentAttemptsTitle', `${definition.label}: attempts heading`, 80, true),
+        shortText(raw, 'levelNote', `${definition.label}: level explanation`, 400),
+      ]);
+      break;
+    case 'eventsScreen':
+      errors.push(...validateScreenLabels(raw, 'filterLabels', definition.label, ['all', 'live', 'upcoming', 'completed', 'unscheduled']));
+      collect(errors, [
+        shortText(raw, 'addToCalendarLabel', `${definition.label}: calendar button label`, 40, true),
+        shortText(raw, 'detailsCtaLabel', `${definition.label}: details button label`, 40, true),
+        shortText(raw, 'infoBody', `${definition.label}: reminder note`, 800),
+      ]);
+      break;
+    case 'challengesScreen':
+      collect(errors, [
+        shortText(raw, 'joinLabel', `${definition.label}: join button label`, 40, true),
+        shortText(raw, 'leaveLabel', `${definition.label}: leave button label`, 40, true),
+        shortText(raw, 'checklistTitle', `${definition.label}: checklist heading`, 80, true),
+        shortText(raw, 'joinHint', `${definition.label}: join hint`, 200),
+      ]);
+      break;
+    case 'chat':
+      collect(errors, [
+        shortText(raw, 'composerPlaceholder', `${definition.label}: message placeholder`, 120, true),
+        shortText(raw, 'sendLabel', `${definition.label}: send button label`, 40, true),
+        shortText(raw, 'emptyTitle', `${definition.label}: empty-state heading`, 120, true),
+        shortText(raw, 'helpBody', `${definition.label}: privacy note`, 600),
+      ]);
+      break;
+    case 'notifications':
+      collect(errors, [
+        shortText(raw, 'markReadLabel', `${definition.label}: mark-read label`, 40, true),
+        shortText(raw, 'openLabel', `${definition.label}: open label`, 40, true),
+        shortText(raw, 'unreadOnlyLabel', `${definition.label}: unread filter label`, 40, true),
+        shortText(raw, 'emptyTitle', `${definition.label}: empty-state heading`, 120, true),
+      ]);
+      break;
+    case 'search': {
+      if (raw.suggestions !== undefined) {
+        if (!Array.isArray(raw.suggestions)) {
+          errors.push(`${definition.label}: suggested searches must be a list.`);
+        } else {
+          if (raw.suggestions.length > 10) errors.push(`${definition.label}: keep suggested searches to 10 or fewer.`);
+          for (const item of raw.suggestions) {
+            if (typeof item !== 'string' || !item.trim()) {
+              errors.push(`${definition.label}: every suggested search needs text.`);
+              break;
+            }
+            if (item.length > 60) {
+              errors.push(`${definition.label}: suggested searches must be 60 characters or fewer.`);
+              break;
+            }
+          }
+        }
+      }
+      collect(errors, [
+        shortText(raw, 'searchCtaLabel', `${definition.label}: search button label`, 40, true),
+        shortText(raw, 'searchPlaceholder', `${definition.label}: search placeholder`, 120, true),
+        shortText(raw, 'infoNote', `${definition.label}: discovery note`, 400),
+      ]);
+      break;
+    }
+    case 'onboarding': {
+      if (raw.features !== undefined) {
+        if (!Array.isArray(raw.features)) {
+          errors.push(`${definition.label}: highlights must be a list.`);
+        } else {
+          if (raw.features.length > 5) errors.push(`${definition.label}: keep highlights to 5 or fewer.`);
+          for (const item of raw.features) {
+            if (!item || typeof item !== 'object') {
+              errors.push(`${definition.label}: a highlight is malformed.`);
+              break;
+            }
+            const entry = item as Record<string, unknown>;
+            if (typeof entry.title !== 'string' || !entry.title.trim()) {
+              errors.push(`${definition.label}: every highlight needs a title.`);
+              break;
+            }
+            if (typeof entry.text === 'string' && entry.text.length > 240) {
+              errors.push(`${definition.label}: highlight text must be 240 characters or fewer.`);
+              break;
+            }
+          }
+        }
+      }
+      collect(errors, [
+        shortText(raw, 'brandPanelTitle', `${definition.label}: welcome heading`, 180, true),
+        shortText(raw, 'formTitle', `${definition.label}: form heading`, 120, true),
+        shortText(raw, 'nameQuestion', `${definition.label}: name question`, 120, true),
+        shortText(raw, 'examQuestion', `${definition.label}: exam question`, 120, true),
+        shortText(raw, 'classQuestion', `${definition.label}: class question`, 120, true),
+        shortText(raw, 'finishLabel', `${definition.label}: finish button label`, 60, true),
+        shortText(raw, 'continueLabel', `${definition.label}: continue button label`, 40, true),
+        shortText(raw, 'backLabel', `${definition.label}: back button label`, 40, true),
+        shortText(raw, 'footerNote', `${definition.label}: footer note`, 300),
+      ]);
+      break;
+    }
+    default:
+      break;
+  }
+
+  return result(errors);
+}
+
 export function validateSettingValue(key: SiteSettingKey, value: unknown): ValidationResult {
   try {
     return validateSettingValueUnsafe(key, value);
@@ -348,6 +703,7 @@ function validateSettingValueUnsafe(key: SiteSettingKey, value: unknown): Valida
     case 'media':
       return validateMedia(value as MediaConfig);
     default:
+      if (isScreenSettingKey(key)) return validateScreen(key, value);
       return result(['Unknown settings key.']);
   }
 }
