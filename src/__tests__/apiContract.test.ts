@@ -43,11 +43,11 @@ describe('final architecture', () => {
     const pagesApi = read('cloudflare-pages/pages-api-entry.mjs');
     expect(pagesApi).toContain('handleApiRequest');
     expect(pagesApi).toContain('env.DB');
-    expect(pagesApi).not.toContain('EXAM_CRACKER_WEB');
+    expect(pagesApi).toContain('EXAM_CRACKER_WEB');
+    expect(pagesApi).toContain('env.EXAM_CRACKER_WEB.fetch');
 
     const route = read('cloudflare-pages/functions/api/ec/[[path]].js');
     expect(route).toContain('pages-api-entry.mjs');
-    expect(route).not.toContain('EXAM_CRACKER_WEB');
 
     const buildScript = read('cloudflare-pages/build.sh');
     expect(buildScript).toContain('esbuild');
