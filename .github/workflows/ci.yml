@@ -95,7 +95,7 @@ jobs:
           }
           const hasAsset = (dir) => fs.readdirSync(dir, { withFileTypes: true }).some((entry) => {
             const file = path.join(dir, entry.name);
-            return entry.isDirectory() ? hasAsset(file) : /\\.(?:js|css)$/.test(entry.name);
+            return entry.isDirectory() ? hasAsset(file) : entry.name.endsWith('.js') || entry.name.endsWith('.css');
           });
           if (!hasAsset(path.join(output, '_next', 'static'))) {
             throw new Error('Pages static asset directory contains no JS/CSS files.');
