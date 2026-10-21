@@ -16,7 +16,7 @@ import { isSafeHttpUrl, validateQuestionsJson } from '@/lib/validation';
 import type { CourseCatalogItem } from '@/types';
 import YoutubeThumbnail from '@/components/YoutubeThumbnail';
 
-export type AdminTab = 'overview'|'goals'|'batches'|'lectures'|'series'|'tests'|'events'|'announcements'|'students'|'chat';
+export type AdminTab = 'overview'|'goals'|'batches'|'lectures'|'series'|'tests'|'events'|'announcements'|'students'|'feedback';
 
 export default function AdminPage({ embedded = false, initialTab }: { embedded?: boolean; initialTab?: AdminTab } = {}){
   const { user, isAdmin, initializing } = useAuth();
@@ -51,7 +51,7 @@ export default function AdminPage({ embedded = false, initialTab }: { embedded?:
     {id:'events', label:'Events'},
     {id:'announcements', label:'Announcements'},
     {id:'students', label:'Students'},
-    {id:'chat', label:'Chat'},
+    {id:'feedback', label:'Feedback'},
   ];
 
   return (
@@ -90,7 +90,7 @@ export default function AdminPage({ embedded = false, initialTab }: { embedded?:
         {tab==='events' && <AdminContentTab kind="event" />}
         {tab==='announcements' && <AdminAnnouncementsTab />}
         {tab==='students' && <AdminStudentsTab />}
-        {tab==='chat' && <AdminChatTab />}
+        {tab==='feedback' && <AdminFeedbackTab />}
       </div>
     </div>
   );
@@ -907,7 +907,7 @@ function AdminStudentsTab(){
   );
 }
 
-export function AdminChatTab(){
+export function AdminFeedbackTab(){
   const { user } = useAuth();
   const { push } = useToast();
   const [threads, setThreads] = useState<any[]>([]);
@@ -922,7 +922,7 @@ export function AdminChatTab(){
     import('@/lib/firestore').then(({ subscribeToAllStudentThreads }) => {
       if (!cancelled) unsub = subscribeToAllStudentThreads(setThreads);
     }).catch(() => {
-      if (!cancelled) push('Unable to load live student threads', 'error');
+      if (!cancelled) push('Unable to load student feedback', 'error');
     });
     return () => { cancelled = true; unsub?.(); };
   },[push]);
@@ -931,10 +931,10 @@ export function AdminChatTab(){
     if(!selected || !user) return;
     let cancelled = false;
     let unsub: (() => void) | undefined;
-    import('@/lib/firestore').then(({ subscribeToStudentMessages }) => {
-      if (!cancelled) unsub = subscribeToStudentMessages(selected, setMessages);
+    import('@/lib/firestore').then(({ subscribeToFeedbackMessages }) => {
+      if (!cancelled) unsub = subscribeToFeedbackMessages(selected, setMessages);
     }).catch(() => {
-      if (!cancelled) push('Unable to load student messages', 'error');
+      if (!cancelled) push('Unable to load feedback details', 'error');
     });
     return () => { cancelled = true; unsub?.(); };
   },[selected, user, push]);
@@ -950,11 +950,11 @@ export function AdminChatTab(){
   return (
     <div className="grid md:grid-cols-[340px_1fr] gap-4">
       <Card className="p-0 overflow-hidden">
-        <div className="p-3 border-b border-ink-100 bg-ink-50 flex items-center justify-between"><h3 className="font-semibold">Student threads</h3><Badge>{threads.length}</Badge></div>
+        <div className="p-3 border-b border-ink-100 bg-ink-50 flex items-center justify-between"><h3 className="font-semibold">Feedback inbox</h3><Badge>{threads.length}</Badge></div>
         <div className="max-h-[60vh] overflow-auto">
-          {threads.length===0 && <p className="p-4 text-sm text-ink-500 text-center">No threads yet</p>}
+          {threads.length===0 && <p className="p-4 text-sm text-ink-500 text-center">No feedback submitted yet</p>}
           {threads.map(t=>(
-            <button key={t.id} onClick={()=> setSelected(t.studentUid)} className={`w-full text-left p-3 border-b border-ink-100 hover:bg-ink-50 ${selected===t.studentUid?'bg-brand-50':''}`}>
+            <button key={t.id} onClick={()=> setSelected(t.id)} className={`w-full text-left p-3 border-b border-ink-100 hover:bg-ink-50 ${selected===t.id?'bg-brand-50':''}`}>
               <p className="font-semibold text-sm truncate">{t.studentName || t.studentUid.slice(0,8)} {t.unreadByAdmin && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-red-500" />}</p>
               <p className="text-xs text-ink-500 truncate">{t.lastMessageText || 'No messages'}</p>
               <p className="text-[11px] text-ink-400">{t.lastMessageAt? new Date(t.lastMessageAt).toLocaleString('en-IN',{ timeZone:'Asia/Kolkata'}) : ''} • {t.exam||''} {t.classLevel||''}</p>
@@ -964,9 +964,9 @@ export function AdminChatTab(){
       </Card>
 
       <Card className="p-0 overflow-hidden flex flex-col min-h-[60vh]">
-        {!selected ? <div className="flex-1 grid place-items-center text-sm text-ink-500">Select a student to view chat (admin can read/respond to all threads per Firestore rules).</div> : (
+        {!selected ? <div className="flex-1 grid place-items-center text-sm text-ink-500">Select a feedback item to review and respond. Feedback and replies are stored in Cloudflare D1.</div> : (
           <>
-            <div className="p-3 border-b border-ink-100 bg-ink-50 flex items-center justify-between"><h3 className="font-semibold">Chat • {selected.slice(0,8)}</h3><Badge variant="info">Admin</Badge></div>
+            <div className="p-3 border-b border-ink-100 bg-ink-50 flex items-center justify-between"><h3 className="font-semibold">Feedback • {selected.slice(0,8)}</h3><Badge variant="info">Admin</Badge></div>
             <div className="flex-1 overflow-auto p-4 space-y-3 bg-ink-50">
               {messages.map(m=>(
                 <div key={m.id} className={`flex ${m.senderRole==='admin' ? 'justify-end':'justify-start'}`}>
@@ -979,7 +979,7 @@ export function AdminChatTab(){
               {messages.length===0 && <p className="text-sm text-ink-500 text-center py-10">No messages in this thread.</p>}
             </div>
             <form onSubmit={handleReply} className="p-3 border-t border-ink-100 flex gap-2 bg-white">
-              <input value={reply} onChange={e=> setReply(e.target.value)} placeholder="Reply as admin..." maxLength={5000} className="flex-1 rounded-full border border-ink-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+              <input value={reply} onChange={e=> setReply(e.target.value)} placeholder="Reply to feedback..." maxLength={5000} className="flex-1 rounded-full border border-ink-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
               <Button type="submit" loading={sending}>Send</Button>
             </form>
           </>
