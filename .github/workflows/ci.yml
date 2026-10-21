@@ -53,9 +53,12 @@ jobs:
           node --check 'cloudflare-pages/functions/[[path]].js'
           node --check cloudflare-pages/functions/index.js
           node --check 'cloudflare-pages/functions/api/ec/[[path]].js'
+          node --check cloudflare-pages/pages-api-entry.mjs
           node --check cloudflare-pages/stage-assets.mjs
-          grep -q 'workers/ec-api/src/index.js' cloudflare-pages/build.sh
-          grep -q 'workers/ec-api/src/drive.js' cloudflare-pages/build.sh
+          npx esbuild cloudflare-pages/pages-api-entry.mjs --bundle --format=esm --platform=browser --target=es2022 --outfile=/tmp/exam-cracker-pages-api.js
+          node --check /tmp/exam-cracker-pages-api.js
+          grep -q 'pages-api-entry.mjs' cloudflare-pages/build.sh
+          grep -q 'esbuild' cloudflare-pages/build.sh
           bash -n cloudflare-pages/build.sh
           node -e "const fs = require('node:fs'); const r = JSON.parse(fs.readFileSync('cloudflare-pages/public/_routes.json', 'utf8')); if (r.version !== 1 || !r.include.includes('/*') || r.exclude.length !== 0) process.exit(1); console.log('Pages proxy route template valid')"
           test ! -f cloudflare-pages/wrangler.toml
