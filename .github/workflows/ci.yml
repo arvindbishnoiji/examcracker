@@ -24,6 +24,16 @@ jobs:
       - name: Verify jsdom available
         run: npx vitest --version && node -e "require('jsdom'); console.log('jsdom ok')"
 
+      - name: Validate D1 API syntax and migration locally
+        run: |
+          node --check workers/ec-api/src/index.js
+          npx wrangler d1 migrations apply exam-cracker-db --local
+          schema_output="$(npx wrangler d1 execute exam-cracker-db --local --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('student_profiles','course_catalog','site_settings','feedback_threads','feedback_messages','notifications') ORDER BY name")"
+          echo "$schema_output"
+          for table in student_profiles course_catalog site_settings feedback_threads feedback_messages notifications; do
+            grep -q "$table" <<<"$schema_output"
+          done
+
       - name: Validate Cloudflare media proxy JavaScript
         run: node --check workers/ec-content-api/src/index.js
 
