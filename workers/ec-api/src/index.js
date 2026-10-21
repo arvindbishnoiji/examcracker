@@ -415,8 +415,7 @@ export async function handleApiRequest(request, env) {
         const body = await readBody(request);
         const messageText = String(body.message || body.text || "").trim();
         if (messageText.length < 3 || messageText.length > 5000) return fail("Feedback must be between 3 and 5000 characters.");
-        const thread = await ensureFeedbackThread(db, user, body);
-        // A feedback ticket is created for each first submission; follow-up uses /feedback/:id/messages.
+        // A separate D1 feedback ticket is created for each submission.
         const timestamp = now();
         const actualId = uuid();
         await run(db, "INSERT INTO feedback_threads (id,firebase_uid,category,subject,status,last_message_text,last_message_at,unread_by_admin,unread_by_student,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -638,7 +637,7 @@ export async function handleApiRequest(request, env) {
         await run(db,"UPDATE enrollments SET active=1,status='active',revoked_at=NULL,updated_at=? WHERE id=?",now(),id);
         return json({item:await first(db,"SELECT * FROM enrollments WHERE id=?",id)});
       }
-      if (path === "/admin/enrollment-history" && method === "GET") return json({items:await all(db,"SELECT * FROM enrollment_events ORDER BY created_at DESC LIMIT 250")});
+      if ((path === "/admin/enrollment-history" || path === "/admin/enrollments/history") && method === "GET") {\n        const limitN=Math.min(500,Math.max(1,Number(url.searchParams.get("limit")||120)));\n        return json({items:await all(db,"SELECT * FROM enrollment_events ORDER BY created_at DESC LIMIT ?",limitN)});\n      }
       if (path === "/admin/enrollment-rules" && method === "GET") return json({items:await all(db,"SELECT * FROM enrollment_rules ORDER BY created_at DESC")});
       if (segments[1] === "enrollment-rules" && segments.length === 3 && method === "PATCH") {
         const b=await readBody(request); await run(db,"UPDATE enrollment_rules SET active=?,updated_at=? WHERE id=?",b.active?1:0,now(),segments[2]);
@@ -672,7 +671,7 @@ export async function handleApiRequest(request, env) {
         const b=await readBody(request),status=String(b.status||"");
         if(!["open","in_progress","resolved"].includes(status)) return fail("Invalid feedback status.");
         await run(db,"UPDATE feedback_threads SET status=?,updated_at=? WHERE id=?",status,now(),segments[2]);
-        await activity(db,user,"feedback.status","feedback",segments[2,""],"Changed feedback status",{status});
+        await activity(db,user,"feedback.status","feedback",segments[2],"Changed feedback status",{status});
         return json({item:await first(db,"SELECT * FROM feedback_threads WHERE id=?",segments[2])});
       }
       if (path === "/admin/notifications" && method === "POST") {
