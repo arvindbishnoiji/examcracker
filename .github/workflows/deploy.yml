@@ -93,27 +93,16 @@ jobs:
           NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${{ vars.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED || 'true' }}
           NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://examcrack.pages.dev' }}
 
-      - name: Detect D1 migration changes in this commit
-        id: migration_changes
-        shell: bash
-        run: |
-          if git diff --name-only HEAD^ HEAD -- migrations | grep -q '^migrations/'; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "D1 migration files changed; database verification and migrations are required."
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No D1 migration files changed; skipping the D1 API preflight so unrelated frontend/Worker deployments are not blocked by D1-only permissions."
-          fi
-
-      - name: Verify configured D1 database and apply schema migrations
-        if: steps.migration_changes.outputs.changed == 'true'
+      - name: Apply D1 migrations and verify the production schema
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          EXPECTED_D1_DATABASE_ID: dbf2375d-a302-443f-83bf-df59e1d98177
         run: |
-          npx wrangler d1 list --json > /tmp/d1-databases.json
-          node -e "const fs=require('node:fs');const raw=JSON.parse(fs.readFileSync('/tmp/d1-databases.json','utf8'));const list=Array.isArray(raw)?raw:(raw.result||raw.databases||raw.items||[]);const db=list.find(x=>(x.uuid||x.id||x.database_id||x.databaseId)===process.env.EXPECTED_D1_DATABASE_ID);if(!db||db.name!=='exam-cracker-db'){console.error('Expected D1 database was not found in the authenticated Cloudflare account; stopping before deployment.');process.exit(1)}console.log('Verified exam-cracker-db database ID:',process.env.EXPECTED_D1_DATABASE_ID)"
+          # Use the database ID already fixed in wrangler.toml. Avoid the
+          # account-wide `d1 list` preflight: it needs a broader list scope
+          # and previously blocked migrations before the targeted DB was used.
+          # Wrangler records applied versions in d1_migrations, so this is safe
+          # to run on every deployment and repairs a DB that missed old migrations.
           npx wrangler d1 migrations apply exam-cracker-db --remote
           schema_output="$(npx wrangler d1 execute exam-cracker-db --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('student_profiles','course_catalog','subjects','course_subjects','drive_files','site_settings','feedback_threads','feedback_messages','notifications') ORDER BY name")"
           echo "$schema_output"
@@ -152,6 +141,22 @@ jobs:
         run: |
           test -n "$HEALTH_URL" || { echo "Set CLOUDFLARE_WEB_HEALTH_URL to the deployed /login URL" >&2; exit 1; }
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 "$HEALTH_URL"
+
+      - name: Verify profile API and D1 schema are reachable through Pages
+        env:
+          API_HEALTH_URL: https://examcrack.pages.dev/api/ec/health
+        run: |
+          response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 "$API_HEALTH_URL")"
+          echo "$response"
+          API_HEALTH_JSON="$response" node <<'NODE'
+          const health = JSON.parse(process.env.API_HEALTH_JSON || '{}');
+          const tables = Number(health.tables);
+          if (health.ok !== true || !Number.isFinite(tables) || tables < 19) {
+            console.error('API health did not confirm the expected D1 schema. Profile/bootstrap requests will not work until the DB binding and migrations are corrected.');
+            process.exit(1);
+          }
+          console.log('Authenticated API route healthy; D1 tables:', tables);
+          NODE
 
       - name: Install browser for client runtime verification
         run: |
