@@ -37,9 +37,10 @@ jobs:
           node --check 'cloudflare-pages/functions/[[path]].js'
           node --check cloudflare-pages/functions/index.js
           node -e "const fs = require('node:fs'); const r = JSON.parse(fs.readFileSync('cloudflare-pages/public/_routes.json', 'utf8')); if (r.version !== 1 || !r.include.includes('/*') || r.exclude.length !== 0) process.exit(1); console.log('Pages proxy route configuration valid')"
-          test -f cloudflare-pages/wrangler.toml
-          grep -q 'EXAM_CRACKER_WEB' cloudflare-pages/wrangler.toml
-          grep -q 'exam-cracker-web' cloudflare-pages/wrangler.toml
+          test ! -f cloudflare-pages/wrangler.toml
+          grep -q 'EXAM_CRACKER_WEB' CLOUDFLARE_PAGES_DASHBOARD_ENV.md
+          grep -q 'exam-cracker-web' CLOUDFLARE_PAGES_DASHBOARD_ENV.md
+          echo "Pages uses dashboard-managed bindings; handoff documentation is present"
 
       - name: Type check
         run: npm run typecheck
