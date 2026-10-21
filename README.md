@@ -1,31 +1,71 @@
 # Exam Cracker
 
-JEE/NEET learning web app for Class 11 and 12 using Next.js App Router, TypeScript, Tailwind CSS, Firebase Authentication and Cloudflare D1.
+JEE/NEET learning app for Class 11 and 12 (Next.js App Router, TypeScript,
+Tailwind CSS) built on:
 
-## Target architecture
+**Firebase Authentication → Cloudflare Worker API → Cloudflare D1 → Google Drive (files)**
 
-- Firebase project: `darvo1`. Use Firebase Auth for signup, login, password reset and enabled sign-in providers.
-- Structured app data is stored in Cloudflare D1 via the authenticated same-origin `/api/ec/*` API.
-- Cloudflare Worker `exam-cracker-web` is compute/API runtime; it is not the database.
-- D1 binding: `DB`; database name: `exam-cracker-db`; database ID supplied by the owner: `dbf2375d-a302-443f-83bf-df59e1d98177`.
-- The separate `ec-content-api` Worker remains the YouTube video/playlist metadata proxy.
-- Student chat has been replaced by Feedback; feedback threads/replies are designed for D1.
+There is no Supabase or Firestore runtime. Files are never stored in D1 and never
+outside Google Drive.
 
-Supabase is no longer part of the intended app runtime, and no Supabase-to-D1 data copy is planned because the owner has not populated Supabase. Old documentation/function-source files may remain in the repository pending final cleanup, but new runtime code must not call Supabase or use Firestore for application data.
+## Architecture
+
+| Layer | Responsibility |
+| --- | --- |
+| Firebase Auth (`darvo1`) | Signup, sign-in, password reset, Google sign-in. Firebase UID is the identity key. Passwords never touch D1. |
+| Browser | Calls only the same-origin `/api/ec/*` API with a Firebase ID token. |
+| `src/app/api/ec/[...path]/route.ts` | Proxies to the Worker inside the same OpenNext deployment and fails closed with 503 when the D1 binding is absent. |
+| `workers/ec-api/src/index.js` | Verifies Firebase ID tokens (JWKS), enforces admin/ownership rules, validates bodies, scores tests on the server, and reads/writes D1 with parameterized SQL. |
+| Cloudflare D1 (`DB`) | All structured data: profiles, catalogue, subjects, progress, attempts, enrollments, feedback, notifications, settings, audit log, Drive metadata. |
+| Google Drive | Profile photos and course PDFs, accessed only by the Worker service account. Private; no public links. |
+| `ec-content-api` Worker | Separate YouTube video/playlist metadata proxy. Unchanged. |
+
+- D1 binding `DB`, database `exam-cracker-db`, ID `dbf2375d-a302-443f-83bf-df59e1d98177`.
+- Admin email `arvinddarabishnoi@gmail.com`, enforced by the Worker on every admin
+  request. Email verification is not a required admin login condition.
+- `/chat` redirects to `/feedback`. Feedback threads, replies and status live in D1
+  with server-enforced ownership.
 
 ## Local setup
 
 ```bash
 npm ci
-cp .env.example .env.local
+cp .env.example .env.local   # Firebase web config + media proxy URL
 npm run dev
 ```
 
-Configure only the Firebase web-app public configuration and existing Cloudflare media proxy URL in `.env.local`. Do not add Cloudflare API tokens or Firebase Admin keys to `NEXT_PUBLIC_*` variables. Do not add Supabase variables.
+`next dev` has no Cloudflare bindings, so `/api/ec/*` returns a clear 503. To run
+the full stack locally:
 
-## D1 schema setup
+```bash
+npx wrangler d1 migrations apply exam-cracker-db --local
+# create .dev.vars with the Worker secrets you need (never commit it)
+npm run build:cloudflare
+npx wrangler dev --local
+```
 
-First verify the authenticated Cloudflare account and database identity; don't create a duplicate.
+Configure only public Firebase values in `.env.local`. Never put Cloudflare tokens,
+Firebase Admin keys, the service-account JSON or Drive folder ids in
+`NEXT_PUBLIC_*`. See [GOOGLE_DRIVE_SETUP.md](GOOGLE_DRIVE_SETUP.md).
+
+## D1 schema
+
+Versioned, additive migrations in `migrations/`:
+
+- `0001_initial_schema.sql` — profiles, catalogue, progress, attempts, enrollments,
+  events/rules, announcements, settings, activity, library, feedback,
+  notifications, push tokens, broadcasts.
+- `0002_subjects_and_drive_files.sql` — `subjects`, `course_subjects`, hierarchy
+  columns (`parent_id`, `subject_id`, `sort_order`) with a JSON backfill,
+  `drive_files`, `student_profiles.avatar_file_id`, `feedback_threads.resolved_at`.
+
+Validate locally before touching the remote database:
+
+```bash
+npx wrangler d1 migrations apply exam-cracker-db --local
+```
+
+Then, after verifying the account and database id:
 
 ```bash
 npx wrangler whoami
@@ -35,11 +75,14 @@ npx wrangler d1 migrations apply exam-cracker-db --remote
 npx wrangler d1 execute exam-cracker-db --remote --command="SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
 ```
 
-Only apply migrations when the list confirms ID `dbf2375d-a302-443f-83bf-df59e1d98177`. Applying SQL creates schema only; it does not populate the database or guarantee the app APIs are fully cut over. The Cloudflare connector was unavailable during this preparation, so remote D1 migration/health has not yet been verified from ChatGPT.
+Stop if the database list does not contain ID `dbf2375d-a302-443f-83bf-df59e1d98177`.
+Do not create a duplicate. Remote migrations and Worker secrets are owner-run
+actions; the repository cannot verify them by itself.
 
 ## Checks
 
 ```bash
+npm ci
 npm run typecheck
 npm test
 npm run lint
@@ -47,16 +90,40 @@ npm run build
 npm run build:cloudflare
 ```
 
-Production must not be switched over until typecheck, tests, build, migration validation, actual D1 health checks, feedback ownership checks and the student/admin routes pass.
+CI additionally applies both migrations to a local D1 database, checks the required
+tables and scans `src/` for retired Supabase code and server credentials.
+
+## Feature map
+
+**Student** — onboarding (name → JEE/NEET → Class 11/12), home, batches/series,
+lecture player, subjects filter, Drive PDF viewer, tests/attempts/results,
+leaderboard, profile with photo upload and analysis, events, challenges,
+notifications, search, library, feedback.
+
+**Admin** — overview, Screen Studio, homepage builder, goals, batches, series,
+**subjects and assignments**, lectures (with parent → subject cascade and Drive PDF
+upload), tests, analytics, leaderboards, students/enrollments, announcements,
+events, notifications, feedback inbox, appearance/navigation/footer/banners/
+popups/testimonials/media/SEO/toggles, scheduling, reports, health, import/export,
+preferences and the preserved classic console with the YouTube playlist importer.
 
 ## Important paths
 
-- `src/app/`: student/admin Next.js routes
-- `src/lib/api.ts`: same-origin application API client
-- `src/app/api/ec/[...path]/route.ts`: same-origin Worker API route
-- `workers/ec-api/src/index.js`: authenticated D1 API logic
-- `migrations/0001_initial_schema.sql`: initial D1 schema
-- `D1_MIGRATION_RUNBOOK.md`: D1 provisioning and safe rollout steps
-- `workers/ec-content-api/`: separate YouTube metadata proxy
+- `src/app/` — student and admin routes
+- `src/lib/api.ts` — typed same-origin API client (including authenticated blob
+  downloads and upload progress)
+- `src/lib/enrollment-core.ts` — pure eligibility/bulk-enrollment rules used by the
+  console and tests
+- `src/components/student/ProfileAvatar.tsx` — preview, progress, cancel/retry
+  profile photo control
+- `workers/ec-api/src/index.js` — Worker API
+- `workers/ec-api/src/drive.js` — Google Drive service-account auth, upload,
+  download and delete
+- `migrations/` — D1 schema
+- `D1_MIGRATION_RUNBOOK.md` — rollout steps
+- `GOOGLE_DRIVE_SETUP.md` — Drive, service account and secret setup
+- `cloudflare-pages/` — Pages front door and service binding
+- `MASTER_PROMPT.md` — authoritative engineering brief
 
-Admin identity check is enforced server-side for `arvinddarabishnoi@gmail.com`. Firebase passwords and privileged secrets must never be stored in D1 or committed to Git.
+No production deployment, remote D1 migration, merge or secret configuration is
+performed by committing to this repository.

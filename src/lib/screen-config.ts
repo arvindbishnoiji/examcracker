@@ -240,7 +240,7 @@ export const SCREEN_DEFINITIONS: ScreenDefinition[] = [
       { id: 'list', label: 'Notification list', description: 'Live inbox with mark-read actions.', required: true },
       { id: 'info', label: 'Delivery note', description: 'Explains in-app delivery versus browser push.' },
     ],
-    locked: 'Firestore inbox ownership and read state.',
+    locked: 'D1 inbox ownership and read state.',
   },
   {
     key: 'search',
@@ -582,7 +582,7 @@ export const DEFAULT_CHAT_SCREEN: ChatScreenConfig = {
   showTimestamp: true,
   helpTitle: 'Private by default',
   helpBody:
-    'Your conversation is stored in Firestore and is visible only to you and your mentor. Messages are read and written under security rules.',
+    'Your feedback is stored in Cloudflare D1 and is visible only to you and your mentor. Every read and write is checked against your Firebase identity.',
 };
 
 export const DEFAULT_NOTIFICATIONS_SCREEN: NotificationsScreenConfig = {

@@ -96,7 +96,7 @@ export function useSettingWorkspace<K extends SiteSettingKey>(key: K): SettingWo
       setError(
         err instanceof Error
           ? err.message
-          : 'Unable to load site settings. Apply the new Supabase migration and redeploy the Edge Function.'
+          : 'Unable to load site settings. Apply pending D1 migrations and redeploy the Worker.'
       );
     } finally {
       setLoading(false);

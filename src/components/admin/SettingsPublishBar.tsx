@@ -99,7 +99,7 @@ export function SettingsPublishBar({
         </Banner>
       )}
       <p className="text-[11px] text-ink-500">
-        Drafts are private. Students only receive values after <strong>Publish</strong>, once the Supabase migration and
+        Drafts are private. Students only receive values after <strong>Publish</strong>, once the D1 migration and
         Edge Function in this repository are deployed.
       </p>
 

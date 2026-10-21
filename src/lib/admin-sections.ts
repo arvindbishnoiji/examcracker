@@ -67,6 +67,14 @@ export const ADMIN_SECTIONS: AdminSectionMeta[] = [
     keywords: ['series', 'playlist', 'course', 'collection'],
   },
   {
+    slug: 'subjects',
+    label: 'Subjects',
+    group: 'Learning Content',
+    icon: '◫',
+    description: 'Subject catalogue, exam/class applicability and batch or series assignments.',
+    keywords: ['subject', 'chapter', 'physics', 'chemistry', 'biology', 'assign', 'course subjects'],
+  },
+  {
     slug: 'lectures',
     label: 'Lectures & resources',
     group: 'Learning Content',
@@ -143,7 +151,7 @@ export const ADMIN_SECTIONS: AdminSectionMeta[] = [
     label: 'Notifications',
     group: 'Communication',
     icon: '◉',
-    description: 'Send in-app notifications to targeted students via Firestore.',
+    description: 'Send in-app notifications to targeted students, stored in Cloudflare D1.',
     keywords: ['notification', 'broadcast', 'push', 'inbox'],
   },
   {

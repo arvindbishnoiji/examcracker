@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { Card, Badge, EmptyState, Skeleton } from '@/components/ui/Card';
@@ -9,12 +9,14 @@ import { useToast } from '@/hooks/useToast';
 import {
   getAdminOverview, getAdminContentList, createAdminContent, updateAdminContent, disableAdminContent,
   getAdminAnnouncements, createAdminAnnouncement, updateAdminAnnouncement, getAdminStudents,
+  getAdminSubjects, uploadAdminPdf, getCourseFiles, invalidateAuthorizedBlobCache,
 } from '@/lib/api';
 import { fetchVideoMetadata, importFullYoutubePlaylist, extractYoutubeVideoId, extractYoutubePlaylistId, getYoutubeDefaultThumbnail } from '@/lib/mediaProxy';
 import { fromISTDateTimeLocalInput, toISTDateTimeLocalInput } from '@/lib/date';
 import { isSafeHttpUrl, validateQuestionsJson } from '@/lib/validation';
-import type { CourseCatalogItem } from '@/types';
+import type { CourseCatalogItem, DriveFileItem, Subject } from '@/types';
 import YoutubeThumbnail from '@/components/YoutubeThumbnail';
+import { ProfileImage } from '@/components/student/ProfileImage';
 
 export type AdminTab = 'overview'|'goals'|'batches'|'lectures'|'series'|'tests'|'events'|'announcements'|'students'|'feedback';
 
@@ -315,17 +317,29 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
   );
 }
 
+const EMPTY_LECTURE_FORM = {
+  title:'', description:'', exam:'JEE', classes:['11'], active:true, accessCode:'',
+  youtubeUrl:'', videoId:'', thumbnailUrl:'', lesson:'', topic:'', notesPdfUrl:'', isPreview:false,
+  parentId:'', subjectId:'', position:'', duration:'', notesFileId:'', notesFileName:''
+};
+
 function AdminLecturesTab(){
   const { push } = useToast();
   const [items, setItems] = useState<CourseCatalogItem[]>([]);
   const [batches, setBatches] = useState<CourseCatalogItem[]>([]);
   const [series, setSeries] = useState<CourseCatalogItem[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [courseFiles, setCourseFiles] = useState<DriveFileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string|null>(null);
-  const [form, setForm] = useState<any>({
-    title:'', description:'', exam:'JEE', classes:['11'], active:true, accessCode:'',
-    youtubeUrl:'', videoId:'', thumbnailUrl:'', lesson:'', topic:'', notesPdfUrl:'', isPreview:false, parentId:'', position:'', duration:''
-  });
+  const [parentFilter, setParentFilter] = useState('');
+  const [subjectFilter, setSubjectFilter] = useState('');
+  const [pdfUploading, setPdfUploading] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState(0);
+  const [pdfError, setPdfError] = useState<string|null>(null);
+  const pdfInputRef = useRef<HTMLInputElement|null>(null);
+  const pdfAbortRef = useRef<AbortController|null>(null);
+  const [form, setForm] = useState<any>({ ...EMPTY_LECTURE_FORM });
   const [editing, setEditing] = useState<CourseCatalogItem|null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -341,34 +355,101 @@ function AdminLecturesTab(){
   const [playlistExam, setPlaylistExam] = useState('JEE');
   const [playlistClasses, setPlaylistClasses] = useState<string[]>(['11']);
   const [playlistTopic, setPlaylistTopic] = useState('');
+  const [playlistSubject, setPlaylistSubject] = useState('');
 
   const load = useCallback(async()=>{
     setLoading(true); setError(null);
     try{
-      const [lectures, b, s] = await Promise.all([
+      const [lectures, b, s, subj] = await Promise.all([
         getAdminContentList({ kind:'lecture' }),
         getAdminContentList({ kind:'batch' }),
         getAdminContentList({ kind:'series' }),
+        getAdminSubjects({ includeArchived: false }).catch(() => [] as Subject[]),
       ]);
-      setItems(lectures); setBatches(b); setSeries(s);
-    }catch(e){ setError(e instanceof Error? e.message:'Failed'); }
+      setItems(lectures); setBatches(b); setSeries(s); setSubjects(subj);
+    }catch(e){ setError(e instanceof Error ? e.message:'Failed'); }
     finally{ setLoading(false); }
   },[]);
   useEffect(()=>{ load(); },[load]);
 
+  // Subject options come from the parent course's assignment list, so the admin
+  // cannot pick a pair the API would reject.
+  const subjectsForParent = useCallback((parentId: string) => {
+    if (!parentId) return [] as Subject[];
+    return subjects.filter((subject) => subject.assignments?.some((a)=> a.courseId===parentId));
+  },[subjects]);
+
+  const parentTitle = useCallback((id: string) => {
+    const found = [...batches, ...series].find((row)=> row.id===id);
+    return found ? `${found.kind==='batch'?'Batch':'Series'}: ${found.title}` : '';
+  },[batches, series]);
+
+  const filteredItems = items.filter((item)=>{
+    const m = (item.metadata||{}) as Record<string,any>;
+    const itemParent = item.parentId || m.parentId || '';
+    const itemSubject = item.subjectId || m.subjectId || '';
+    if (parentFilter && itemParent !== parentFilter) return false;
+    if (subjectFilter && itemSubject !== subjectFilter) return false;
+    return true;
+  });
+
+  useEffect(()=>{
+    let cancelled = false;
+    if(!form.parentId){ setCourseFiles([]); return ()=>{ cancelled = true; }; }
+    getCourseFiles(form.parentId)
+      .then((rows)=>{ if(!cancelled) setCourseFiles(rows); })
+      .catch(()=>{ if(!cancelled) setCourseFiles([]); });
+    return ()=>{ cancelled = true; };
+  },[form.parentId]);
+
   function openCreate(){
     setEditing(null);
-    setForm({ title:'', description:'', exam:'JEE', classes:['11'], active:true, accessCode:'', youtubeUrl:'', videoId:'', thumbnailUrl:'', lesson:'', topic:'', notesPdfUrl:'', isPreview:false, parentId:'', position:'', duration:'' });
+    setPdfError(null);
+    setForm({ ...EMPTY_LECTURE_FORM });
     setShowForm(true);
   }
   function openEdit(item: CourseCatalogItem){
     setEditing(item);
     const m = item.metadata as Record<string,any>;
+    setPdfError(null);
     setForm({
       title:item.title, description:item.description, exam:item.exam, classes:item.classes, active:item.active, accessCode:(item as any).access_code||'',
-      youtubeUrl: m.youtubeUrl||'', videoId: m.videoId||'', thumbnailUrl: m.thumbnailUrl||'', lesson: m.lesson||'', topic: m.topic||'', notesPdfUrl: m.notesPdfUrl||'', isPreview: !!m.isPreview, parentId: m.parentId||'', position: m.position||'', duration: m.duration||''
+      youtubeUrl: m.youtubeUrl||'', videoId: m.videoId||'', thumbnailUrl: m.thumbnailUrl||'', lesson: m.lesson||'', topic: m.topic||'', notesPdfUrl: m.notesPdfUrl||'', isPreview: !!m.isPreview,
+      parentId: item.parentId || m.parentId || '', subjectId: item.subjectId || m.subjectId || '', position: item.sortOrder ? String(item.sortOrder) : (m.position||''), duration: m.duration||'',
+      notesFileId: m.notesFileId || '', notesFileName: m.notesFileName || '',
     });
     setShowForm(true);
+  }
+
+  function handleParentChange(nextParent: string){
+    setForm((s:any)=>{
+      const stillValid = s.subjectId && subjects.some((subject)=> subject.id===s.subjectId && subject.assignments?.some((a)=> a.courseId===nextParent));
+      return { ...s, parentId: nextParent, subjectId: stillValid ? s.subjectId : '' };
+    });
+  }
+
+  async function handlePdfUpload(file: File | null | undefined){
+    if(!file) return;
+    if(!form.parentId){ setPdfError('Choose the parent batch or series before uploading a PDF — Drive files are scoped to a course.'); return; }
+    const controller = new AbortController();
+    pdfAbortRef.current = controller;
+    setPdfUploading(true); setPdfProgress(0); setPdfError(null);
+    try{
+      const record = await uploadAdminPdf({
+        courseId: form.parentId,
+        file,
+        signal: controller.signal,
+        onProgress: (percent)=> setPdfProgress(percent),
+      });
+      setForm((s:any)=> ({ ...s, notesFileId: record.id, notesFileName: record.displayName, notesPdfUrl: '' }));
+      push('PDF uploaded to Google Drive. Save the lecture to attach it.', 'success');
+    }catch(e){
+      setPdfError(e instanceof Error ? e.message : 'The PDF upload failed.');
+    }finally{
+      setPdfUploading(false);
+      pdfAbortRef.current = null;
+      if(pdfInputRef.current) pdfInputRef.current.value = '';
+    }
   }
 
   async function handleFetchMeta(){
@@ -393,6 +474,8 @@ function AdminLecturesTab(){
     setSaving(true);
     try{
       const vid = form.youtubeUrl ? extractYoutubeVideoId(form.youtubeUrl) : (form.videoId || '');
+      if(form.subjectId && !form.parentId){ push('Choose a parent batch or series before selecting a subject.','error'); return; }
+      if(form.notesFileId && !form.parentId){ push('A Drive PDF needs a parent batch or series.','error'); return; }
       const metadata: Record<string,unknown> = {
         youtubeUrl: form.youtubeUrl || undefined,
         videoId: vid || undefined,
@@ -400,15 +483,31 @@ function AdminLecturesTab(){
         duration: form.duration || undefined,
         position: form.position? Number(form.position): undefined,
         parentId: form.parentId || undefined,
+        subjectId: form.subjectId || undefined,
         lesson: form.lesson || undefined,
         topic: form.topic || undefined,
-        notesPdfUrl: form.notesPdfUrl || undefined,
+        notesPdfUrl: form.notesFileId ? undefined : (form.notesPdfUrl || undefined),
+        notesFileId: form.notesFileId || undefined,
+        notesFileName: form.notesFileId ? (form.notesFileName || undefined) : undefined,
         isPreview: !!form.isPreview,
         playlistId: form.playlistId || undefined,
       };
-      const payload = { kind:'lecture' as const, title: form.title.trim(), description: form.description.slice(0,10000), exam: form.exam, classes: form.classes, active: !!form.active, accessCode: form.accessCode||null, metadata };
+      const payload = {
+        kind:'lecture' as const,
+        title: form.title.trim(),
+        description: form.description.slice(0,10000),
+        exam: form.exam,
+        classes: form.classes,
+        active: !!form.active,
+        accessCode: form.accessCode||null,
+        metadata,
+        parentId: form.parentId || null,
+        subjectId: form.subjectId || null,
+        sortOrder: form.position ? Number(form.position) : 0,
+      };
       if(editing) await updateAdminContent(editing.id, payload);
       else await createAdminContent(payload);
+      invalidateAuthorizedBlobCache('/api/ec/files');
       push(editing?'Updated':'Created','success');
       setShowForm(false); load();
     }catch(err){ push(err instanceof Error? err.message:'Save failed','error'); }
@@ -482,7 +581,19 @@ function AdminLecturesTab(){
           const metadata = {
             youtubeUrl: it.watchUrl, videoId: it.videoId, thumbnailUrl: it.thumbnail, duration: it.duration, position: order, parentId: playlistTarget, lesson: playlistTopic || playlistTitle, topic: playlistTopic || playlistTitle, isPreview:false, playlistId: extractYoutubePlaylistId(playlistUrl)
           };
-          await createAdminContent({ kind:'lecture', title: it.title.trim() || `Lecture ${order}`, description: it.description || `Imported from playlist ${playlistTitle}`, exam: playlistExam as any, classes: playlistClasses as any, active:true, accessCode:null, metadata });
+          await createAdminContent({
+            kind:'lecture',
+            title: it.title.trim() || `Lecture ${order}`,
+            description: it.description || `Imported from playlist ${playlistTitle}`,
+            exam: playlistExam as any,
+            classes: playlistClasses as any,
+            active:true,
+            accessCode:null,
+            metadata: { ...metadata, subjectId: playlistSubject || undefined },
+            parentId: playlistTarget,
+            subjectId: playlistSubject || null,
+            sortOrder: order,
+          });
           ok++;
         }catch(err){
           fail++;
@@ -531,6 +642,12 @@ function AdminLecturesTab(){
                 {series.map(s=> <option key={s.id} value={s.id}>Series: {s.title}</option>)}
               </Select>
               <Select label="Exam" value={playlistExam} onChange={e=> setPlaylistExam(e.target.value)}><option>JEE</option><option>NEET</option><option>Both</option></Select>
+              <Select label="Subject (optional)" value={playlistSubject} onChange={e=> setPlaylistSubject(e.target.value)}>
+                <option value="">Unassigned</option>
+                {playlistTarget
+                  ? subjectsForParent(playlistTarget).map(subject=> <option key={subject.id} value={subject.id}>{subject.name}</option>)
+                  : subjects.map(subject=> <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+              </Select>
               <div>
                 <label className="block text-sm font-medium text-ink-700 mb-1.5">Classes</label>
                 <div className="flex gap-2 pt-2">
@@ -563,12 +680,33 @@ function AdminLecturesTab(){
         )}
       </Card>
 
+      <Card className="p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <Select label="Filter by course" value={parentFilter} onChange={e=> setParentFilter(e.target.value)}>
+            <option value="">All batches &amp; series</option>
+            {batches.map(b=> <option key={b.id} value={b.id}>Batch: {b.title}</option>)}
+            {series.map(s=> <option key={s.id} value={s.id}>Series: {s.title}</option>)}
+          </Select>
+          <Select label="Filter by subject" value={subjectFilter} onChange={e=> setSubjectFilter(e.target.value)}>
+            <option value="">All subjects</option>
+            {subjects.map(subject=> <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+          </Select>
+          <p className="pb-2 text-xs text-ink-500">
+            {filteredItems.length} of {items.length} lecture{items.length===1?'':'s'}
+            {subjects.length===0 && <> · no subjects yet — <Link href="/admin/subjects" className="font-semibold text-brand-700 hover:underline">create one</Link></>}
+          </p>
+        </div>
+      </Card>
+
       {loading && <Skeleton className="h-40 w-full" />}
       {error && <div className="p-3 bg-red-50 border border-red-200 text-sm text-red-700 rounded-xl">{error}</div>}
       {!loading && items.length===0 && <EmptyState title="No lectures yet" description="Add lectures manually or via playlist import. Exam/class parentId enrolment respects server gate." />}
+      {!loading && items.length>0 && filteredItems.length===0 && (
+        <EmptyState title="No lectures match this filter" description="Clear the course or subject filter to see the full lecture list." />
+      )}
 
       <div className="grid gap-3">
-        {items.map(it=>{
+        {filteredItems.map(it=>{
           const m = it.metadata as Record<string,any>;
           return (
             <Card key={it.id} className="p-4">
@@ -577,8 +715,15 @@ function AdminLecturesTab(){
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm line-clamp-1">{it.title} <Badge variant={it.active?'success':'danger'}>{it.active?'Active':'Disabled'}</Badge> <Badge>{it.exam}</Badge> <Badge>{it.classes.join('/')}</Badge></p>
                   <p className="text-xs text-ink-500 line-clamp-2">{it.description}</p>
-                  <p className="text-xs text-ink-400 mt-1">Video {m.videoId || '—'} • Parent {m.parentId? m.parentId.slice(0,8):'—'} • Lesson {m.lesson||'—'} • {m.isPreview?'Preview':''}</p>
-                  {m.notesPdfUrl && <a href={m.notesPdfUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-brand-600">PDF →</a>}
+                  <p className="text-xs text-ink-400 mt-1">
+                    Video {m.videoId || '—'} • Parent {parentTitle(it.parentId || m.parentId) || '—'} •{' '}
+                    Subject {subjects.find(subject=> subject.id===(it.subjectId || m.subjectId))?.name || 'Unassigned'} • Lesson {m.lesson||'—'} • {m.isPreview?'Preview':''}
+                  </p>
+                  {m.notesFileId ? (
+                    <span className="text-xs font-semibold text-emerald-700">Drive PDF attached{m.notesFileName? `: ${m.notesFileName}`:''}</span>
+                  ) : m.notesPdfUrl ? (
+                    <a href={m.notesPdfUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-brand-600">PDF →</a>
+                  ) : null}
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
                   <Button size="sm" variant="outline" onClick={()=> openEdit(it)}>Edit</Button>
@@ -602,12 +747,46 @@ function AdminLecturesTab(){
             <Input label="Title*" value={form.title} onChange={e=> setForm((s:any)=>({...s, title:e.target.value}))} required />
             <Textarea label="Description" value={form.description} onChange={e=> setForm((s:any)=>({...s, description:e.target.value}))} rows={2} />
             <div className="grid grid-cols-2 gap-3">
-              <Select label="Target batch/series" value={form.parentId} onChange={e=> setForm((s:any)=>({...s, parentId:e.target.value}))}>
+              <Select label="Target batch/series" value={form.parentId} onChange={e=> handleParentChange(e.target.value)}>
                 <option value="">None (no enrolment gate)</option>
                 {batches.map(b=> <option key={b.id} value={b.id}>Batch: {b.title}</option>)}
                 {series.map(s=> <option key={s.id} value={s.id}>Series: {s.title}</option>)}
               </Select>
+              <div>
+                {form.parentId ? (
+                  <div>
+                    <Select
+                      label="Subject"
+                      value={form.subjectId}
+                      onChange={e=> setForm((s:any)=>({...s, subjectId:e.target.value}))}
+                    >
+                      <option value="">Unassigned (course-level lecture)</option>
+                      {subjectsForParent(form.parentId).map(subject=> (
+                        <option key={subject.id} value={subject.id}>{subject.name}</option>
+                      ))}
+                    </Select>
+                    {subjectsForParent(form.parentId).length===0 ? (
+                      <p className="mt-1 text-[11px] text-amber-700">
+                        No subjects assigned to this course yet.{' '}
+                        <Link href="/admin/subjects" className="font-semibold underline">Assign subjects</Link> before grouping lectures.
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-ink-500">Only subjects assigned to the selected course are listed.</p>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm font-medium text-ink-700 mb-1.5">Subject</label>
+                    <p className="rounded-xl border border-dashed border-ink-200 px-3 py-2 text-xs text-ink-500">
+                      Choose a batch or series to enable subject assignment. Subjects are validated server-side.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <Input label="Lesson/Topic" value={form.lesson} onChange={e=> setForm((s:any)=>({...s, lesson:e.target.value}))} placeholder="e.g. Electrostatics - Lecture 1" />
+              <Input label="Topic tag" value={form.topic} onChange={e=> setForm((s:any)=>({...s, topic:e.target.value}))} placeholder="Shown in student filters" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Select label="Exam*" value={form.exam} onChange={e=> setForm((s:any)=>({...s, exam:e.target.value}))}><option>JEE</option><option>NEET</option><option>Both</option></Select>
@@ -616,9 +795,60 @@ function AdminLecturesTab(){
                 <div className="flex gap-2">{['11','12'].map(c=> <label key={c} className="flex items-center gap-1 text-sm"><input type="checkbox" checked={form.classes.includes(c)} onChange={e=> setForm((s:any)=>({...s, classes: e.target.checked? [...s.classes,c]: s.classes.filter((x:string)=>x!==c)}))} />{c}</label>)}</div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Input label="Thumbnail URL" placeholder="https://img.youtube.com/vi/.../hqdefault.jpg" value={form.thumbnailUrl} onChange={e=> setForm((s:any)=>({...s, thumbnailUrl:e.target.value}))} />
-              <Input label="Notes PDF URL" value={form.notesPdfUrl} onChange={e=> setForm((s:any)=>({...s, notesPdfUrl:e.target.value}))} />
+            <Input label="Thumbnail URL" placeholder="https://img.youtube.com/vi/.../hqdefault.jpg" value={form.thumbnailUrl} onChange={e=> setForm((s:any)=>({...s, thumbnailUrl:e.target.value}))} />
+
+            <div className="rounded-xl border border-ink-200 bg-ink-50/50 p-3">
+              <p className="text-sm font-semibold">Notes PDF (Google Drive)</p>
+              <p className="text-[11px] text-ink-500 mt-0.5">
+                PDFs are uploaded server-side to the private Drive folder and streamed to students only after an access check.
+                Limit 20 MB, PDF only. A parent batch or series is required.
+              </p>
+              {form.notesFileId ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                  <span className="font-semibold">{form.notesFileName || 'Attached PDF'}</span>
+                  <span className="text-emerald-700">stored in Drive, linked by file ID</span>
+                  <button type="button" className="ml-auto font-bold text-red-700 hover:underline" onClick={()=> setForm((s:any)=>({...s, notesFileId:'', notesFileName:''}))}>
+                    Detach
+                  </button>
+                </div>
+              ) : null}
+              {pdfUploading ? (
+                <div className="mt-2">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-ink-200" role="progressbar" aria-valuenow={pdfProgress} aria-valuemin={0} aria-valuemax={100}>
+                    <div className="h-full bg-brand-600 transition-all" style={{ width: `${pdfProgress}%` }} />
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 text-[11px] text-ink-500">
+                    <span>Uploading… {pdfProgress}%</span>
+                    <button type="button" className="font-bold text-red-600 hover:underline" onClick={()=> pdfAbortRef.current?.abort()}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <input
+                    ref={pdfInputRef}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    aria-label="Upload notes PDF"
+                    className="block w-full max-w-xs text-xs"
+                    disabled={!form.parentId}
+                    onChange={e=> void handlePdfUpload(e.target.files?.[0])}
+                  />
+                  {courseFiles.length>0 && (
+                    <Select label="" value="" onChange={e=> {
+                      const picked = courseFiles.find(file=> file.id===e.target.value);
+                      if(picked) setForm((s:any)=>({ ...s, notesFileId: picked.id, notesFileName: picked.displayName, notesPdfUrl:'' }));
+                    }}>
+                      <option value="">Attach an existing course PDF…</option>
+                      {courseFiles.map(file=> <option key={file.id} value={file.id}>{file.displayName}</option>)}
+                    </Select>
+                  )}
+                </div>
+              )}
+              {pdfError && <p role="alert" className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2 text-[11px] text-red-700">{pdfError}</p>}
+              <details className="mt-2">
+                <summary className="cursor-pointer text-[11px] font-semibold text-ink-500">Use an external PDF link instead</summary>
+                <Input label="Notes PDF URL" value={form.notesPdfUrl} onChange={e=> setForm((s:any)=>({...s, notesPdfUrl:e.target.value, notesFileId:''}))} />
+              </details>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Input label="Duration label" placeholder="45:00" value={form.duration} onChange={e=> setForm((s:any)=>({...s, duration:e.target.value}))} />
@@ -894,7 +1124,7 @@ function AdminStudentsTab(){
       <div className="grid gap-2">
         {filtered.map(s=>(
           <Card key={s.firebase_uid} className="p-3 flex items-center gap-3">
-            <img src={s.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.display_name||'Student')}`} alt={s.display_name} className="h-10 w-10 rounded-full" />
+            <ProfileImage src={s.avatar_url} name={s.display_name} className="h-10 w-10" />
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-sm truncate">{s.display_name} <Badge>{s.exam}</Badge> <Badge>Class {s.class_level}</Badge></p>
               <p className="text-xs text-ink-500 truncate">{s.email} • UID {s.firebase_uid.slice(0,8)} • {new Date(s.created_at).toLocaleDateString('en-IN')}</p>

@@ -140,7 +140,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <div className="mx-auto h-12 w-12 rounded-2xl bg-brand-600 text-white grid place-items-center text-xl">🔐</div>
           <h1 className="text-xl font-bold mt-4">Admin sign-in required</h1>
           <p className="text-sm text-ink-500 mt-1">
-            Sign in with the administrator account. Access is verified again by the Supabase Edge Function.
+            Sign in with the administrator account. Access is verified again by the Cloudflare Worker API.
           </p>
           <Link href="/login" className="mt-5 inline-flex px-4 py-2.5 bg-brand-600 text-white rounded-button text-sm font-semibold">
             Go to sign in

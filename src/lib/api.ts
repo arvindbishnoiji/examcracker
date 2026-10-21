@@ -34,6 +34,10 @@ import type {
   EnrollmentScope,
   LibraryItem,
   LibraryItemType,
+  Subject,
+  CourseTreeResponse,
+  CatalogItemResponse,
+  DriveFileItem,
 } from '@/types';
 
 export class ApiError extends Error {
@@ -196,15 +200,15 @@ export async function saveStudentProfile(input: {
   displayName: string;
   exam: ExamTrack;
   classLevel: ClassLevel;
-  avatarUrl?: string | null;
 }): Promise<StudentProfile> {
+  // The profile photo is managed exclusively by the authenticated Drive upload
+  // endpoint. A client-supplied avatar URL is intentionally not accepted here.
   const res = await requestApi<{ profile: StudentProfile }>('/profile', {
     method: 'POST',
     body: {
       displayName: input.displayName.trim(),
       exam: input.exam,
       classLevel: input.classLevel,
-      avatarUrl: input.avatarUrl,
     },
   });
   return res.profile;
@@ -226,17 +230,58 @@ export async function getCatalogContent(params: {
   exam?: ExamTrack;
   classLevel?: ClassLevel;
   parentId?: string;
+  subjectId?: string;
 }): Promise<CourseCatalogItem[]> {
   const query = new URLSearchParams();
   if (params.kind) query.set('kind', params.kind);
   if (params.exam) query.set('exam', params.exam);
   if (params.classLevel) query.set('class', params.classLevel);
   if (params.parentId) query.set('parentId', params.parentId);
+  if (params.subjectId) query.set('subjectId', params.subjectId);
   const qs = query.toString();
   const res = await requestApi<{ items: CourseCatalogItem[] }>(
     `/content${qs ? `?${qs}` : ''}`
   );
   return redactCourseCatalogList(res.items || []);
+}
+
+export async function getCatalogItem(id: string): Promise<CatalogItemResponse> {
+  const res = await requestApi<CatalogItemResponse>(`/content/${encodeURIComponent(id)}`);
+  return {
+    item: redactCourseCatalogList([res.item])[0],
+    parent: res.parent ? redactCourseCatalogList([res.parent])[0] : null,
+    subject: res.subject || null,
+  };
+}
+
+export async function getStudentSubjects(parentId?: string): Promise<Subject[]> {
+  const query = new URLSearchParams();
+  if (parentId) query.set('parentId', parentId);
+  const qs = query.toString();
+  const res = await requestApi<{ items: Subject[] }>(`/subjects${qs ? `?${qs}` : ''}`);
+  return res.items || [];
+}
+
+export async function getCourseTree(parentId: string): Promise<CourseTreeResponse> {
+  const res = await requestApi<CourseTreeResponse>(
+    `/catalog/tree?parentId=${encodeURIComponent(parentId)}`
+  );
+  return {
+    ...res,
+    parent: redactCourseCatalogList([res.parent])[0],
+    subjects: (res.subjects || []).map((subject) => ({
+      ...subject,
+      lectures: redactCourseCatalogList(subject.lectures || []),
+      resources: redactCourseCatalogList(subject.resources || []),
+    })),
+    unassigned: res.unassigned
+      ? {
+          ...res.unassigned,
+          lectures: redactCourseCatalogList(res.unassigned.lectures || []),
+          resources: redactCourseCatalogList(res.unassigned.resources || []),
+        }
+      : null,
+  };
 }
 
 export async function checkParentEnrollmentOnServer(
@@ -387,6 +432,10 @@ export interface AdminContentPayload {
   active: boolean;
   accessCode?: string | null;
   metadata: Record<string, unknown>;
+  /** Stable hierarchy: batch/series parent and its assigned subject. */
+  parentId?: string | null;
+  subjectId?: string | null;
+  sortOrder?: number;
 }
 
 export async function createAdminContent(
@@ -728,6 +777,289 @@ export async function deleteStudentLibraryItem(
 
 
 // ---------------------------------------------------------------------------
+// Subjects and course/subject assignments
+// ---------------------------------------------------------------------------
+
+export interface AdminSubjectInput {
+  name: string;
+  description?: string;
+  exam: ContentExam;
+  classes: ClassLevel[];
+  active?: boolean;
+  archived?: boolean;
+  sortOrder?: number;
+}
+
+export async function getAdminSubjects(params?: {
+  query?: string;
+  exam?: ContentExam | '';
+  classLevel?: ClassLevel | '';
+  includeArchived?: boolean;
+}): Promise<Subject[]> {
+  const query = new URLSearchParams();
+  if (params?.query) query.set('query', params.query);
+  if (params?.exam) query.set('exam', params.exam);
+  if (params?.classLevel) query.set('class', params.classLevel);
+  if (params?.includeArchived === false) query.set('includeArchived', '0');
+  const qs = query.toString();
+  const res = await requestApi<{ items: Subject[] }>(
+    `/admin/subjects${qs ? `?${qs}` : ''}`
+  );
+  return res.items || [];
+}
+
+export async function createAdminSubject(input: AdminSubjectInput): Promise<Subject> {
+  const res = await requestApi<{ item: Subject }>('/admin/subjects', {
+    method: 'POST',
+    body: input,
+  });
+  return res.item;
+}
+
+export async function updateAdminSubject(
+  id: string,
+  input: AdminSubjectInput
+): Promise<Subject> {
+  const res = await requestApi<{ item: Subject }>(
+    `/admin/subjects/${encodeURIComponent(id)}`,
+    { method: 'PATCH', body: input }
+  );
+  return res.item;
+}
+
+export async function archiveAdminSubject(id: string): Promise<Subject> {
+  const res = await requestApi<{ item: Subject }>(
+    `/admin/subjects/${encodeURIComponent(id)}`,
+    { method: 'DELETE' }
+  );
+  return res.item;
+}
+
+export async function setCourseSubjects(
+  courseId: string,
+  subjectIds: string[],
+  force = false
+): Promise<Subject[]> {
+  const res = await requestApi<{ items: Subject[] }>('/admin/course-subjects', {
+    method: 'POST',
+    body: { courseId, subjectIds, force },
+  });
+  return res.items || [];
+}
+
+export async function removeCourseSubject(
+  courseId: string,
+  subjectId: string,
+  force = false
+): Promise<Subject[]> {
+  const res = await requestApi<{ items: Subject[] }>(
+    `/admin/course-subjects/${encodeURIComponent(courseId)}/${encodeURIComponent(subjectId)}?force=${force ? '1' : '0'}`,
+    { method: 'DELETE' }
+  );
+  return res.items || [];
+}
+
+// ---------------------------------------------------------------------------
+// Google Drive files (metadata only; bytes live in Drive)
+// ---------------------------------------------------------------------------
+
+const authorizedBlobCache = new Map<string, Promise<Blob>>();
+
+export function invalidateAuthorizedBlobCache(prefix?: string): void {
+  if (!prefix) {
+    authorizedBlobCache.clear();
+    return;
+  }
+  for (const key of authorizedBlobCache.keys()) {
+    if (key.startsWith(prefix)) authorizedBlobCache.delete(key);
+  }
+}
+
+/**
+ * Fetches a protected file with the Firebase Bearer token. Standard <img> and
+ * <iframe> requests cannot attach that header, so callers receive a Blob and
+ * create an object URL (and revoke it when done).
+ */
+export async function fetchAuthorizedBlob(
+  path: string,
+  options: { force?: boolean } = {}
+): Promise<Blob> {
+  const url = path.startsWith('/api/ec') ? path : `${APP_CONFIG.apiBaseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  if (!options.force && authorizedBlobCache.has(url)) {
+    return authorizedBlobCache.get(url) as Promise<Blob>;
+  }
+  const task = (async () => {
+    let token = await getFreshIdToken(false);
+    const attempt = async (bearer: string) =>
+      fetch(url, { headers: { Authorization: `Bearer ${bearer}` }, cache: 'no-store' });
+    let response: Response;
+    try {
+      response = await attempt(token);
+      if (response.status === 401) {
+        token = await getFreshIdToken(true);
+        response = await attempt(token);
+      }
+    } catch (error) {
+      throw new ApiError('The file could not be downloaded. Check your connection and try again.', 0, error instanceof Error ? error.message : undefined);
+    }
+    if (!response.ok) {
+      let message = `The file could not be opened (${response.status}).`;
+      try {
+        const payload = await response.json() as Record<string, unknown>;
+        if (typeof payload.error === 'string') message = payload.error;
+      } catch {
+        // Keep the status message.
+      }
+      if (response.status === 401 && sessionExpiredHandler) sessionExpiredHandler();
+      throw new ApiError(message, response.status);
+    }
+    return response.blob();
+  })();
+  authorizedBlobCache.set(url, task);
+  try {
+    return await task;
+  } catch (error) {
+    authorizedBlobCache.delete(url);
+    throw error;
+  }
+}
+
+interface UploadOptions {
+  onProgress?: (percent: number) => void;
+  signal?: AbortSignal;
+}
+
+function uploadMultipart<T>(path: string, formData: FormData, options: UploadOptions = {}): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    if (typeof XMLHttpRequest === 'undefined') {
+      reject(new ApiError('Uploads are only available in the browser.', 0));
+      return;
+    }
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      callback();
+    };
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${APP_CONFIG.apiBaseUrl}${path}`);
+    xhr.responseType = 'text';
+
+    const abort = () => xhr.abort();
+    if (options.signal) {
+      if (options.signal.aborted) {
+        reject(new ApiError('Upload cancelled.', 0));
+        return;
+      }
+      options.signal.addEventListener('abort', abort, { once: true });
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable || !event.total) return;
+      options.onProgress?.(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+    };
+    xhr.onerror = () => finish(() => reject(new ApiError('The upload failed because the network was interrupted.', 0)));
+    xhr.onabort = () => finish(() => reject(new ApiError('Upload cancelled.', 0)));
+    xhr.onload = () => {
+      let payload: Record<string, unknown> = {};
+      try {
+        payload = xhr.responseText ? JSON.parse(xhr.responseText) as Record<string, unknown> : {};
+      } catch {
+        payload = {};
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        options.onProgress?.(100);
+        finish(() => resolve(payload as T));
+        return;
+      }
+      if (xhr.status === 401 && sessionExpiredHandler) sessionExpiredHandler();
+      const message = typeof payload.error === 'string' ? payload.error : `Upload failed (${xhr.status}).`;
+      finish(() => reject(new ApiError(message, xhr.status, typeof payload.detail === 'string' ? payload.detail : undefined, payload)));
+    };
+
+    getFreshIdToken(false)
+      .then((token) => {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.send(formData);
+      })
+      .catch((error) => finish(() => reject(error instanceof Error ? error : new ApiError('Sign in to upload files.', 401))));
+  });
+}
+
+export async function uploadProfilePhoto(
+  file: File,
+  options: UploadOptions = {}
+): Promise<{ file: DriveFileItem; profile: StudentProfile; warnings?: string[] }> {
+  const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!allowed.includes(file.type)) {
+    throw new ApiError('Choose a JPEG, PNG or WebP profile photo.', 415);
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    throw new ApiError('Profile photos must be 5 MB or smaller.', 413);
+  }
+  if (file.size === 0) throw new ApiError('The selected photo is empty.', 400);
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  return uploadMultipart('/drive/profile-photo', formData, options);
+}
+
+export async function uploadAdminPdf(input: {
+  courseId: string;
+  file: File;
+  displayName?: string;
+  onProgress?: (percent: number) => void;
+  signal?: AbortSignal;
+}): Promise<DriveFileItem> {
+  if (input.file.type !== 'application/pdf' && !input.file.name.toLowerCase().endsWith('.pdf')) {
+    throw new ApiError('Choose a PDF file.', 415);
+  }
+  if (input.file.size > 20 * 1024 * 1024) {
+    throw new ApiError('Course PDFs must be 20 MB or smaller.', 413);
+  }
+  if (input.file.size === 0) throw new ApiError('The selected PDF is empty.', 400);
+  const formData = new FormData();
+  formData.append('file', input.file, input.file.name);
+  formData.append('courseId', input.courseId);
+  if (input.displayName) formData.append('displayName', input.displayName);
+  const res = await uploadMultipart<{ file: DriveFileItem }>('/admin/drive/upload', formData, {
+    onProgress: input.onProgress,
+    signal: input.signal,
+  });
+  return res.file;
+}
+
+export async function getCourseFiles(courseId: string): Promise<DriveFileItem[]> {
+  const res = await requestApi<{ items: DriveFileItem[] }>(
+    `/files?courseId=${encodeURIComponent(courseId)}`
+  );
+  return res.items || [];
+}
+
+export async function getAdminDriveFiles(params?: {
+  courseId?: string;
+  purpose?: 'profile_photo' | 'pdf' | '';
+  status?: 'active' | 'superseded' | 'deleted' | 'orphan' | 'all';
+}): Promise<DriveFileItem[]> {
+  const query = new URLSearchParams();
+  if (params?.courseId) query.set('courseId', params.courseId);
+  if (params?.purpose) query.set('purpose', params.purpose);
+  if (params?.status) query.set('status', params.status);
+  const qs = query.toString();
+  const res = await requestApi<{ items: DriveFileItem[] }>(
+    `/admin/drive/files${qs ? `?${qs}` : ''}`
+  );
+  return res.items || [];
+}
+
+export async function deleteAdminDriveFile(id: string): Promise<{ removed: boolean; driveDeleted: boolean }> {
+  return requestApi(`/admin/drive/files/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function cleanupDriveFiles(): Promise<{ checked: number; deleted: number; failed: number }> {
+  return requestApi('/admin/drive/cleanup', { method: 'POST', body: {} });
+}
+
+// ---------------------------------------------------------------------------
 // Student feedback inbox (stored in Cloudflare D1; Firebase Auth supplies identity)
 // ---------------------------------------------------------------------------
 export interface StudentFeedbackItem {
@@ -778,8 +1110,19 @@ export interface AdminFeedbackItem extends StudentFeedbackItem {
   exam?: ExamTrack | null;
   class_level?: ClassLevel | null;
 }
-export async function getAdminFeedback(): Promise<AdminFeedbackItem[]> {
-  const res = await requestApi<{ items: AdminFeedbackItem[] }>('/admin/feedback');
+export async function getAdminFeedback(params?: {
+  status?: 'open' | 'in_progress' | 'resolved' | '';
+  query?: string;
+  category?: string;
+}): Promise<AdminFeedbackItem[]> {
+  const query = new URLSearchParams();
+  if (params?.status) query.set('status', params.status);
+  if (params?.query) query.set('query', params.query);
+  if (params?.category) query.set('category', params.category);
+  const qs = query.toString();
+  const res = await requestApi<{ items: AdminFeedbackItem[] }>(
+    `/admin/feedback${qs ? `?${qs}` : ''}`
+  );
   return res.items || [];
 }
 export async function getAdminFeedbackThread(id: string): Promise<{ item: AdminFeedbackItem; messages: FeedbackMessageItem[] }> {

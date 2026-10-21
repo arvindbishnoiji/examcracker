@@ -163,18 +163,15 @@ describe('Screen Studio configuration model', () => {
     expect(new Set(SCREEN_DEFINITIONS.map((item) => item.key)).size).toBe(SCREEN_DEFINITIONS.length);
   });
 
-  it('mirrors the screen allowlist and required sections in the Supabase Edge Function', () => {
-    const source = readFileSync(
-      resolve(__dirname, '../../supabase/functions/ec-site-api/index.ts'),
-      'utf8'
-    );
+  it('accepts every editable screen key in the D1 Worker allowlist', () => {
+    const source = readFileSync(resolve(__dirname, '../../workers/ec-api/src/index.js'), 'utf8');
+    const allowlist = source.match(/const SITE_SETTING_KEYS = new Set\(\[([\s\S]*?)\]\);/);
+    expect(allowlist).not.toBeNull();
     for (const definition of SCREEN_DEFINITIONS) {
-      expect(source).toContain(`"${definition.key}"`);
-      for (const section of definition.sections) {
-        expect(source).toContain(`id: "${section.id}", required: ${section.required ? 'true' : 'false'}`);
-      }
+      // The API must accept the stored key for every screen the studio edits.
+      expect(allowlist?.[1]).toContain(`"${definition.key}"`);
     }
     // Login is a stored contract but must not be an editable Screen Studio entry.
-    expect(source).not.toMatch(/login:\s*\[/);
+    expect(SCREEN_DEFINITIONS.some((definition) => definition.key === ('login' as never))).toBe(false);
   });
 });

@@ -10,9 +10,10 @@ import { Card, Badge, Skeleton } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/hooks/useToast';
 import { formatWatchDuration } from '@/lib/date';
-import type { AnalysisResponse, ClassLevel, ExamTrack, TestCardItem } from '@/types';
+import type { AnalysisResponse, ClassLevel, ExamTrack, StudentProfile, TestCardItem } from '@/types';
 import { visibleSectionIds } from '@/lib/screen-config';
 import { ScreenAnnouncementBanner, ScreenHelpNote, ScreenPageHeader } from '@/components/student/ScreenScaffold';
+import { ProfileAvatar } from '@/components/student/ProfileAvatar';
 
 export default function ProfileAnalysisPage() {
   const { profile, user, bootstrap, signOut, refresh } = useAuth();
@@ -102,12 +103,8 @@ export default function ProfileAnalysisPage() {
     );
   }
 
-  const initials = profile.display_name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('');
+  // Narrowed once here so nested render helpers keep the non-null profile type.
+  const currentProfile: StudentProfile = profile;
 
   const scoreWidth =
     analysis && analysis.totalMaxScore > 0
@@ -122,7 +119,9 @@ export default function ProfileAnalysisPage() {
         <Card key={id} className="relative overflow-hidden p-5 sm:p-6">
           <div className="ec-grid-texture pointer-events-none absolute inset-0 opacity-70" aria-hidden />
           <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start">
-            <span className="ec-avatar h-16 w-16 shrink-0 text-xl">{initials || 'S'}</span>
+            <div className="shrink-0">
+              <ProfileAvatar profile={currentProfile} size="lg" onUpdated={() => void refresh()} />
+            </div>
             <div className="min-w-0 flex-1">
               {screen.heroEyebrow ? (
                 <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-brand-700">{screen.heroEyebrow}</p>
@@ -142,7 +141,7 @@ export default function ProfileAnalysisPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Link
-                href="/chat"
+                href="/feedback"
                 className="ec-btn inline-flex items-center gap-1.5 bg-brand-600 px-3.5 py-2 text-xs font-bold text-white"
               >
                 <MessageCircle size={14} /> {screen.askDoubtLabel}
@@ -300,7 +299,7 @@ export default function ProfileAnalysisPage() {
               { href: '/tests', label: 'Tests' },
               { href: '/lectures', label: 'Lectures' },
               { href: '/leaderboard', label: 'Leaderboard' },
-              { href: '/chat', label: 'Chat' },
+              { href: '/feedback', label: 'Feedback' },
             ].map((link) => (
               <Link
                 key={link.href}

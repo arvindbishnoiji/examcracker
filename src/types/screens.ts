@@ -9,7 +9,7 @@
  * answer-key protection, route protection or any other business rule.
  *
  * All documents are validated on the client (`site-validation.ts`) and again on
- * the server (`supabase/functions/ec-site-api`) before they are stored.
+ * the Worker (`workers/ec-api`) before they are stored.
  */
 
 export type ScreenLayout = 'grid' | 'list' | 'compact';

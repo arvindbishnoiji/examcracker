@@ -34,7 +34,14 @@ binding = "ASSETS"
 enabled = true
 
 # Environment variables (public NEXT_PUBLIC_* are baked at build time via .env)
-# Secrets must be set via `wrangler secret put` or GitHub Actions secrets, never committed
+# Secrets must be set via `wrangler secret put` or GitHub Actions secrets, never committed.
+#
+# Google Drive (server-side only — see GOOGLE_DRIVE_SETUP.md):
+#   wrangler secret put GOOGLE_SERVICE_ACCOUNT_JSON --name exam-cracker-web
+#   wrangler secret put GOOGLE_DRIVE_FOLDER_ID      --name exam-cracker-web
+# Optional purpose-specific folders / limits can be Worker vars or secrets:
+#   GOOGLE_DRIVE_PROFILE_FOLDER_ID, GOOGLE_DRIVE_PDF_FOLDER_ID, GOOGLE_DRIVE_SCOPE,
+#   GOOGLE_DRIVE_MAX_PROFILE_PHOTO_MB (default 5), GOOGLE_DRIVE_MAX_PDF_MB (default 20)
 
 # Routes — add custom domain after deployment
 # [[routes]]

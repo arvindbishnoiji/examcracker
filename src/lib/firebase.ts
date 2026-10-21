@@ -56,9 +56,6 @@ export function getFirebaseAuth(): Auth {
 
 // Lazy getters for backward compat
 export const auth = typeof window !== 'undefined' ? getFirebaseAuth() : (null as unknown as Auth);
-// Legacy compatibility export. Use the browser-only helpers in ./firestore instead.
-export const db = null as unknown as import('firebase/firestore').Firestore;
-
 export function getAuthSafe(): Auth {
   return getFirebaseAuth();
 }

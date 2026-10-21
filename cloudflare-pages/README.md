@@ -22,10 +22,17 @@ The backend Worker must already be deployed. The repository's deployment workflo
 
 ## Auth/API origin setup
 
-The production origin `https://examcrack.pages.dev` is included in `supabase/functions/ec-site-api/index.ts` as a default allowed origin. The Pages front door forwards the visitor's original `Origin` header to the upstream Worker, so the site API must allow this exact origin for CORS preflight and settings writes.
+The production origin `https://examcrack.pages.dev` is in the Worker's `ALLOWED_ORIGINS`
+set (`workers/ec-api/src/index.js`). The Pages front door forwards the visitor's
+original `Origin` header to the upstream Worker, so that Worker must allow this
+exact origin for CORS preflight and API writes.
 
 - Add `examcrack.pages.dev` to Firebase Authentication → Settings → Authorized domains.
-- `ALLOWED_ORIGINS` is additive and is only needed for other custom/preview origins; preserve existing values when updating that secret.
-- The Supabase source change must be deployed separately to activate the allowlist fix. The website deployment workflow does not deploy Supabase functions.
-- Public website URL: `https://examcrack.pages.dev`. The internal `exam-cracker-web` Worker is reached through the Pages `EXAM_CRACKER_WEB` service binding and must not expose a separate workers.dev URL.
+- To allow another custom/preview origin, edit the `ALLOWED_ORIGINS` set in the
+  Worker and redeploy it with `wrangler deploy`.
+- Public website URL: `https://examcrack.pages.dev`. The internal `exam-cracker-web`
+  Worker is reached through the Pages `EXAM_CRACKER_WEB` service binding and must
+  not expose a separate workers.dev URL (`workers_dev = false`).
+- The Worker also needs the D1 binding and the Google Drive secrets described in
+  `GOOGLE_DRIVE_SETUP.md`; Pages does not manage those.
 - The separate `ec-content-api` media proxy remains unchanged.

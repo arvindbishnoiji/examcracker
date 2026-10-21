@@ -262,7 +262,7 @@ export function ImportExportSection() {
             <li>Every stored setting key with published and draft payloads.</li>
             <li>Publish timestamps so you can see how fresh each surface is.</li>
             <li>No Firebase tokens, student emails, UIDs or attempt data.</li>
-            <li>Content (lectures, tests, events) lives in Firestore/Supabase and is backed up separately.</li>
+            <li>Content (lectures, tests, events) lives in Cloudflare D1; PDFs and profile photos live in Google Drive.</li>
           </ul>
           <button type="button" onClick={download} disabled={!rows?.length} className="mt-3 ec-btn px-3 py-2 text-xs font-semibold border border-ink-200 disabled:opacity-50">
             Download backup

@@ -61,7 +61,7 @@ export function ContentToolSection({ slug }: { slug: string }) {
         meta={
           <>
             <span className="rounded-full border border-ink-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-ink-600">
-              Real Firestore data
+              Stored in Cloudflare D1
             </span>
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
               Preserved workflow

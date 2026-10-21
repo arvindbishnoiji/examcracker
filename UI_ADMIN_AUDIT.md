@@ -1,10 +1,15 @@
-# Exam Cracker — UI/Admin Audit (Pass 1)
+# Exam Cracker — UI/Admin Audit (Pass 1, historical)
+
+> **Historical document.** It records the repository state at commit `ae38c99`, before
+> the D1/Drive cutover. Supabase and Firestore described below are no longer part of
+> the application runtime. See `README.md`, `MASTER_PROMPT.md`,
+> `D1_MIGRATION_RUNBOOK.md` and `GOOGLE_DRIVE_SETUP.md` for the current architecture.
 
 Inspection of the repository on branch `arena/1e423bd0-examcracker` (from `main` commit `ae38c99`). All checks were green at inspection time: `npm run typecheck`, `npm test` (57 tests), `npm run lint`, `npm run build`, `npm run build:cloudflare`.
 
 ## What already works
 
-- Next.js App Router student app with Firebase Auth + Supabase Edge Functions (`exam-cracker-api` and dedicated `ec-site-api`).
+- Next.js App Router student app with Firebase Auth + (at the time) Supabase Edge Functions.
 - Persisted site configuration: `site_settings` table with `draft`/`published` columns per key; `/public/site` endpoint serves published values; `SiteConfigContext` merges published values over typed defaults and applies theme tokens to `:root`.
 - Admin console at `/admin` with shell, command palette (⌘K), searchable sidebar, toast feedback, publish bars with draft/published/reset states, per-key validation in `src/lib/site-validation.ts` and mirrored server-side in the Edge Function.
 - Manageable screens today: theme (`appearance`), login (`login` designer), homepage (`homepage` builder), navigation, footer, banners, popups, testimonials, challenges, feature toggles, SEO/search, media library.

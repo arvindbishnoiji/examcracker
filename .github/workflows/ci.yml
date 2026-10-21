@@ -27,11 +27,17 @@ jobs:
       - name: Validate D1 API syntax and migration locally
         run: |
           node --check workers/ec-api/src/index.js
+          node --check workers/ec-api/src/drive.js
           npx wrangler d1 migrations apply exam-cracker-db --local
-          schema_output="$(npx wrangler d1 execute exam-cracker-db --local --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('student_profiles','course_catalog','site_settings','feedback_threads','feedback_messages','notifications') ORDER BY name")"
+          schema_output="$(npx wrangler d1 execute exam-cracker-db --local --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('student_profiles','course_catalog','subjects','course_subjects','drive_files','site_settings','feedback_threads','feedback_messages','notifications') ORDER BY name")"
           echo "$schema_output"
-          for table in student_profiles course_catalog site_settings feedback_threads feedback_messages notifications; do
+          for table in student_profiles course_catalog subjects course_subjects drive_files site_settings feedback_threads feedback_messages notifications; do
             grep -q "$table" <<<"$schema_output"
+          done
+          column_output="$(npx wrangler d1 execute exam-cracker-db --local --command="SELECT name FROM pragma_table_info('course_catalog')")"
+          echo "$column_output"
+          for column in parent_id subject_id sort_order; do
+            grep -q "$column" <<<"$column_output"
           done
 
       - name: Validate Cloudflare media proxy JavaScript
@@ -73,7 +79,9 @@ jobs:
         run: |
           echo "Checking for accidental secret commit..."
           ! grep -R "service_role" --include="*.ts" --include="*.tsx" --include="*.js" src/ || (echo "Found service_role in src — remove before commit" && exit 1)
-          ! grep -R "SUPABASE_SERVICE_ROLE_KEY" --include="*.ts" --include="*.tsx" src/ || (echo "Found service key in src" && exit 1)
+          ! grep -R "SUPABASE_SERVICE_ROLE_KEY\|GOOGLE_SERVICE_ACCOUNT_JSON\|private_key" --include="*.ts" --include="*.tsx" --include="*.js" src/ || (echo "Found a server credential in src — remove before commit" && exit 1)
+          ! grep -R "supabase" --include="*.ts" --include="*.tsx" src/ || (echo "Supabase code is retired; remove the import" && exit 1)
+          test ! -d supabase || (echo "supabase/ source directory should not exist" && exit 1)
 
       - name: Verify Cloudflare web worker config is separate
         run: |

@@ -460,7 +460,7 @@ export const DEFAULT_FOOTER: FooterConfig = {
     },
   ],
   socialLinks: [],
-  copyright: '© Exam Cracker. Built with Firebase, Supabase and Cloudflare.',
+  copyright: '© Exam Cracker. Built with Firebase, Cloudflare and Google Drive.',
 };
 
 export const DEFAULT_BANNERS: BannersConfig = {
