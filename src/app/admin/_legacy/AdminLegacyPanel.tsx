@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/useToast';
 import {
   getAdminOverview, getAdminContentList, createAdminContent, updateAdminContent, disableAdminContent,
   getAdminAnnouncements, createAdminAnnouncement, updateAdminAnnouncement, getAdminStudents,
-  getAdminSubjects, uploadAdminPdf, getCourseFiles, invalidateAuthorizedBlobCache,
+  getAdminSubjects, createAdminSubject, setCourseSubjects, uploadAdminPdf, getCourseFiles, invalidateAuthorizedBlobCache,
 } from '@/lib/api';
 import { fetchVideoMetadata, importFullYoutubePlaylist, extractYoutubeVideoId, extractYoutubePlaylistId, getYoutubeDefaultThumbnail } from '@/lib/mediaProxy';
 import { fromISTDateTimeLocalInput, toISTDateTimeLocalInput } from '@/lib/date';
@@ -146,16 +146,73 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
   const [examFilter, setExamFilter] = useState('all');
   const [classFilter, setClassFilter] = useState('all');
   const [stateFilter, setStateFilter] = useState('all');
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [workspaceId, setWorkspaceId] = useState('');
+  const [workspaceSubjectIds, setWorkspaceSubjectIds] = useState<string[]>([]);
+  const [newSubjectName, setNewSubjectName] = useState('');
+  const [savingSubjects, setSavingSubjects] = useState(false);
 
   const load = useCallback(async()=>{
     setLoading(true); setError(null);
     try{
-      const data = await getAdminContentList({ kind });
+      const [data, subjectRows] = await Promise.all([
+        getAdminContentList({ kind }),
+        (kind === 'batch' || kind === 'series') ? getAdminSubjects({ includeArchived: false }) : Promise.resolve([] as Subject[]),
+      ]);
       setItems(data);
+      setSubjects(subjectRows);
     }catch(e){ setError(e instanceof Error? e.message:'Failed'); }
     finally{ setLoading(false); }
   },[kind]);
   useEffect(()=>{ load(); },[load]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    setWorkspaceSubjectIds(subjects
+      .filter((subject) => subject.assignments?.some((assignment) => assignment.courseId === workspaceId))
+      .map((subject) => subject.id));
+  }, [workspaceId, subjects]);
+
+  async function saveWorkspaceSubjects(event: React.FormEvent) {
+    event.preventDefault();
+    if (!workspaceId) return;
+    setSavingSubjects(true);
+    try {
+      await setCourseSubjects(workspaceId, workspaceSubjectIds);
+      push('Subject assignments saved to D1.','success');
+      await load();
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Could not save subject assignments.','error');
+    } finally {
+      setSavingSubjects(false);
+    }
+  }
+
+  async function createAndAssignSubject(event: React.FormEvent) {
+    event.preventDefault();
+    const course = items.find((item) => item.id === workspaceId);
+    const name = newSubjectName.trim();
+    if (!course || !name) return;
+    setSavingSubjects(true);
+    try {
+      const created = await createAdminSubject({
+        name,
+        description: '',
+        exam: course.exam,
+        classes: course.classes,
+        active: true,
+        sortOrder: subjects.length + 1,
+      });
+      await setCourseSubjects(workspaceId, [...workspaceSubjectIds, created.id]);
+      setNewSubjectName('');
+      push(`${created.name} created and assigned to ${course.title}.`,'success');
+      await load();
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Could not create and assign this subject.','error');
+    } finally {
+      setSavingSubjects(false);
+    }
+  }
 
   const visibleItems = items.filter((item) => {
     const query = search.trim().toLowerCase();
@@ -299,6 +356,7 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
                   {kind==='event' && meta.images && <p className="text-xs">Images: {JSON.stringify(meta.images).slice(0,120)}</p>}
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
+                  {(kind === 'batch' || kind === 'series') && <Button size="sm" onClick={() => setWorkspaceId(it.id)} aria-expanded={workspaceId === it.id}>Manage</Button>}
                   <Button size="sm" variant="outline" onClick={()=> openEdit(it)}>Edit</Button>
                   <Button size="sm" variant={it.active ? 'danger' : 'outline'} onClick={()=> handleToggleActive(it)}>{it.active ? 'Disable' : 'Restore'}</Button>
                 </div>
@@ -307,6 +365,60 @@ function AdminContentTab({ kind }: { kind: 'goal'|'batch'|'series'|'event' }){
           );
         })}
       </div>
+
+      {(kind === 'batch' || kind === 'series') && items.some((item) => item.id === workspaceId) && (() => {
+        const course = items.find((item) => item.id === workspaceId)!;
+        const assignedCount = workspaceSubjectIds.length;
+        return (
+          <Card className="space-y-4 border-brand-200 p-5" aria-label={`${course.title} management workspace`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-brand-700">{course.kind} workspace</p>
+                <h3 className="text-lg font-extrabold">{course.title}</h3>
+                <p className="text-xs text-ink-500">{assignedCount} subject{assignedCount === 1 ? '' : 's'} assigned · lectures and resources are grouped by subject.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link href={`/lectures/${encodeURIComponent(course.id)}`} className="ec-btn border border-ink-200 px-3 py-2 text-xs font-bold">Preview learning tree</Link>
+                <button type="button" className="ec-btn px-3 py-2 text-xs font-bold text-ink-500 hover:bg-ink-100" onClick={() => setWorkspaceId('')}>Close</button>
+              </div>
+            </div>
+            <form onSubmit={saveWorkspaceSubjects} className="space-y-3">
+              <fieldset>
+                <legend className="mb-2 text-sm font-bold">Assigned subjects</legend>
+                {subjects.filter((subject) => subject.active && !subject.archived).length ? (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {subjects.filter((subject) => subject.active && !subject.archived).map((subject) => {
+                      const checked = workspaceSubjectIds.includes(subject.id);
+                      const examOkay = subject.exam === 'Both' || course.exam === 'Both' || subject.exam === course.exam;
+                      const classOkay = subject.classes.some((level) => course.classes.includes(level));
+                      return (
+                        <label key={subject.id} className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${checked ? 'border-brand-300 bg-brand-50/70' : 'border-ink-200'}`}>
+                          <input type="checkbox" checked={checked} disabled={!examOkay || !classOkay} onChange={(event) => setWorkspaceSubjectIds((previous) => event.target.checked ? [...new Set([...previous, subject.id])] : previous.filter((id) => id !== subject.id))} />
+                          <span className="min-w-0"><span className="block font-semibold">{subject.name}</span><span className="text-[10px] text-ink-500">{subject.exam} · Class {subject.classes.join('/')}{!examOkay || !classOkay ? ' · not applicable' : ''}</span></span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : <p className="rounded-xl border border-dashed border-ink-200 p-3 text-xs text-ink-500">No subjects yet. Create one here and it will be linked to this {course.kind}.</p>}
+              </fieldset>
+              <div className="flex flex-wrap items-end gap-2">
+                <Button type="submit" loading={savingSubjects}>Save subject assignments</Button>
+                <Link href={`/admin/lectures?parentId=${encodeURIComponent(course.id)}`} className="ec-btn border border-ink-200 px-3 py-2 text-xs font-bold">Manage lectures &amp; resources</Link>
+              </div>
+            </form>
+            <form onSubmit={createAndAssignSubject} className="grid gap-2 rounded-xl border border-ink-200 bg-ink-50/50 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <Input label="Create and assign a subject" value={newSubjectName} onChange={(event) => setNewSubjectName(event.target.value)} placeholder="e.g. Physics" maxLength={100} required />
+              <Button type="submit" variant="outline" loading={savingSubjects} disabled={!newSubjectName.trim()}>Create &amp; assign</Button>
+              <p className="text-[11px] text-ink-500 sm:col-span-2">Uses this {course.exam} · Class {course.classes.join('/')} scope. The subject and course link are saved to D1 together through authenticated API calls.</p>
+            </form>
+            {workspaceSubjectIds.map((subjectId) => {
+              const subject = subjects.find((row) => row.id === subjectId);
+              if (!subject) return null;
+              return <div key={subjectId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-200 px-3 py-2 text-sm"><span className="font-semibold">{subject.name}</span><Link href={`/admin/lectures?parentId=${encodeURIComponent(course.id)}&subjectId=${encodeURIComponent(subject.id)}`} className="text-xs font-bold text-brand-700 hover:underline">Open subject · Add lecture →</Link></div>;
+            })}
+          </Card>
+        );
+      })()}
 
       {showForm && (
         <Card className="p-6 border-brand-200">
@@ -405,6 +517,7 @@ function AdminLecturesTab(){
   const [playlistClasses, setPlaylistClasses] = useState<string[]>(['11']);
   const [playlistTopic, setPlaylistTopic] = useState('');
   const [playlistSubject, setPlaylistSubject] = useState('');
+  const initializedWorkspaceLink = useRef(false);
 
   const load = useCallback(async()=>{
     setLoading(true); setError(null);
@@ -420,6 +533,18 @@ function AdminLecturesTab(){
     finally{ setLoading(false); }
   },[]);
   useEffect(()=>{ load(); },[load]);
+
+  useEffect(() => {
+    if (initializedWorkspaceLink.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const parentId = params.get('parentId') || '';
+    if (!parentId || ![...batches, ...series].some((course) => course.id === parentId)) return;
+    const subjectId = params.get('subjectId') || '';
+    const subjectIsAssigned = subjects.some((subject) => subject.id === subjectId && subject.assignments?.some((assignment) => assignment.courseId === parentId));
+    initializedWorkspaceLink.current = true;
+    setForm({ ...EMPTY_LECTURE_FORM, parentId, subjectId: subjectIsAssigned ? subjectId : '' });
+    setShowForm(true);
+  }, [batches, series, subjects]);
 
   // Subject options come from the parent course's assignment list, so the admin
   // cannot pick a pair the API would reject.
