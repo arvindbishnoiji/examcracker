@@ -67,7 +67,8 @@ jobs:
           test -f workers/ec-content-api/wrangler.toml
           grep -q 'ec-content-api' workers/ec-content-api/wrangler.toml
           test "$(grep -c '^name =' wrangler.toml)" -eq 1
-          echo "✓ Worker configs separate and correct"
+          grep -q 'NEXT_PRIVATE_MINIMAL_MODE = "1"' wrangler.toml
+          echo "✓ Worker configs separate and runtime compatibility flag is set"
 
       - name: Verify OpenNext config exists
         run: test -f open-next.config.ts && echo "✓ open-next.config.ts present"
