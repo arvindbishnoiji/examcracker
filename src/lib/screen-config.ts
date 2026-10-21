@@ -219,7 +219,7 @@ export const SCREEN_DEFINITIONS: ScreenDefinition[] = [
     slug: 'chat',
     label: 'Feedback & help',
     route: '/feedback',
-    description: 'Send suggestions and report issues, then track the team response.
+    description: 'Send suggestions and report issues, then track the team response.',
     icon: '✉',
     group: 'Communication',
     sections: [
