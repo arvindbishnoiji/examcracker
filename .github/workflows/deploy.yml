@@ -69,7 +69,7 @@ jobs:
           NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL: ${{ vars.NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL || 'https://ec-content-api.arvinddara0290.workers.dev' }}
           NEXT_PUBLIC_ADMIN_EMAIL: ${{ vars.NEXT_PUBLIC_ADMIN_EMAIL || 'arvinddarabishnoi@gmail.com' }}
           NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${{ vars.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED || 'true' }}
-          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://examcrack.pages.dev' }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://examcracker.pages.dev' }}
 
       - name: Verify Firebase public config was inlined in client JavaScript
         env:
@@ -90,7 +90,7 @@ jobs:
           NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL: ${{ vars.NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL || 'https://ec-content-api.arvinddara0290.workers.dev' }}
           NEXT_PUBLIC_ADMIN_EMAIL: ${{ vars.NEXT_PUBLIC_ADMIN_EMAIL || 'arvinddarabishnoi@gmail.com' }}
           NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${{ vars.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED || 'true' }}
-          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://examcrack.pages.dev' }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://examcracker.pages.dev' }}
 
       - name: Verify configured D1 database and apply schema migrations
         env:
@@ -132,9 +132,29 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
 
+      - name: Build and deploy public Cloudflare Pages frontend
+        run: |
+          bash cloudflare-pages/build.sh
+          npx wrangler pages deploy cloudflare-pages/public --project-name=examcracker --branch=main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyA1fiEviIdG5_yi7AcyxC3m9sec-AdkOfU' }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'darvo1.firebaseapp.com' }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'darvo1' }}
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'darvo1.firebasestorage.app' }}
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '283467136948' }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID || '1:283467136948:web:c66fd594827909eb3f7ce1' }}
+          NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || 'G-FMV79YMHBC' }}
+          NEXT_PUBLIC_VAPID_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_VAPID_KEY }}
+          NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL: ${{ vars.NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL || 'https://ec-content-api.arvinddara0290.workers.dev' }}
+          NEXT_PUBLIC_ADMIN_EMAIL: ${{ vars.NEXT_PUBLIC_ADMIN_EMAIL || 'arvinddarabishnoi@gmail.com' }}
+          NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${{ vars.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED || 'true' }}
+          NEXT_PUBLIC_SITE_URL: https://examcracker.pages.dev
+
       - name: Verify deployed website health
         env:
-          HEALTH_URL: https://examcrack.pages.dev/login
+          HEALTH_URL: https://examcracker.pages.dev/login
         run: |
           test -n "$HEALTH_URL" || { echo "Set CLOUDFLARE_WEB_HEALTH_URL to the deployed /login URL" >&2; exit 1; }
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 "$HEALTH_URL"
@@ -149,7 +169,7 @@ jobs:
 
       - name: Verify rendered app shell and JavaScript assets
         env:
-          HEALTH_URL: https://examcrack.pages.dev/login
+          HEALTH_URL: https://examcracker.pages.dev/login
         run: |
           node --input-type=module <<'NODE'
           const configured = process.env.HEALTH_URL;
