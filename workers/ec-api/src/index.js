@@ -1212,7 +1212,7 @@ async function initializeRuntimeSchemaIfNeeded(db) {
   // non-idempotent ALTER TABLE statements against real or partial user data.
   if (appTables.length > 0) {
     throw httpError(
-      "Exam Cracker database schema is incomplete.",
+      `Exam Cracker database schema is incomplete. Found tables: ${appTables.join(", ")}; missing required tables: ${missing.join(", ")}.`,
       503
     );
   }
@@ -1228,7 +1228,10 @@ async function initializeRuntimeSchemaIfNeeded(db) {
   } else {
     const columns = await all(db, "PRAGMA table_info('d1_migrations')");
     if (!columns.some((column) => column.name === "name")) {
-      throw httpError("Exam Cracker D1 migration history table has an unsupported schema.", 503);
+      throw httpError(
+        `Exam Cracker D1 migration history table has an unsupported schema. Found columns: ${columns.map((column) => column.name).join(", ") || "(none)"}.`,
+        503
+      );
     }
     // With no application tables, any old ledger rows cannot describe the
     // missing schema; reset only this metadata table before safely bootstrapping.
@@ -1240,9 +1243,15 @@ async function initializeRuntimeSchemaIfNeeded(db) {
     if (!statements.length) continue;
     const prepared = statements.map((sql) => db.prepare(sql));
     prepared.push(db.prepare("INSERT INTO d1_migrations (name) VALUES (?)").bind(migration.name));
-    const results = await db.batch(prepared);
+    let results;
+    try {
+      results = await db.batch(prepared);
+    } catch (error) {
+      const detail = String(error && error.message || "D1 batch failed").slice(0, 320);
+      throw httpError(`Failed to apply D1 schema migration ${migration.name}: ${detail}`, 503);
+    }
     if (Array.isArray(results) && results.some((result) => result && result.success === false)) {
-      throw httpError(`Failed to apply D1 schema migration ${migration.name}.`, 503);
+      throw httpError(`Failed to apply D1 schema migration ${migration.name}: a D1 statement returned success=false.`, 503);
     }
   }
 
