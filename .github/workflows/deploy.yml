@@ -156,9 +156,21 @@ jobs:
         env:
           API_HEALTH_URL: https://examcrack.pages.dev/api/ec/health
         run: |
-          response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 "$API_HEALTH_URL")"
-          echo "$response"
-          API_HEALTH_JSON="$response" node <<'NODE'
+          # Capture the response body even for HTTP errors so a failed deploy
+          # tells us exactly which binding/schema check blocked the API.
+          for attempt in 1 2 3 4 5; do
+            http_status="$(curl --silent --show-error --output /tmp/api-health.json --write-out '%{http_code}' "$API_HEALTH_URL")"
+            if [ "$http_status" = "200" ]; then break; fi
+            echo "API health attempt $attempt returned HTTP $http_status"
+            if [ "$attempt" -lt 5 ]; then sleep 2; fi
+          done
+          echo "API health HTTP status: $http_status"
+          cat /tmp/api-health.json
+          if [ "$http_status" != "200" ]; then
+            echo "Profile API returned HTTP $http_status; see the response body above." >&2
+            exit 1
+          fi
+          API_HEALTH_JSON="$(cat /tmp/api-health.json)" node <<'NODE'
           const health = JSON.parse(process.env.API_HEALTH_JSON || '{}');
           const tables = Number(health.tables);
           if (health.ok !== true || !Number.isFinite(tables) || tables < 19) {
