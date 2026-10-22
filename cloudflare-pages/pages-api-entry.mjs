@@ -23,28 +23,43 @@ const jsonError = (error, detail) =>
     },
   );
 
-function isDriveBinaryOrStatusRoute(request) {
+function requestApiPath(request) {
   try {
-    const pathname = new URL(request.url).pathname.replace(/^\/api\/ec/, "") || "/";
-    if (pathname.startsWith("/drive/")) return true;
-    if (pathname === "/admin/drive/upload" || pathname === "/admin/drive/status") return true;
-    if (/^\/files\/[^/]+$/.test(pathname)) return true;
-    return false;
+    return new URL(request.url).pathname.replace(/^\/api\/ec(?=\/|$)/, "") || "/";
   } catch {
-    return false;
+    return "/";
   }
 }
 
-function hasLocalDriveCredentials(env) {
-  const hasServiceAccount =
+function isDriveBinaryOrStatusRoute(request) {
+  const pathname = requestApiPath(request);
+  return (
+    pathname.startsWith("/drive/") ||
+    pathname.startsWith("/admin/drive/") ||
+    /^\/files\/[^/]+$/.test(pathname)
+  );
+}
+
+function hasLocalServiceAccountCredentials(env) {
+  return (
     typeof env?.GOOGLE_SERVICE_ACCOUNT_JSON === "string" &&
-    env.GOOGLE_SERVICE_ACCOUNT_JSON.trim();
-  const hasAppsScript =
+    Boolean(env.GOOGLE_SERVICE_ACCOUNT_JSON.trim())
+  );
+}
+
+function hasLocalAppsScriptCredentials(env) {
+  return (
     typeof env?.GOOGLE_APPS_SCRIPT_URL === "string" &&
-    env.GOOGLE_APPS_SCRIPT_URL.trim() &&
+    Boolean(env.GOOGLE_APPS_SCRIPT_URL.trim()) &&
     typeof env?.GOOGLE_APPS_SCRIPT_SHARED_SECRET === "string" &&
-    env.GOOGLE_APPS_SCRIPT_SHARED_SECRET.trim();
-  return Boolean(hasServiceAccount || hasAppsScript);
+    Boolean(env.GOOGLE_APPS_SCRIPT_SHARED_SECRET.trim())
+  );
+}
+
+function isAppsScriptUploadRoute(request) {
+  if (request.method.toUpperCase() !== "POST") return false;
+  const pathname = requestApiPath(request);
+  return pathname === "/drive/profile-photo" || pathname === "/admin/drive/upload";
 }
 
 export async function onRequest({ request, env }) {
@@ -54,10 +69,17 @@ export async function onRequest({ request, env }) {
 
   // If Google Drive secrets live on exam-cracker-web rather than Pages env,
   // delegate Drive upload/download/status routes to the Worker before failing 503.
+  // Apps Script only creates new files; downloads, delete/cleanup and status
+  // still need the service account. Do not let local Apps Script upload
+  // secrets accidentally make those other routes bypass a Worker that has
+  // GOOGLE_SERVICE_ACCOUNT_JSON configured.
+  const canUploadViaLocalAppsScript =
+    hasLocalAppsScriptCredentials(env) && isAppsScriptUploadRoute(request);
   if (
     hasWorkerBinding &&
     isDriveBinaryOrStatusRoute(request) &&
-    !hasLocalDriveCredentials(env)
+    !hasLocalServiceAccountCredentials(env) &&
+    !canUploadViaLocalAppsScript
   ) {
     try {
       return await env.EXAM_CRACKER_WEB.fetch(request);
