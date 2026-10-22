@@ -32,6 +32,15 @@ import type {
   BatchShowcaseConfig,
   MotionPreset,
 } from '@/types';
+import { isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
+
+/** Return only app-internal routes or HTTPS URLs for animation reward links. */
+export function safeAnimationRewardHref(value?: string | null): string {
+  const href = typeof value === 'string' ? value.trim() : '';
+  if (isValidInternalDeepLink(href)) return href;
+  if (/^https:\/\//i.test(href) && isSafeHttpUrl(href)) return href;
+  return '';
+}
 
 export function studioId(prefix: string): string {
   const random =
