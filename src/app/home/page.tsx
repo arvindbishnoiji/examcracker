@@ -250,8 +250,8 @@ function HowItWorks() {
     },
     {
       n: '03',
-      title: 'See progress, claim rewards',
-      body: 'Rank, streak and rewards update from real attempts. No vanity numbers.',
+      title: 'Track your progress',
+      body: 'Review real test scores, streaks and leaderboard positions as your preparation improves.',
       tint: 'var(--ec-c3)',
       icon: <Trophy size={16} />,
     },
