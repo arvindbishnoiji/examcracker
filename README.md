@@ -3,10 +3,9 @@
 JEE/NEET learning app for Class 11 and 12 (Next.js App Router, TypeScript,
 Tailwind CSS) built on:
 
-**Firebase Authentication → Cloudflare Worker API → Cloudflare D1 → Google Drive (files)**
+**Firebase Authentication → Cloudflare API / Worker → Cloudflare D1 → Google Drive (files)**
 
-There is no Supabase or Firestore runtime. Files are never stored in D1 and never
-outside Google Drive.
+There is no Supabase or Firestore runtime. Files are never stored in D1. They remain in private Google Drive folders; personal Gmail uploads can use a server-side Google Apps Script bridge, while the service account remains responsible for authenticated file reads and cleanup.
 
 ## Architecture
 
@@ -17,7 +16,7 @@ outside Google Drive.
 | `src/app/api/ec/[...path]/route.ts` | Proxies to the Worker inside the same OpenNext deployment and fails closed with 503 when the D1 binding is absent. |
 | `workers/ec-api/src/index.js` | Verifies Firebase ID tokens (JWKS), enforces admin/ownership rules, validates bodies, scores tests on the server, and reads/writes D1 with parameterized SQL. |
 | Cloudflare D1 (`DB`) | All structured data: profiles, catalogue, subjects, progress, attempts, enrollments, feedback, notifications, settings, audit log, Drive metadata. |
-| Google Drive | Profile photos and course PDFs, accessed only by the Worker service account. Private; no public links. |
+| Google Drive | Private profile photos and course PDFs, with metadata in D1. The service account handles authenticated reads/cleanup; uploads use it on supported Shared Drives or the owner-run Apps Script bridge for personal Gmail My Drive. No public file links. |
 | `ec-content-api` Worker | Separate YouTube video/playlist metadata proxy. Unchanged. |
 
 - D1 binding `DB`, database `exam-cracker-db`, ID `dbf2375d-a302-443f-83bf-df59e1d98177`.
@@ -107,6 +106,38 @@ events, notifications, feedback inbox, appearance/navigation/footer/banners/
 popups/testimonials/media/SEO/toggles, scheduling, reports, health, import/export,
 preferences and the preserved classic console with the YouTube playlist importer.
 
+## Experience Studio (batches + animations)
+
+Two new admin workspaces ship with the Aurora 2026 UI refresh:
+
+**Batch Studio — `/admin/batch-studio`**
+- Create a real D1 batch (name, description, exam, class levels, access code) and
+  design its student card in one screen: cover image URL, hero image, badge,
+  mentor, feature chips, seats, priority, start/end schedule (IST), the pages it
+  appears on (`home`, `lectures`, `tests`, `dashboard`, `events`), its accent
+  colour, entrance motion and completion reward (badge, XP, certificate,
+  discount, cash, bonus access).
+- The **Section design** tab edits the published `batchStudio` site setting:
+  headline, sub-headline, layout (`spotlight`, `tile`, `wide`, `minimal`),
+  countdown/reward/feature/seat visibility, maximum cards and the colour cycle.
+- Batches that are unpublished or outside their schedule never reach students;
+  each card only shows to the exam/classes it targets.
+
+**Animation Studio — `/admin/animation-studio`**
+- Author per-page animation layers in raw HTML + CSS + JS (the “index.html”
+  workflow), starting from a template (confetti reward, marquee ribbon, snow
+  focus, corner offer, countdown bar, cursor spotlight) or from a blank layer.
+- Choose pages, audience, trigger (page load, delay, scroll, exit intent, idle,
+  schedule), delay, auto-hide duration, frequency, surface (overlay, banner,
+  corner, floating), backdrop, dismissibility and an optional claimable reward.
+- Layers are validated before publishing and rendered inside a sandboxed iframe
+  (`allow-scripts`, unique origin) so authored JS cannot read student data or
+  the parent document. `respectReducedMotion` and a global kill switch are built
+  in, and publishing is draft → publish through D1 like every other setting.
+
+`/design-preview` is a noindex internal style guide that renders sample batches
+and a sample animation layer so the design can be reviewed without signing in.
+
 ## Important paths
 
 - `src/app/` — student and admin routes
@@ -117,8 +148,9 @@ preferences and the preserved classic console with the YouTube playlist importer
 - `src/components/student/ProfileAvatar.tsx` — preview, progress, cancel/retry
   profile photo control
 - `workers/ec-api/src/index.js` — Worker API
-- `workers/ec-api/src/drive.js` — Google Drive service-account auth, upload,
-  download and delete
+- `workers/ec-api/src/drive.js` — server-side Google Drive upload/read/delete integration
+- `workers/ec-api/src/apps-script-drive.js` — personal Gmail Apps Script upload bridge
+- `cloudflare-pages/apps-script-drive-bridge.gs` — deployable Apps Script source
 - `migrations/` — D1 schema
 - `D1_MIGRATION_RUNBOOK.md` — rollout steps
 - `GOOGLE_DRIVE_SETUP.md` — Drive, service account and secret setup

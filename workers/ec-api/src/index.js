@@ -53,6 +53,8 @@ const SITE_SETTING_KEYS = new Set([
   "notifications",
   "search",
   "onboarding",
+  "batchStudio",
+  "animations",
 ]);
 const FEEDBACK_CATEGORIES = new Set(["general", "content", "tests", "technical", "suggestion"]);
 const FEEDBACK_STATUSES = new Set(["open", "in_progress", "resolved"]);

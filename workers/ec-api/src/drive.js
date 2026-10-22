@@ -1,15 +1,18 @@
 /**
  * Google Drive server-side integration for the Exam Cracker Worker.
  *
- * The service account is read only from server-side Worker secrets:
- *   GOOGLE_SERVICE_ACCOUNT_JSON  (secret)
- *   GOOGLE_DRIVE_FOLDER_ID       (var or secret)
+ * Credentials are read only from server-side secrets:
+ *   GOOGLE_SERVICE_ACCOUNT_JSON (for private reads/deletes and legacy uploads)
+ *   GOOGLE_APPS_SCRIPT_URL + GOOGLE_APPS_SCRIPT_SHARED_SECRET (personal Gmail uploads)
+ *   GOOGLE_DRIVE_FOLDER_ID (var or secret)
  *   GOOGLE_DRIVE_PROFILE_FOLDER_ID / GOOGLE_DRIVE_PDF_FOLDER_ID (optional)
  *
  * Nothing in this module writes credentials, access tokens or file bytes to
  * logs. Files are never shared publicly: the Worker verifies a Firebase ID
  * token and proxies authorized reads from Drive.
  */
+
+import { inspectAppsScriptDriveStatus, isAppsScriptDriveConfigured, uploadViaAppsScript } from "./apps-script-drive.js";
 
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const DRIVE_UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/drive/v3/files";
@@ -428,10 +431,31 @@ export async function inspectDriveStatus(env, { probe = false, fetchImpl = fetch
     credentialError = err instanceof Error ? err.message : "Service account is not configured.";
   }
 
-  const configured = Boolean(accountInfo && (defaultFolderId || (pdfFolderId && profileFolderId)) && !scopeWarning);
+  const appsScriptConfigured = isAppsScriptDriveConfigured(env);
+  const hasAppsScriptConfig = Boolean(
+    String((env && env.GOOGLE_APPS_SCRIPT_URL) || "").trim() ||
+      String((env && env.GOOGLE_APPS_SCRIPT_SHARED_SECRET) || "").trim()
+  );
+  const appsScriptConfigurationIncomplete = hasAppsScriptConfig && !appsScriptConfigured;
+  // Uploads can use Apps Script, but private file downloads and cleanup still
+  // use the service account. "configured" must represent the whole file system,
+  // not just the uploader, and the service-account Drive scope still matters.
+  const configured = Boolean(
+    accountInfo &&
+      (defaultFolderId || (pdfFolderId && profileFolderId)) &&
+      !scopeWarning &&
+      !appsScriptConfigurationIncomplete
+  );
   const result = {
     configured,
     serviceAccountConfigured: Boolean(accountInfo),
+    uploadMode: hasAppsScriptConfig
+      ? appsScriptConfigured
+        ? "personal-gmail-apps-script"
+        : "personal-gmail-apps-script-incomplete"
+      : "service-account",
+    appsScriptConfigured,
+    appsScriptConfigurationIncomplete,
     serviceAccountEmail: accountInfo ? accountInfo.clientEmail : null,
     workspaceDelegationConfigured: Boolean(
       String((env && env.GOOGLE_DRIVE_IMPERSONATE_EMAIL) || "").trim()
@@ -447,7 +471,9 @@ export async function inspectDriveStatus(env, { probe = false, fetchImpl = fetch
     probe: null,
   };
 
-  if (probe && accountInfo && effectivePdfFolder) {
+  if (probe && appsScriptConfigured && effectivePdfFolder) {
+    result.probe = await inspectAppsScriptDriveStatus(env, effectivePdfFolder, fetchImpl);
+  } else if (probe && accountInfo && effectivePdfFolder) {
     try {
       const token = await getDriveAccessToken(env, fetchImpl);
       result.probe = await probeDriveFolder(env, effectivePdfFolder, token, fetchImpl);
@@ -476,6 +502,11 @@ export async function uploadDriveFile(
     throw httpError("The selected file is empty.", 400);
   }
   const folderId = folderFor(env, purpose);
+  // Personal Gmail uploads must be created by the account owner through Apps Script;
+  // service-account uploads to personal My Drive fail with storageQuotaExceeded.
+  if (env?.GOOGLE_APPS_SCRIPT_URL || env?.GOOGLE_APPS_SCRIPT_SHARED_SECRET) {
+    return uploadViaAppsScript(env, { bytes, mimeType, name, purpose, folderId, fetchImpl });
+  }
   const token = await getDriveAccessToken(env, fetchImpl);
 
   const boundary = `examcracker_${crypto.randomUUID().replace(/-/g, "")}`;

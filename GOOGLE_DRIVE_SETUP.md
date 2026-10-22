@@ -156,3 +156,42 @@ mix with student production files.
 - **No public Drive links** — `src/lib/api.ts` streams files exclusively via
   authenticated `/api/ec/files/:id` with `Cache-Control: private, max-age=60`
   and `X-Content-Type-Options: nosniff`.
+
+
+## Personal Gmail My Drive uploads with Google Apps Script (recommended for this folder)
+
+For a **personal @gmail.com My Drive**, use the Apps Script bridge instead of service-account uploads. Apps Script runs as the Google account that owns the script and creates files in that account's Drive quota. Exam Cracker still authenticates users with Firebase, checks admin/profile permissions, stores metadata in D1, and serves files through its authenticated API. The service account may remain configured for private reads/deletes; share the target folder with its service-account email as Editor so it can access files created by Apps Script.
+
+### 1. Create the Apps Script bridge
+
+1. While signed into the personal Gmail account that owns the target folder, open <https://script.google.com/> and create a project.
+2. Paste the contents of [`cloudflare-pages/apps-script-drive-bridge.gs`](cloudflare-pages/apps-script-drive-bridge.gs) into the editor.
+3. In **Project Settings → Script properties**, add:
+   - `EXAM_CRACKER_SHARED_SECRET`: a long random secret (at least 32 random characters).
+   - `EXAM_CRACKER_FOLDER_ID`: the exact personal My Drive folder ID.
+4. Click **Deploy → New deployment → Web app**:
+   - **Execute as:** Me (the account that owns the folder).
+   - **Who has access:** Anyone.
+   - Deploy, authorize Drive access, and copy the `https://script.google.com/macros/s/.../exec` URL.
+5. If you change the script code later, create a new version under **Deploy → Manage deployments → Edit → New version**.
+
+The Web App must be publicly reachable because Cloudflare calls it server-to-server. The shared secret is checked before any Drive operation; the script also rejects every folder except the configured folder. Keep the secret private, rotate it if exposed, and do not place it in the URL or frontend.
+
+### 2. Add these Cloudflare secrets
+
+Add both secrets to the **Cloudflare Pages project `examcrack` → Settings → Variables and Secrets → Production** (and Preview only if you intend to test previews):
+
+| Secret name | Value |
+| --- | --- |
+| `GOOGLE_APPS_SCRIPT_URL` | The deployed Apps Script Web App URL ending in `/exec` |
+| `GOOGLE_APPS_SCRIPT_SHARED_SECRET` | The exact same random secret as Script Property `EXAM_CRACKER_SHARED_SECRET` |
+
+Keep `GOOGLE_DRIVE_FOLDER_ID` set to your folder ID. If `GOOGLE_DRIVE_PROFILE_FOLDER_ID` or `GOOGLE_DRIVE_PDF_FOLDER_ID` overrides are set, either unset them or set them to the same folder ID configured in `EXAM_CRACKER_FOLDER_ID`; the bridge intentionally allowlists one folder. Do **not** paste the service-account JSON, shared secret, or Apps Script URL into site HTML, a public environment variable, or GitHub. Save the Cloudflare secrets and redeploy the Pages project.
+
+**If the service-account JSON exists only on the `exam-cracker-web` Worker:** also set `GOOGLE_APPS_SCRIPT_URL` and `GOOGLE_APPS_SCRIPT_SHARED_SECRET` as Worker secrets. Keep them on Pages too. When Pages has its D1 binding, it can create new uploads locally through Apps Script, while the Worker handles authenticated file reads and Drive cleanup; configuring both runtimes keeps the reported Drive upload mode consistent.
+
+If the folder is shared with the existing service account, retain `GOOGLE_SERVICE_ACCOUNT_JSON` on the runtime that handles authenticated file downloads and cleanup. The upload bridge only changes how new file bytes are created; it does not bypass Exam Cracker's Firebase auth, D1 ownership/access checks, or private download routes. Do not remove the service-account credentials until a separate read/delete migration has been implemented.
+
+### 3. Verify before real uploads
+
+Sign in as the configured admin and use **Admin → Media & Files → Verify Drive Folder**. The status should show the Apps Script personal Gmail backend ready. Upload one small image and confirm it appears in the intended My Drive folder. A code change alone cannot create your Apps Script deployment or configure secrets, so no successful live upload can be claimed until these owner-controlled steps are complete.

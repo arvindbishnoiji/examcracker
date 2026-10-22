@@ -22,6 +22,7 @@ import {
   ScreenSection,
   screenGridClass,
 } from '@/components/student/ScreenScaffold';
+import { pageIdentity } from '@/lib/page-identity';
 
 type Filter = 'all' | 'live' | 'upcoming' | 'completed';
 
@@ -266,6 +267,7 @@ export default function TestsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <ScreenPageHeader
+        identity={pageIdentity('tests')}
         showHeader={screen.showHeader}
         eyebrow={screen.eyebrow}
         title={screen.pageTitle}

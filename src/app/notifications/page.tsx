@@ -17,6 +17,7 @@ import {
   ScreenPageHeader,
   ScreenSection,
 } from '@/components/student/ScreenScaffold';
+import { pageIdentity } from '@/lib/page-identity';
 
 function formatTime(value: string): string {
   const date = new Date(value);
@@ -103,6 +104,7 @@ export default function NotificationsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <ScreenPageHeader
+        identity={pageIdentity('notifications')}
         showHeader={screen.showHeader}
         eyebrow={screen.eyebrow}
         title={screen.pageTitle}

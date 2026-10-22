@@ -17,6 +17,8 @@ import { FeedbackSection } from '@/components/admin/sections/FeedbackSection';
 import { EnrollmentConsole } from '@/components/admin/sections/EnrollmentConsole';
 import { SubjectsSection } from '@/components/admin/sections/SubjectsSection';
 import { HomepageBuilderSection } from '@/components/admin/sections/HomepageBuilderSection';
+import { BatchStudioSection } from '@/components/admin/sections/BatchStudioSection';
+import { AnimationStudioSection } from '@/components/admin/sections/AnimationStudioSection';
 import { NotificationsSection } from '@/components/admin/sections/NotificationsSection';
 import { PopupsSection } from '@/components/admin/sections/PopupsSection';
 import {
@@ -91,6 +93,10 @@ export default function AdminSectionPage() {
       return <AppearanceSection />;
     case 'homepage':
       return <HomepageBuilderSection />;
+    case 'batch-studio':
+      return <BatchStudioSection />;
+    case 'animation-studio':
+      return <AnimationStudioSection />;
     case 'banners':
       return <BannersSection />;
     case 'popups':

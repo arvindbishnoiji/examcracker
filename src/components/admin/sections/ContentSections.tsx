@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import AdminLegacyPanel, { type AdminTab } from '@/app/admin/_legacy/AdminLegacyPanel';
 import { AdminPageHeader, Banner } from '../ui';
 
@@ -72,6 +73,16 @@ export function ContentToolSection({ slug }: { slug: string }) {
       <Banner tone="info" title="Manage persisted learning content">
         Changes are saved through the authenticated D1 API. For a batch or series, choose Manage → assign or create a subject → Open subject · Add lecture. Disable preserves records; permanent deletion is guarded when students, progress, files or relationships still depend on an item.
       </Banner>
+      {(slug === 'batches' || slug === 'series') && (
+        <div className="mb-4">
+          <Banner tone="brand" title="Prefer a visual, animated batch card?">
+            The new <strong>Batch Studio</strong> lets you build the student-facing card directly: cover image link,
+            badge, schedule, class targeting, page placement, accent colour, entrance motion and completion reward —
+            all with a live preview. This classic console still manages subjects, lectures and access codes.
+            <Link href="/admin/batch-studio" className="ml-1.5 font-bold underline">Open Batch Studio →</Link>
+          </Banner>
+        </div>
+      )}
       <div className="mt-4">
         <AdminLegacyPanel embedded initialTab={tab} />
       </div>

@@ -49,10 +49,14 @@ export function AdminPageHeader({
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between mb-6">
       <div className="min-w-0">
         {eyebrow && (
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-brand-600 mb-1.5">{eyebrow}</p>
+          <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-[0.18em]">
+            <span className="ec-gradient-text">{eyebrow}</span>
+          </p>
         )}
-        <h1 className="text-2xl sm:text-[28px] font-extrabold leading-tight text-ink-900">{title}</h1>
-        {description && <p className="text-sm text-ink-500 mt-1.5 max-w-3xl leading-relaxed">{description}</p>}
+        <h1 className="text-[1.6rem] font-extrabold leading-[1.08] tracking-[-0.035em] text-ink-900 sm:text-[2rem]">
+          {title}
+        </h1>
+        {description && <p className="ec-lead mt-2 max-w-3xl text-[0.9rem]">{description}</p>}
         {meta && <div className="flex flex-wrap items-center gap-2 mt-3">{meta}</div>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}

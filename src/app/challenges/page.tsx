@@ -18,6 +18,7 @@ import {
   ScreenPageHeader,
   ScreenSection,
 } from '@/components/student/ScreenScaffold';
+import { pageIdentity } from '@/lib/page-identity';
 
 interface StoredProgress {
   checked: string[];
@@ -164,6 +165,7 @@ export default function ChallengesPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <ScreenPageHeader
+        identity={pageIdentity('challenges')}
         showHeader={screen.showHeader}
         eyebrow={screen.eyebrow}
         title={screen.pageTitle}

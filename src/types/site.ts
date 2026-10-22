@@ -26,7 +26,9 @@ export type ThemePresetId =
   | 'minimal'
   | 'academic'
   | 'dark-premium'
-  | 'colorful-learning';
+  | 'colorful-learning'
+  | 'aurora'
+  | 'spectrum';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type FontPreset = 'modern' | 'minimal' | 'academic' | 'display';
@@ -414,6 +416,10 @@ export interface SiteConfig {
   notifications: NotificationsScreenConfig;
   search: SearchScreenConfig;
   onboarding: OnboardingScreenConfig;
+  /** Featured batch presentation rules (Batch Studio). */
+  batchStudio: BatchShowcaseConfig;
+  /** Authored animation layers (Animation Studio). */
+  animations: AnimationStudioConfig;
 }
 
 export type SiteSettingKey = keyof SiteConfig;
@@ -651,4 +657,134 @@ export interface LectureNote {
   seconds: number;
   text: string;
   createdAt: string;
+}
+
+/* ---------------------------------------------------------------------------
+   Batch Studio + Animation Studio (admin-authored experience layer)
+   ---------------------------------------------------------------------------
+   `batchStudio` stores the presentation rules for featured programme cards;
+   the programmes themselves live in the D1 `course_catalog` table (kind=batch).
+   `animations` stores designer-authored HTML/CSS/JS layers that the storefront
+   mounts on a selected page for a selected audience and time window.
+   Everything here is public, non-secret presentation data.
+--------------------------------------------------------------------------- */
+
+export type MotionPreset =
+  | 'none'
+  | 'fade-up'
+  | 'slide-left'
+  | 'zoom-in'
+  | 'blur-in'
+  | 'flip-in'
+  | 'float'
+  | 'shine'
+  | 'glow';
+
+export type BatchAccent =
+  | 'auto'
+  | 'violet'
+  | 'indigo'
+  | 'sky'
+  | 'teal'
+  | 'emerald'
+  | 'amber'
+  | 'orange'
+  | 'rose'
+  | 'fuchsia';
+
+export type BatchPage = 'home' | 'lectures' | 'tests' | 'dashboard' | 'events';
+
+export type BatchCardLayout = 'spotlight' | 'tile' | 'wide' | 'minimal';
+
+export type BatchRewardType =
+  | 'none'
+  | 'badge'
+  | 'xp'
+  | 'certificate'
+  | 'discount'
+  | 'cash'
+  | 'access';
+
+export interface BatchReward {
+  enabled: boolean;
+  type: BatchRewardType;
+  label: string;
+  value: string;
+  icon: string;
+}
+
+export interface BatchFeature {
+  id: string;
+  label: string;
+  icon: string;
+}
+
+export interface BatchShowcaseConfig {
+  enabled: boolean;
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  layout: BatchCardLayout;
+  showCountdown: boolean;
+  showReward: boolean;
+  showFeatures: boolean;
+  showInstructor: boolean;
+  showSeats: boolean;
+  pages: BatchPage[];
+  maxItems: number;
+  ctaLabel: string;
+  ctaHref: string;
+  accentCycle: BatchAccent[];
+}
+
+export type AnimationTrigger =
+  | 'page_load'
+  | 'delay'
+  | 'scroll'
+  | 'exit_intent'
+  | 'idle'
+  | 'schedule';
+
+export type AnimationFrequency = 'always' | 'once_session' | 'once_day' | 'once_user';
+
+export type AnimationSurface = 'overlay' | 'banner' | 'corner' | 'floating';
+
+export interface AnimationReward {
+  label: string;
+  icon: string;
+  href: string;
+  claimLabel: string;
+}
+
+export interface AnimationLayer {
+  id: string;
+  name: string;
+  enabled: boolean;
+  surface: AnimationSurface;
+  pages: BatchPage[];
+  audience: AudienceTarget;
+  trigger: AnimationTrigger;
+  delayMs: number;
+  durationMs: number;
+  frequency: AnimationFrequency;
+  /** Small badge/copy shown by the host chrome around the layer. */
+  caption: string;
+  /** Self-contained HTML body for the animation. */
+  html: string;
+  css: string;
+  js: string;
+  /** Optional backdrop treatment from the design system. */
+  backdrop: 'none' | 'dim' | 'blur' | 'vignette';
+  dismissible: boolean;
+  reward: AnimationReward;
+  startAt: string;
+  endAt: string;
+  priority: number;
+  updatedAt: string;
+}
+
+export interface AnimationStudioConfig {
+  enabled: boolean;
+  respectReducedMotion: boolean;
+  layers: AnimationLayer[];
 }

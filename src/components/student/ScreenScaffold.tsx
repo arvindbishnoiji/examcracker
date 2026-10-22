@@ -11,9 +11,11 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { ArrowRight, Info, Megaphone } from 'lucide-react';
+import { ArrowRight, Info, Megaphone, Sparkles } from 'lucide-react';
 import type { ScreenAnnouncement, ScreenAnnouncementTone, ScreenHelp } from '@/types';
 import { isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
+import type { PageIdentity } from '@/lib/page-identity';
+import { PageIdentityHero } from './PageHero';
 
 const TONE_CLASSES: Record<ScreenAnnouncementTone, { wrap: string; icon: string }> = {
   brand: { wrap: 'border-brand-200 bg-brand-50 text-brand-900', icon: 'text-brand-700' },
@@ -30,6 +32,7 @@ export function ScreenPageHeader({
   actions,
   showHeader = true,
   headingLevel = 'h1',
+  identity,
 }: {
   eyebrow?: string;
   title: string;
@@ -39,24 +42,44 @@ export function ScreenPageHeader({
   showHeader?: boolean;
   /** The admin preview renders at h2 so the page keeps a single h1. */
   headingLevel?: 'h1' | 'h2';
+  /**
+   * Optional per-page identity. When provided (and the header is visible) the
+   * page opens with its own colour + glyph + "you can do this here" band, so
+   * every screen is instantly recognisable and self-explanatory.
+   */
+  identity?: PageIdentity;
 }) {
+  if (identity && showHeader) {
+    return (
+      <PageIdentityHero
+        identity={identity}
+        title={title}
+        description={description}
+        eyebrow={eyebrow}
+        meta={meta}
+        actions={actions}
+        headingLevel={headingLevel}
+      />
+    );
+  }
+
   if (!showHeader && !actions) return null;
   const Heading = headingLevel;
   return (
     <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
         {showHeader && eyebrow ? (
-          <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-brand-700">
-            {eyebrow}
-          </p>
+          <span className="ec-eyebrow-pill">
+            <Sparkles size={12} /> {eyebrow}
+          </span>
         ) : null}
         {showHeader && (
           <>
-            <Heading className="mt-1 text-[22px] font-extrabold leading-tight tracking-tight sm:text-3xl">
-              {title}
+            <Heading className="ec-display mt-2.5 text-[clamp(1.6rem,3.4vw,2.4rem)]">
+              <span className="ec-gradient-text">{title}</span>
             </Heading>
             {description ? (
-              <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-ink-500 sm:text-sm">{description}</p>
+              <p className="ec-lead mt-2 max-w-2xl text-[0.92rem]">{description}</p>
             ) : null}
             {meta ? <div className="mt-2 flex flex-wrap items-center gap-1.5">{meta}</div> : null}
           </>

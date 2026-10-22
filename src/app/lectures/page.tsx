@@ -30,6 +30,7 @@ import type { CourseCatalogItem, Subject } from '@/types';
 import { formatClassLevel, formatClassList, isSafeHttpUrl } from '@/lib/validation';
 import { activeEnrollmentKeys, coursePriceLabel, isPaidCourse } from '@/lib/enrollment';
 import { selectBannersForPlacement } from '@/lib/site-config';
+import { BatchShowcase } from '@/components/batches/BatchShowcase';
 import { visibleSectionIds } from '@/lib/screen-config';
 import {
   ScreenAnnouncementBanner,
@@ -39,6 +40,7 @@ import {
   ScreenSection,
   screenGridClass,
 } from '@/components/student/ScreenScaffold';
+import { pageIdentity } from '@/lib/page-identity';
 
 type Tab = 'batches' | 'series' | 'lectures' | 'resources';
 
@@ -295,7 +297,7 @@ function LecturesHubPageInner() {
           const subjectLabel = String(item.subjectName || meta.subject || '').trim() || null;
 
           return (
-            <article key={item.id} className="ec-card ec-card-interactive flex flex-col overflow-hidden">
+            <article key={item.id} className="ec-tile flex flex-col overflow-hidden">
               <Link href={`/lectures/${item.id}`} className="block focus:outline-none">
                 <YoutubeThumbnail
                   src={customThumbOf(item)}
@@ -602,6 +604,7 @@ function LecturesHubPageInner() {
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <ScreenPageHeader
+        identity={pageIdentity('lectures')}
         showHeader={screen.showHeader}
         eyebrow={screen.eyebrow}
         title={screen.pageTitle}
@@ -630,6 +633,16 @@ function LecturesHubPageInner() {
       )}
 
       <ScreenAnnouncementBanner announcement={screen.announcement} />
+
+      {tab === 'batches' && (
+        <BatchShowcase
+          batches={items.filter((item) => item.kind === 'batch')}
+          config={config.batchStudio}
+          student={profile ? { exam: profile.exam, classLevel: profile.class_level } : null}
+          page="lectures"
+          compact
+        />
+      )}
 
       {sections.map((id) => renderSection(id))}
 

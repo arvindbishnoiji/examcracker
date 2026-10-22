@@ -1,4 +1,5 @@
 import type {
+  AnimationStudioConfig,
   BannersConfig,
   ChallengesConfig,
   FeatureFlags,
@@ -8,6 +9,7 @@ import type {
   MediaConfig,
   NavigationConfig,
   PopupsConfig,
+  BatchShowcaseConfig,
   SeoConfig,
   SiteSettingKey,
   TestimonialsConfig,
@@ -667,6 +669,71 @@ export function validateScreen(key: ScreenKey, value: unknown): ValidationResult
   return result(errors);
 }
 
+export function validateBatchStudio(config: BatchShowcaseConfig): ValidationResult {
+  const errors: string[] = [];
+  const checks: Array<[string | null, string]> = [
+    [text(config.eyebrow, 'Eyebrow', { max: 80 }), 'Eyebrow must be 80 characters or fewer.'],
+    [text(config.title, 'Title', { max: 140, required: true }), 'Title is required (140 characters max).'],
+    [text(config.subtitle, 'Subtitle', { max: 400 }), 'Subtitle must be 400 characters or fewer.'],
+    [text(config.ctaLabel, 'CTA label', { max: 60 }), 'CTA label must be 60 characters or fewer.'],
+    [text(config.ctaHref, 'CTA link', { max: 300 }), 'CTA link must be 300 characters or fewer.'],
+  ];
+  for (const [error, message] of checks) if (error) errors.push(message);
+  if (config.ctaHref && !isEmptyOrInternalLink(config.ctaHref)) {
+    errors.push('CTA link must be a /path or an https:// URL.');
+  }
+  if (!Array.isArray(config.pages) || config.pages.length === 0) {
+    errors.push('Pick at least one page where batch cards should appear.');
+  }
+  if (!Array.isArray(config.accentCycle) || config.accentCycle.length === 0) {
+    errors.push('Choose at least one accent colour for the card colour cycle.');
+  }
+  if (config.maxItems < 1 || config.maxItems > 12) errors.push('Maximum cards must be between 1 and 12.');
+  return result(errors);
+}
+
+export function validateAnimations(config: AnimationStudioConfig): ValidationResult {
+  const errors: string[] = [];
+  if (!Array.isArray(config.layers)) return result(['Animation layers must be a list.']);
+  if (config.layers.length > 12) errors.push('A maximum of 12 animation layers can be stored.');
+  // The API accepts a 512 KiB JSON body. Authored strings can expand when JSON
+  // escapes quotes, backslashes or multi-byte characters, so enforce an
+  // aggregate encoded-size budget before the admin hits Publish.
+  try {
+    const payloadBytes = new TextEncoder().encode(JSON.stringify(config)).byteLength;
+    if (payloadBytes > 450 * 1024) {
+      errors.push('Combined animation settings are too large to publish (450 KiB JSON limit). Shorten the code or split it across fewer layers.');
+    }
+  } catch {
+    errors.push('Animation settings could not be serialized. Remove unsupported values and retry.');
+  }
+  config.layers.forEach((layer, index) => {
+    const label = `Animation ${index + 1}${layer.name ? ` (${layer.name})` : ''}`;
+    if (!layer.pages?.length) errors.push(`${label}: choose at least one page.`);
+    if (!layer.html?.trim() && !layer.css?.trim() && !layer.js?.trim()) {
+      errors.push(`${label}: add HTML, CSS or JS so there is something to show.`);
+    }
+    if (layer.html.length > 12000) errors.push(`${label}: HTML is too long (12,000 characters max).`);
+    if (layer.css.length > 12000) errors.push(`${label}: CSS is too long (12,000 characters max).`);
+    if (layer.js.length > 12000) errors.push(`${label}: JS is too long (12,000 characters max).`);
+    if (layer.delayMs < 0 || layer.delayMs > 120000) errors.push(`${label}: delay must be 0–120,000 ms.`);
+    if (layer.durationMs < 0 || layer.durationMs > 600000) {
+      errors.push(`${label}: auto-hide duration must be 0–600,000 ms.`);
+    }
+    if (layer.reward.href && !isEmptyOrInternalLink(layer.reward.href)) {
+      errors.push(`${label}: reward link must be a /path or an https:// URL.`);
+    }
+    if (layer.startAt && !parseSchedule(layer.startAt)) errors.push(`${label}: start date is invalid.`);
+    if (layer.endAt && !parseSchedule(layer.endAt)) errors.push(`${label}: end date is invalid.`);
+    const start = layer.startAt ? parseSchedule(layer.startAt) : null;
+    const end = layer.endAt ? parseSchedule(layer.endAt) : null;
+    if (start !== null && end !== null && start >= end) {
+      errors.push(`${label}: end date must be after the start date.`);
+    }
+  });
+  return result(errors);
+}
+
 export function validateSettingValue(key: SiteSettingKey, value: unknown): ValidationResult {
   try {
     return validateSettingValueUnsafe(key, value);
@@ -702,6 +769,10 @@ function validateSettingValueUnsafe(key: SiteSettingKey, value: unknown): Valida
       return validateSeo(value as SeoConfig);
     case 'media':
       return validateMedia(value as MediaConfig);
+    case 'batchStudio':
+      return validateBatchStudio(value as BatchShowcaseConfig);
+    case 'animations':
+      return validateAnimations(value as AnimationStudioConfig);
     default:
       if (isScreenSettingKey(key)) return validateScreen(key, value);
       return result(['Unknown settings key.']);

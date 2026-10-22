@@ -38,6 +38,12 @@ import {
   SCREEN_SANITIZERS,
   type ScreenKey,
 } from './screen-config';
+import {
+  DEFAULT_ANIMATION_STUDIO,
+  DEFAULT_BATCH_STUDIO,
+  sanitizeAnimations,
+  sanitizeBatchStudio,
+} from './studio-config';
 
 export const SITE_SETTING_KEYS: SiteSettingKey[] = [
   'theme',
@@ -53,6 +59,8 @@ export const SITE_SETTING_KEYS: SiteSettingKey[] = [
   'seo',
   'media',
   ...SCREEN_KEYS,
+  'batchStudio',
+  'animations',
 ];
 
 /** Keys exposed by the public config endpoint and rendered by student pages. */
@@ -139,30 +147,30 @@ export function makeId(prefix = 'ec'): string {
 }
 
 export const DEFAULT_THEME: ThemeConfig = {
-  preset: 'modern',
+  preset: 'aurora',
   brandName: 'Exam Cracker',
   tagline: 'JEE • NEET • Class 11, 12 & Dropper',
   logoText: 'EC',
   logoUrl: '',
   faviconUrl: '',
-  primaryColor: '#1d4ed8',
-  secondaryColor: '#1e3a8a',
-  accentColor: '#0284c7',
-  backgroundColor: '#f8fafc',
+  primaryColor: '#6d28d9',
+  secondaryColor: '#4c1d95',
+  accentColor: '#f97316',
+  backgroundColor: '#f8f7ff',
   surfaceColor: '#ffffff',
-  textColor: '#0f172a',
+  textColor: '#170f2e',
   mode: 'light',
-  fontPreset: 'modern',
+  fontPreset: 'display',
   headingStyle: 'tight',
-  radius: 18,
-  buttonShape: 'rounded',
+  radius: 22,
+  buttonShape: 'pill',
   cardStyle: 'elevated',
   shadow: 'soft',
-  pageWidth: 'standard',
+  pageWidth: 'wide',
   density: 'comfortable',
   stickyHeader: true,
   headerStyle: 'light',
-  animation: 'subtle',
+  animation: 'expressive',
   showBottomNav: true,
   emptyStateTitle: 'Nothing here yet',
   emptyStateBody: 'New content will appear here as soon as your admin publishes it.',
@@ -560,6 +568,8 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   seo: DEFAULT_SEO,
   media: DEFAULT_MEDIA,
   ...(DEFAULT_SCREEN_CONFIGS as Pick<SiteConfig, ScreenKey>),
+  batchStudio: DEFAULT_BATCH_STUDIO,
+  animations: DEFAULT_ANIMATION_STUDIO,
 };
 
 export function defaultForSetting<K extends SiteSettingKey>(key: K): SiteConfig[K] {
@@ -652,7 +662,7 @@ function sanitizeTheme(value: unknown): ThemeConfig {
   return {
     preset: asEnum<ThemePresetId>(
       raw.preset,
-      ['modern', 'minimal', 'academic', 'dark-premium', 'colorful-learning'],
+      ['modern', 'minimal', 'academic', 'dark-premium', 'colorful-learning', 'aurora', 'spectrum'],
       base.preset
     ),
     brandName: asString(raw.brandName, base.brandName, 80) || base.brandName,
@@ -1151,6 +1161,8 @@ export function sanitizeSiteConfig(config: SiteConfig): SiteConfig {
     features: sanitizeFeatures(config.features),
     seo: sanitizeSeo(config.seo),
     media: sanitizeMedia(config.media),
+    batchStudio: sanitizeBatchStudio(config.batchStudio),
+    animations: sanitizeAnimations(config.animations),
     ...safeScreens,
   };
 }

@@ -14,6 +14,7 @@ import { formatClassLevel } from '@/lib/validation';
 import type { AnalysisResponse, ClassLevel, ExamTrack, StudentProfile, TestCardItem } from '@/types';
 import { visibleSectionIds } from '@/lib/screen-config';
 import { ScreenAnnouncementBanner, ScreenHelpNote, ScreenPageHeader } from '@/components/student/ScreenScaffold';
+import { pageIdentity } from '@/lib/page-identity';
 import { ProfileAvatar } from '@/components/student/ProfileAvatar';
 
 export default function ProfileAnalysisPage() {
@@ -329,6 +330,7 @@ export default function ProfileAnalysisPage() {
     <div className="mx-auto max-w-5xl space-y-5">
       {screen.showHeader ? (
         <ScreenPageHeader
+        identity={pageIdentity('profile')}
           eyebrow={screen.eyebrow}
           title={screen.pageTitle}
           description={screen.pageSubtitle}
