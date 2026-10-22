@@ -67,20 +67,19 @@ export async function onRequest({ request, env }) {
     env?.EXAM_CRACKER_WEB && typeof env.EXAM_CRACKER_WEB.fetch === "function"
   );
 
-  // If Google Drive secrets live on exam-cracker-web rather than Pages env,
-  // delegate Drive upload/download/status routes to the Worker before failing 503.
-  // Apps Script only creates new files; downloads, delete/cleanup and status
-  // still need the service account. Do not let local Apps Script upload
-  // secrets accidentally make those other routes bypass a Worker that has
-  // GOOGLE_SERVICE_ACCOUNT_JSON configured.
-  const canUploadViaLocalAppsScript =
-    hasLocalAppsScriptCredentials(env) && isAppsScriptUploadRoute(request);
-  if (
-    hasWorkerBinding &&
+  // Uploads must run in the runtime that has Apps Script credentials.
+  // A common split configuration has GOOGLE_SERVICE_ACCOUNT_JSON on Pages,
+  // but GOOGLE_APPS_SCRIPT_URL + GOOGLE_APPS_SCRIPT_SHARED_SECRET only on the
+  // Worker. In that case, do not accidentally use the service-account uploader
+  // for personal My Drive uploads just because Pages also has a service key.
+  const needsWorkerUpload =
+    isAppsScriptUploadRoute(request) && !hasLocalAppsScriptCredentials(env);
+  // Private downloads, delete/cleanup and status require the service account.
+  const needsWorkerDriveOperation =
     isDriveBinaryOrStatusRoute(request) &&
-    !hasLocalServiceAccountCredentials(env) &&
-    !canUploadViaLocalAppsScript
-  ) {
+    !isAppsScriptUploadRoute(request) &&
+    !hasLocalServiceAccountCredentials(env);
+  if (hasWorkerBinding && (needsWorkerUpload || needsWorkerDriveOperation)) {
     try {
       return await env.EXAM_CRACKER_WEB.fetch(request);
     } catch (error) {
