@@ -3,7 +3,7 @@
  *
  * Credentials are read only from server-side secrets:
  *   GOOGLE_SERVICE_ACCOUNT_JSON (for private reads/deletes and legacy uploads)
- *   GOOGLE_APPS_SCRIPT_URL + GOOGLE_APPS_SCRIPT_SHARED_SECRET (personal Gmail uploads)
+ *   GOOGLE_APPS_SCRIPT_URL (personal Gmail uploads via the fixed Apps Script folder)
  *   GOOGLE_DRIVE_FOLDER_ID (var or secret)
  *   GOOGLE_DRIVE_PROFILE_FOLDER_ID / GOOGLE_DRIVE_PDF_FOLDER_ID (optional)
  *
