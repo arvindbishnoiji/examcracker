@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { X } from 'lucide-react';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { useAuth } from '@/context/AuthContext';
-import { buildAnimationDocument, layersForPage } from '@/lib/studio-config';
+import { buildAnimationDocument, layersForPage, safeAnimationRewardHref } from '@/lib/studio-config';
 import type { AnimationLayer, BatchPage } from '@/types';
 
 const PAGE_OVERRIDES: Array<{ startsWith: string; page: BatchPage }> = [
@@ -224,6 +224,7 @@ export function AnimationLayerHost() {
   if (!layer || !fire) return null;
 
   const doc = buildAnimationDocument(layer);
+  const rewardHref = safeAnimationRewardHref(layer.reward.href);
   const interactive = layer.surface === 'banner' || layer.surface === 'corner';
 
   return (
@@ -252,8 +253,8 @@ export function AnimationLayerHost() {
       {layer.caption && layer.surface !== 'overlay' && (
         <span className="ec-sr-only">{layer.caption}</span>
       )}
-      {layer.reward.label && layer.reward.href && (
-        <a className="ec-anim-reward" href={layer.reward.href}>
+      {layer.reward.label && rewardHref && (
+        <a className="ec-anim-reward" href={rewardHref}>
           <span aria-hidden>{layer.reward.icon || '🎁'}</span>
           {layer.reward.claimLabel || layer.reward.label}
         </a>
