@@ -29,15 +29,31 @@ import {
 import YoutubeThumbnail from '@/components/YoutubeThumbnail';
 import { BannerCarousel } from '@/components/banners/BannerCarousel';
 import { PopupHost } from '@/components/site/PopupHost';
+import { BatchShowcase } from '@/components/batches/BatchShowcase';
+import { FeatureStrip } from '@/components/site/FeatureStrip';
+
+function sectionTint(seed: string): string {
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) hash = (hash * 31 + seed.charCodeAt(index)) % 997;
+  return `var(--ec-c${(hash % 8) + 1})`;
+}
 
 function SectionShell({ section, children }: { section: HomeSectionConfig; children: React.ReactNode }) {
+  const tint = section.accent || sectionTint(section.id || section.type);
   return (
     <section>
       {(section.title || section.subtitle) && (
-        <div className="ec-section-header">
-          <div>
-            {section.title && <h2 className="text-base sm:text-lg font-bold tracking-tight text-ink-900">{section.title}</h2>}
-            {section.subtitle && <p className="text-xs text-ink-500 mt-0.5">{section.subtitle}</p>}
+        <div className="ec-section-header" style={{ borderColor: `color-mix(in srgb, ${tint} 22%, transparent)` }}>
+          <div className="flex items-start gap-2.5">
+            <span
+              className="mt-1 hidden h-8 w-1.5 shrink-0 rounded-full sm:block"
+              style={{ background: `linear-gradient(180deg, ${tint}, transparent)` }}
+              aria-hidden
+            />
+            <div>
+              {section.title && <h2 className="ec-h2 text-[1.15rem] sm:text-[1.3rem]">{section.title}</h2>}
+              {section.subtitle && <p className="mt-0.5 text-[0.8rem] leading-relaxed text-ink-500">{section.subtitle}</p>}
+            </div>
           </div>
           {section.ctaLabel && isValidInternalDeepLink(section.ctaHref) && (
             <Link href={section.ctaHref} className="text-xs font-semibold text-brand-700 hover:underline">
@@ -642,7 +658,7 @@ export default function HomePage() {
       <PopupHost placement="home" student={audience} />
 
       {config.homepage.showGreeting && (
-        <section className="ec-hero-panel p-5 sm:p-6 lg:p-7">
+        <section className="ec-hero-panel ec-fade-up p-5 sm:p-6 lg:p-7">
           <div className="ec-hero-lines pointer-events-none absolute inset-0" aria-hidden />
           <div className="relative grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(280px,1fr)] lg:items-center">
             <div className="min-w-0">
@@ -659,10 +675,10 @@ export default function HomePage() {
               {config.homepage.showGreeting ? (
                 <p className="mt-2 text-[12px] font-semibold text-ink-500">{greeting}</p>
               ) : null}
-              <h1 className="mt-1 max-w-2xl text-[26px] font-extrabold leading-[1.12] tracking-[-0.03em] sm:text-[34px]">
-                {heroTitle || greeting}
+              <h1 className="ec-display mt-1.5 max-w-3xl">
+                <span className="ec-gradient-text">{heroTitle || greeting}</span>
               </h1>
-              <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-ink-500 sm:text-sm">
+              <p className="ec-lead mt-2.5 max-w-xl text-[0.92rem]">
                 {heroSubtitle ||
                   `A focused study plan for ${profile.exam} · ${formatClassLevel(profile.class_level)}. Pick up where you left off, then put your preparation to the test.`}
               </p>
@@ -791,6 +807,15 @@ export default function HomePage() {
       {dashboardBanners.length > 0 && (
         <BannerCarousel banners={dashboardBanners} settings={config.banners} compact />
       )}
+
+      <FeatureStrip />
+
+      <BatchShowcase
+        batches={batches}
+        config={config.batchStudio}
+        student={profile ? { exam: profile.exam, classLevel: profile.class_level } : null}
+        page="home"
+      />
 
       {sections.length === 0 ? (
         <div className="ec-card p-8 text-center">

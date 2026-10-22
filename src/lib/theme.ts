@@ -195,6 +195,19 @@ export function buildThemeVars(
   };
 
   const onBrand = readableOn(primary);
+
+  // Spectral accents: each homepage section keeps its own hue so the whole app
+  // reads as a colourful, deliberate system instead of one flat brand colour.
+  const spectral = [
+    primary,
+    mixColors(primary, accent, 0.7),
+    accent,
+    mixColors(accent, secondary, 0.55),
+    mixColors(secondary, '#ec4899', 0.45),
+    mixColors(primary, '#06b6d4', 0.5),
+    '#059669',
+    '#e11d48',
+  ].map((color) => (dark ? mixColors(color, '#ffffff', 0.12) : color));
   const headerBg =
     theme.headerStyle === 'dark'
       ? text
@@ -241,6 +254,27 @@ export function buildThemeVars(
     '--ec-header-border': theme.headerStyle === 'dark' || theme.headerStyle === 'gradient' ? 'transparent' : ink[100],
     '--ec-nav-bg': dark ? 'color-mix(in srgb, var(--ec-surface) 92%, transparent)' : 'color-mix(in srgb, var(--ec-surface) 96%, transparent)',
   };
+
+  spectral.forEach((color, index) => {
+    vars[`--ec-c${index + 1}`] = color;
+    vars[`--ec-c${index + 1}-soft`] = rgbTriplet(mixColors(color, surface, dark ? 0.82 : 0.88));
+    vars[`--ec-c${index + 1}-ink`] = rgbTriplet(mixColors(color, dark ? '#000000' : '#000000', dark ? 0.1 : 0.28));
+  });
+  vars['--ec-grad-aurora'] = `linear-gradient(120deg, ${spectral[0]}, ${spectral[2]} 42%, ${spectral[4]})`;
+  vars['--ec-grad-sunrise'] = `linear-gradient(120deg, ${spectral[6]}, ${spectral[2]})`;
+  vars['--ec-grad-ocean'] = `linear-gradient(120deg, ${spectral[5]}, ${spectral[0]})`;
+  vars['--ec-grad-candy'] = `linear-gradient(120deg, ${spectral[3]}, ${spectral[7]})`;
+  vars['--ec-glow'] = rgbTriplet(primary);
+  vars['--ec-glow-accent'] = rgbTriplet(accent);
+  vars['--ec-aurora-1'] = rgbTriplet(
+    dark ? mixColors(primary, bg, 0.55) : mixColors(primary, '#ffffff', 0.72)
+  );
+  vars['--ec-aurora-2'] = rgbTriplet(
+    dark ? mixColors(accent, bg, 0.6) : mixColors(accent, '#ffffff', 0.7)
+  );
+  vars['--ec-aurora-3'] = rgbTriplet(
+    dark ? mixColors(secondary, bg, 0.5) : mixColors(secondary, '#ec4899', 0.55)
+  );
 
   for (const [shade, color] of Object.entries(brand)) {
     vars[`--ec-brand-${shade}`] = rgbTriplet(color);
@@ -418,6 +452,56 @@ export const THEME_PRESETS: ThemePreset[] = [
       density: 'spacious',
       animation: 'expressive',
       headerStyle: 'light',
+    },
+  },
+  {
+    id: 'aurora',
+    label: 'Aurora 2026',
+    description: 'The new default: violet aurora, coral accents, huge type and soft glass.',
+    patch: {
+      preset: 'aurora',
+      primaryColor: '#6d28d9',
+      secondaryColor: '#4c1d95',
+      accentColor: '#f97316',
+      backgroundColor: '#f8f7ff',
+      surfaceColor: '#ffffff',
+      textColor: '#170f2e',
+      mode: 'light',
+      fontPreset: 'display',
+      headingStyle: 'tight',
+      radius: 22,
+      buttonShape: 'pill',
+      cardStyle: 'elevated',
+      shadow: 'soft',
+      pageWidth: 'wide',
+      density: 'comfortable',
+      animation: 'expressive',
+      headerStyle: 'light',
+    },
+  },
+  {
+    id: 'spectrum',
+    label: 'Spectrum night',
+    description: 'Deep navy canvas with neon violet, cyan and lime highlights.',
+    patch: {
+      preset: 'spectrum',
+      primaryColor: '#8b5cf6',
+      secondaryColor: '#312e81',
+      accentColor: '#22d3ee',
+      backgroundColor: '#080b1a',
+      surfaceColor: '#111731',
+      textColor: '#eef2ff',
+      mode: 'dark',
+      fontPreset: 'display',
+      headingStyle: 'tight',
+      radius: 20,
+      buttonShape: 'rounded',
+      cardStyle: 'glass',
+      shadow: 'strong',
+      pageWidth: 'wide',
+      density: 'comfortable',
+      animation: 'expressive',
+      headerStyle: 'dark',
     },
   },
 ];

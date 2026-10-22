@@ -30,6 +30,7 @@ import type { CourseCatalogItem, Subject } from '@/types';
 import { formatClassLevel, formatClassList, isSafeHttpUrl } from '@/lib/validation';
 import { activeEnrollmentKeys, coursePriceLabel, isPaidCourse } from '@/lib/enrollment';
 import { selectBannersForPlacement } from '@/lib/site-config';
+import { BatchShowcase } from '@/components/batches/BatchShowcase';
 import { visibleSectionIds } from '@/lib/screen-config';
 import {
   ScreenAnnouncementBanner,
@@ -630,6 +631,16 @@ function LecturesHubPageInner() {
       )}
 
       <ScreenAnnouncementBanner announcement={screen.announcement} />
+
+      {tab === 'batches' && (
+        <BatchShowcase
+          batches={items.filter((item) => item.kind === 'batch')}
+          config={config.batchStudio}
+          student={profile ? { exam: profile.exam, classLevel: profile.class_level } : null}
+          page="lectures"
+          compact
+        />
+      )}
 
       {sections.map((id) => renderSection(id))}
 

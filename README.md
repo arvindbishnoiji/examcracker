@@ -107,6 +107,38 @@ events, notifications, feedback inbox, appearance/navigation/footer/banners/
 popups/testimonials/media/SEO/toggles, scheduling, reports, health, import/export,
 preferences and the preserved classic console with the YouTube playlist importer.
 
+## Experience Studio (batches + animations)
+
+Two new admin workspaces ship with the Aurora 2026 UI refresh:
+
+**Batch Studio — `/admin/batch-studio`**
+- Create a real D1 batch (name, description, exam, class levels, access code) and
+  design its student card in one screen: cover image URL, hero image, badge,
+  mentor, feature chips, seats, priority, start/end schedule (IST), the pages it
+  appears on (`home`, `lectures`, `tests`, `dashboard`, `events`), its accent
+  colour, entrance motion and completion reward (badge, XP, certificate,
+  discount, cash, bonus access).
+- The **Section design** tab edits the published `batchStudio` site setting:
+  headline, sub-headline, layout (`spotlight`, `tile`, `wide`, `minimal`),
+  countdown/reward/feature/seat visibility, maximum cards and the colour cycle.
+- Batches that are unpublished or outside their schedule never reach students;
+  each card only shows to the exam/classes it targets.
+
+**Animation Studio — `/admin/animation-studio`**
+- Author per-page animation layers in raw HTML + CSS + JS (the “index.html”
+  workflow), starting from a template (confetti reward, marquee ribbon, snow
+  focus, corner offer, countdown bar, cursor spotlight) or from a blank layer.
+- Choose pages, audience, trigger (page load, delay, scroll, exit intent, idle,
+  schedule), delay, auto-hide duration, frequency, surface (overlay, banner,
+  corner, floating), backdrop, dismissibility and an optional claimable reward.
+- Layers are validated before publishing and rendered inside a sandboxed iframe
+  (`allow-scripts`, unique origin) so authored JS cannot read student data or
+  the parent document. `respectReducedMotion` and a global kill switch are built
+  in, and publishing is draft → publish through D1 like every other setting.
+
+`/design-preview` is a noindex internal style guide that renders sample batches
+and a sample animation layer so the design can be reviewed without signing in.
+
 ## Important paths
 
 - `src/app/` — student and admin routes

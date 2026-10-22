@@ -39,6 +39,8 @@ import { useToast } from '@/hooks/useToast';
 import { useAuth } from '@/context/AuthContext';
 import { getYoutubeEmbedUrl } from '@/lib/mediaProxy';
 import { formatClassList, isSafeHttpUrl } from '@/lib/validation';
+import { accentPalette, readBatchLook } from '@/lib/studio-config';
+import { formatISTDateTime } from '@/lib/date';
 import {
   buildSubjectQueue,
   formatWatchDuration,
@@ -521,6 +523,10 @@ export default function LectureDetailPage() {
     const isEmpty = subjects.length === 0 && !course.unassigned && totalLectures === 0;
     const requiresCode = Boolean(course.parent.hasAccessCode && !course.isFree);
 
+    const studioLook = readBatchLook(course.parent.metadata as Record<string, unknown>);
+    const studioAccent = accentPalette(studioLook.accent);
+    const studioHref = studioLook.ctaHref && isSafeHttpUrl(studioLook.ctaHref) ? studioLook.ctaHref : '';
+
     return (
       <div className="mx-auto max-w-6xl space-y-6">
         <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-ink-500">
@@ -535,7 +541,15 @@ export default function LectureDetailPage() {
 
         <ScreenAnnouncementBanner announcement={screen.announcement} />
 
-        <Card className="overflow-hidden">
+        <Card
+          className="overflow-hidden"
+          style={{
+            ['--accent-from' as string]: studioAccent.from,
+            ['--accent-to' as string]: studioAccent.to,
+            borderColor: `color-mix(in srgb, ${studioAccent.from} 24%, var(--ec-border))`,
+          }}
+        >
+          <div className="h-1.5 w-full" style={{ background: `linear-gradient(90deg, ${studioAccent.from}, ${studioAccent.to})` }} aria-hidden />
           <div className="grid gap-0 md:grid-cols-[320px_minmax(0,1fr)] lg:grid-cols-[380px_minmax(0,1fr)]">
             <YoutubeThumbnail
               src={customThumbOf(course.parent)}
@@ -564,15 +578,52 @@ export default function LectureDetailPage() {
                       {totalResources} {totalResources === 1 ? 'PDF / note' : 'PDFs & notes'}
                     </Badge>
                   )}
+                  {studioLook.badge && <Badge variant="success">{studioLook.badge}</Badge>}
                 </div>
 
-                <h1 className="mt-3 text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">
-                  {course.parent.title}
-                </h1>
-                <p className="mt-1.5 text-sm leading-relaxed text-ink-600">
-                  {course.parent.description ||
+                <h1 className="ec-h2 mt-3 text-ink-900">{course.parent.title}</h1>
+                <p className="mt-1.5 text-[0.92rem] leading-relaxed text-ink-600">
+                  {studioLook.subtitle ||
+                    course.parent.description ||
                     'Structured subject-wise syllabus with ordered video lectures and downloadable study notes.'}
                 </p>
+
+                {(studioLook.instructor || studioLook.startsAt || (studioLook.reward.enabled && studioLook.reward.type !== 'none')) && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {studioLook.instructor && (
+                      <span className="ec-tint-chip">👨‍🏫 {studioLook.instructor}</span>
+                    )}
+                    {studioLook.startsAt && (
+                      <span className="ec-tint-chip">🗓️ Starts {formatISTDateTime(studioLook.startsAt)}</span>
+                    )}
+                    {studioLook.seats > 0 && <span className="ec-seat-pill">🎟️ {studioLook.seats} seats</span>}
+                    {studioLook.reward.enabled && studioLook.reward.type !== 'none' && (
+                      <span
+                        className="ec-batch-reward"
+                        style={{ ['--accent-from' as string]: studioAccent.from }}
+                      >
+                        <span aria-hidden>{studioLook.reward.icon || '🏅'}</span>
+                        {studioLook.reward.label || 'Completion reward'}
+                        {studioLook.reward.value ? ` · ${studioLook.reward.value}` : ''}
+                      </span>
+                    )}
+                    {studioHref && (
+                      <a href={studioHref} className="text-[0.75rem] font-bold text-brand-700 underline" target="_blank" rel="noreferrer">
+                        {studioLook.ctaLabel || 'Open resource'} ↗
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {studioLook.features.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {studioLook.features.slice(0, 6).map((feature) => (
+                      <span key={feature.id} className="ec-tint-chip">
+                        <span aria-hidden>{feature.icon || '✓'}</span> {feature.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {!course.enrolled && (

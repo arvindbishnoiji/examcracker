@@ -5,6 +5,8 @@ import { Header } from './Header';
 import { BottomNav } from './BottomNav';
 import { Footer } from './Footer';
 import { StudentGate } from '@/components/auth/StudentGate';
+import { PageFX } from '@/components/motion/PageFX';
+import { AnimationLayerHost } from '@/components/site/AnimationLayerHost';
 
 /**
  * Keeps admin on its own full-screen canvas while public/student pages keep the
@@ -19,6 +21,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <PageFX />
+      <AnimationLayerHost />
       {!isFocusedAuth && <Header />}
       <main className={isFocusedAuth ? 'w-full' : 'ec-main'}>
         <StudentGate>{children}</StudentGate>

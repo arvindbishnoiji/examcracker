@@ -39,12 +39,14 @@ export function BottomNav() {
             <Link
               key={item.id}
               href={item.href}
-              className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl min-w-[52px] ${
-                active ? 'text-brand-600 bg-brand-50' : 'text-ink-500'
+              className={`flex min-w-[56px] flex-col items-center gap-0.5 rounded-2xl px-2.5 py-1.5 transition ${
+                active
+                  ? 'bg-brand-50 text-brand-700 shadow-[inset_0_0_0_1px_rgb(var(--ec-brand-200))]'
+                  : 'text-ink-500 hover:text-ink-700'
               }`}
             >
               <NavIcon href={item.href} fallback={item.icon} size={19} strokeWidth={active ? 2.4 : 1.9} />
-              <span className="text-[10.5px] font-medium truncate max-w-[64px]">{item.label}</span>
+              <span className={`max-w-[68px] truncate text-[0.68rem] ${active ? 'font-extrabold' : 'font-medium'}`}>{item.label}</span>
             </Link>
           );
         })}

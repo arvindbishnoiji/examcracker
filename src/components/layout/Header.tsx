@@ -26,8 +26,8 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
     <img src={theme.logoUrl} alt={theme.brandName} className="h-8 w-8 rounded-xl object-cover" />
   ) : (
     <span
-      className="h-8 w-8 rounded-xl text-white grid place-items-center font-bold text-sm shadow-sm"
-      style={{ background: 'linear-gradient(135deg, var(--ec-brand), var(--ec-secondary))', color: 'var(--ec-on-brand)' }}
+      className="grid h-9 w-9 place-items-center rounded-[14px] text-[0.82rem] font-black text-white shadow-[0_10px_24px_-12px_rgba(76,29,149,0.9)]"
+      style={{ background: 'var(--ec-grad-aurora)' }}
     >
       {theme.logoText || 'EC'}
     </span>
@@ -36,7 +36,7 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
   return (
     <>
       {navigation.announcementBarEnabled && navigation.announcementBarText && (
-        <div className="bg-brand-700 text-white text-xs sm:text-sm">
+        <div className="text-white text-xs sm:text-sm" style={{ background: 'var(--ec-grad-aurora)' }}>
           <div className="ec-main !py-2 !pb-2 flex items-center justify-center gap-2 text-center">
             <span className="opacity-95">{navigation.announcementBarText}</span>
             {navigation.announcementBarHref && (
@@ -82,9 +82,8 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
                 <Link
                   key={link.id}
                   href={link.href}
-                  className={`hidden md:inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl text-current opacity-80 hover:bg-black/5 ${
-                    isActivePath(pathname, link.href) ? 'bg-black/5' : ''
-                  }`}
+                  className="ec-nav-link hidden md:inline-flex items-center gap-1.5"
+                  data-active={isActivePath(pathname, link.href)}
                 >
                   <NavIcon href={link.href} fallback={link.icon} size={15} className="opacity-80" />
                   {link.label}

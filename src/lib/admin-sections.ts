@@ -43,6 +43,22 @@ export const ADMIN_SECTIONS: AdminSectionMeta[] = [
     keywords: ['home', 'sections', 'builder', 'hero', 'layout', 'order'],
   },
   {
+    slug: 'batch-studio',
+    label: 'Batch Studio',
+    group: 'Screen Studio',
+    icon: '▣',
+    description: 'Design batches visually: image link, name, schedule, audience, pages, colour, motion and reward.',
+    keywords: ['batch', 'studio', 'image', 'schedule', 'audience', 'reward', 'colour', 'animation', 'course card'],
+  },
+  {
+    slug: 'animation-studio',
+    label: 'Animation Studio',
+    group: 'Screen Studio',
+    icon: '✦',
+    description: 'Author HTML/CSS/JS animation layers per page with triggers, timing, frequency and rewards.',
+    keywords: ['animation', 'motion', 'html', 'css', 'js', 'confetti', 'overlay', 'reward', 'index.html', 'experience'],
+  },
+  {
     slug: 'goals',
     label: "Today's goals",
     group: 'Learning Content',

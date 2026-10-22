@@ -18,6 +18,8 @@ import { readAdminPreferences, writeAdminPreferences } from '@/lib/admin-prefs';
 import { AdminSectionIcon } from '@/components/ui/AppIcon';
 
 const QUICK_ACTIONS: Array<{ label: string; href: string; hint: string; icon: string }> = [
+  { label: 'Create a batch visually', href: '/admin/batch-studio', hint: 'Experience Studio', icon: '▣' },
+  { label: 'Add an animation layer', href: '/admin/animation-studio', hint: 'Experience Studio', icon: '✦' },
   { label: 'Edit a student screen', href: '/admin/screens', hint: 'Screen Studio', icon: '▭' },
   { label: 'Create a banner', href: '/admin/banners', hint: 'Website settings', icon: '▰' },
   { label: 'Create an event', href: '/admin/events', hint: 'Communication', icon: '▦' },
