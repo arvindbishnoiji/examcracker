@@ -24,6 +24,8 @@ function doPost(e) {
     }
     var folder = DriveApp.getFolderById(allowedFolderId);
     if (body.action === "status") {
+      var probe = folder.createFile(".exam-cracker-write-probe-" + new Date().getTime(), "temporary write check", MimeType.PLAIN_TEXT);
+      probe.setTrashed(true);
       return jsonOutput({ status: "success", folderName: folder.getName(), canAddChildren: true });
     }
     if (body.action !== "upload") {
