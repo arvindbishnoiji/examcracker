@@ -28,6 +28,7 @@ import {
 } from '@/lib/site-config';
 import { BannerCarousel } from '@/components/banners/BannerCarousel';
 import { PopupHost } from '@/components/site/PopupHost';
+import { StudyPromoBanner } from '@/components/student/StudyPromoBanner';
 
 function SectionShell({ section, children }: { section: HomeSectionConfig; children: React.ReactNode }) {
   return (
@@ -604,6 +605,8 @@ export default function HomePage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <PopupHost placement="home" student={audience} />
+
+      <StudyPromoBanner exam={profile.exam} classLevel={profile.class_level} />
 
       {config.homepage.showGreeting && (
         <section className="ec-hero-panel p-5 sm:p-6 lg:p-7">
