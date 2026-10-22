@@ -1011,14 +1011,7 @@ export default function HomePage() {
         page="home"
       />
 
-      {sections.length === 0 ? (
-        <div className="ec-card p-8 text-center">
-          <p className="font-bold">{config.theme.emptyStateTitle || 'Nothing here yet'}</p>
-          <p className="text-sm text-ink-500 mt-1">{config.theme.emptyStateBody || 'Your admin has not published homepage sections yet.'}</p>
-        </div>
-      ) : (
-        sections.map((section) => renderSection(section))
-      )}
+      {sections.map((section) => renderSection(section))}
 
     </div>
   );
