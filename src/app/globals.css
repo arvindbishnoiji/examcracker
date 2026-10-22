@@ -1559,32 +1559,37 @@ body::before {
 }
 .ec-tile:hover .ec-tile-arrow { transform: translateX(2px); background: rgb(var(--ec-brand-600)); color: #fff; }
 
-/* Auth shell overrides for the night card */
+/* Auth shell: keep the atmospheric dark hero, but make the form surface bright and unmistakably readable. */
 .ec-auth-shell { min-height: 100svh; }
 .ec-auth-card {
   border-radius: 26px;
-  border: 1px solid var(--dx-line-strong);
-  background: rgba(255, 255, 255, 0.07);
-  box-shadow: 0 40px 100px -50px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(24px) saturate(1.2);
-  color: var(--dx-text);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 34px 90px -38px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  color: #19132d;
 }
 .ec-auth-card .ec-field {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.16);
-  color: #fff;
+  min-height: 46px;
+  background: #fff;
+  border-color: #c9c4d8;
+  color: #19132d;
 }
-.ec-auth-card .ec-field::placeholder { color: rgba(246, 244, 255, 0.42); }
+.ec-auth-card .ec-field::placeholder { color: #77718a; opacity: 1; }
 .ec-auth-card .ec-field:focus {
-  border-color: rgba(200, 255, 77, 0.7);
-  box-shadow: 0 0 0 3px rgba(200, 255, 77, 0.18);
+  border-color: #5b21b6;
+  box-shadow: 0 0 0 3px rgba(91, 33, 182, 0.16);
 }
-.ec-auth-card label, .ec-auth-card .text-ink-700, .ec-auth-card .text-ink-800 { color: rgba(246, 244, 255, 0.84) !important; }
-.ec-auth-card .text-ink-500, .ec-auth-card .text-ink-400 { color: rgba(246, 244, 255, 0.55) !important; }
-.ec-auth-card .bg-\[var\(--ec-surface\)\] { background: rgba(255, 255, 255, 0.06) !important; }
-.ec-auth-card .border-ink-200 { border-color: rgba(255, 255, 255, 0.16) !important; }
-.ec-auth-card .ec-btn { border-radius: 999px; }
-.ec-auth-card ::selection { background: rgba(200, 255, 77, 0.3); color: #fff; }
+.ec-auth-card label, .ec-auth-card .text-ink-700, .ec-auth-card .text-ink-800 { color: #31284a !important; }
+.ec-auth-card .text-ink-500, .ec-auth-card .text-ink-400 { color: #625b75 !important; }
+.ec-auth-card button:not(.bg-brand-600) { color: #31284a; }
+.ec-auth-card .bg-\[var\(--ec-surface\)\] { background: #fff !important; }
+.ec-auth-card .border-ink-200 { border-color: #d5d1df !important; }
+.ec-auth-card .ec-btn { min-height: 44px; border-radius: 14px; }
+.ec-auth-card ::selection { background: rgba(109, 40, 217, 0.18); color: #19132d; }
+@media (max-width: 640px) {
+  .ec-auth-card { border-radius: 22px; }
+  .ec-auth-card .ec-btn { min-height: 46px; }
+}
 
 /* Night footer */
 .ec-footer-night {
@@ -1626,17 +1631,39 @@ body::before {
   .ec-preview-dash { transform: none; }
 }
 
-/* Auth card: keep alert blocks readable on the dark glass card. */
-.ec-auth-card .bg-red-50 { background: rgba(239, 68, 68, 0.12) !important; border-color: rgba(248, 113, 113, 0.4) !important; color: #fecaca !important; }
-.ec-auth-card .bg-amber-50 { background: rgba(251, 191, 36, 0.12) !important; border-color: rgba(251, 191, 36, 0.38) !important; color: #fde68a !important; }
-.ec-auth-card .bg-emerald-50 { background: rgba(16, 185, 129, 0.12) !important; border-color: rgba(52, 211, 153, 0.38) !important; color: #a7f3d0 !important; }
+/* High-contrast form feedback and controls on the light authentication card. */
+.ec-auth-card .bg-red-50 { background: #fff1f2 !important; border-color: #fecdd3 !important; color: #9f1239 !important; }
+.ec-auth-card .bg-amber-50 { background: #fffbeb !important; border-color: #fde68a !important; color: #854d0e !important; }
+.ec-auth-card .bg-emerald-50 { background: #ecfdf5 !important; border-color: #a7f3d0 !important; color: #065f46 !important; }
 .ec-auth-card .bg-ink-50\/60,
-.ec-auth-card .bg-ink-50 { background: rgba(255, 255, 255, 0.07) !important; border-color: rgba(255, 255, 255, 0.14) !important; }
+.ec-auth-card .bg-ink-50 { background: #f7f5fb !important; border-color: #e2deeb !important; }
 .ec-auth-card .bg-red-50 p, .ec-auth-card .bg-amber-50 p, .ec-auth-card .bg-emerald-50 p { color: inherit !important; }
-.ec-auth-card .text-ink-900, .ec-auth-card .text-ink-600 { color: rgba(246, 244, 255, 0.9) !important; }
-.ec-auth-card .text-ink-400 { color: rgba(246, 244, 255, 0.5) !important; }
-.ec-auth-card .text-brand-600 { color: #d9ff70 !important; }
-.ec-auth-card .bg-brand-600 { background: linear-gradient(100deg, #d9ff70, var(--dx-lime)) !important; color: #0b0715 !important; box-shadow: 0 16px 36px -18px rgba(200, 255, 77, 0.8); }
-.ec-auth-card .bg-brand-600:hover { filter: brightness(1.05); }
-.ec-auth-card .border-ink-100 { border-color: rgba(255, 255, 255, 0.12) !important; }
-.ec-auth-card .hover\:bg-ink-100:hover { background: rgba(255, 255, 255, 0.1) !important; }
+.ec-auth-card .text-ink-900, .ec-auth-card .text-ink-600 { color: #241a3b !important; }
+.ec-auth-card .text-ink-400 { color: #625b75 !important; }
+.ec-auth-card .text-brand-600, .ec-auth-card .text-brand-700 { color: #4c1d95 !important; }
+.ec-auth-card [class*="text-white/"] { color: #625b75 !important; }
+.ec-auth-card [class*="border-white/"] { border-color: #d5d1df !important; }
+.ec-auth-card .hover\:text-white:hover { color: #241a3b !important; }
+.ec-auth-card .bg-brand-600 { background: #24143f !important; color: #fff !important; box-shadow: 0 8px 18px -10px rgba(36, 20, 63, 0.8); }
+.ec-auth-card .bg-brand-600:hover { background: #35205b !important; }
+.ec-auth-card .border-ink-100 { border-color: #e5e1ec !important; }
+.ec-auth-card .hover\:bg-ink-100:hover { background: #f0edf6 !important; }
+
+/* Home hero actions remain high-contrast and comfortable to tap at every width. */
+.dx-cta, .dx-cta-ghost {
+  min-height: 46px;
+  padding-inline: 1.15rem;
+  text-align: center;
+  line-height: 1.2;
+}
+.dx-cta:focus-visible, .dx-cta-ghost:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+.dx-cta-ghost { color: #f6f4ff; }
+.dx-cta-ghost:hover { color: #fff; }
+@media (max-width: 640px) {
+  .ec-hero-deck { border-radius: 24px; }
+  .ec-hero-deck .dx-cta, .ec-hero-deck .dx-cta-ghost { width: 100%; }
+  .ec-hero-deck form .dx-cta { width: auto; min-height: 38px; padding-inline: 1rem; }
+}

@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // The live preview proxy uses a dynamic `<port>-<sandbox>.e2b.app` origin.
+  // Allow it during dev so Next's cross-origin dev-asset checks stay explicit.
+  allowedDevOrigins: ['*.e2b.app'],
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'img.youtube.com' },

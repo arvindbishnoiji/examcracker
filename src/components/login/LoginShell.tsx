@@ -191,14 +191,14 @@ export function LoginShell({
         </span>
       </div>
 
-      <p className="mt-6 text-[0.66rem] font-extrabold uppercase tracking-[0.2em] text-[var(--dx-lime)]">
+      <p className="mt-6 text-[0.66rem] font-extrabold uppercase tracking-[0.2em] text-brand-700">
         {login.title}
       </p>
-      <h2 className="mt-1.5 text-[1.55rem] font-extrabold leading-[1.12] tracking-[-0.03em] text-white">
+      <h2 className="mt-1.5 text-[1.55rem] font-extrabold leading-[1.12] tracking-[-0.03em] text-ink-900">
         {login.subtitle}
       </h2>
       {login.welcomeMessage && (
-        <p className="mt-2 text-[0.82rem] leading-relaxed text-white/55">{login.welcomeMessage}</p>
+        <p className="mt-2 text-[0.82rem] leading-relaxed text-ink-600">{login.welcomeMessage}</p>
       )}
 
       <div className="mt-5">{children}</div>
@@ -206,15 +206,15 @@ export function LoginShell({
       {login.bannerEnabled && (login.bannerTitle || login.bannerBody) && (
         <div className="mt-5 rounded-2xl border border-[var(--dx-lime)]/30 bg-[var(--dx-lime)]/[0.08] p-3.5">
           {login.bannerTitle && (
-            <p className="text-[0.76rem] font-extrabold text-[var(--dx-lime)]">{login.bannerTitle}</p>
+            <p className="text-[0.76rem] font-extrabold text-brand-700">{login.bannerTitle}</p>
           )}
           {login.bannerBody && (
-            <p className="mt-1 text-[0.72rem] leading-relaxed text-white/65">{login.bannerBody}</p>
+            <p className="mt-1 text-[0.72rem] leading-relaxed text-ink-700">{login.bannerBody}</p>
           )}
           {login.bannerCtaLabel && login.bannerCtaHref && (
             <Link
               href={login.bannerCtaHref}
-              className="mt-2 inline-flex items-center gap-1 text-[0.72rem] font-bold text-white underline"
+              className="mt-2 inline-flex items-center gap-1 text-[0.72rem] font-bold text-brand-700 underline"
             >
               {login.bannerCtaLabel} <ArrowUpRight size={11} />
             </Link>
@@ -223,10 +223,10 @@ export function LoginShell({
       )}
 
       {login.footerText && (
-        <p className="mt-5 text-center text-[0.68rem] leading-relaxed text-white/45">{login.footerText}</p>
+        <p className="mt-5 text-center text-[0.68rem] leading-relaxed text-ink-500">{login.footerText}</p>
       )}
       {(login.footerLinks.length > 0 || login.termsUrl || login.privacyUrl) && (
-        <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[0.68rem] text-white/45">
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[0.68rem] text-ink-500">
           {login.footerLinks.map((link) => (
             <Link key={link.id} href={link.href} className="hover:text-white">
               {link.label}
@@ -244,7 +244,7 @@ export function LoginShell({
           )}
         </div>
       )}
-      <p className="mt-2 text-center text-[0.62rem] text-white/30">
+      <p className="mt-2 text-center text-[0.62rem] text-ink-400">
         {theme.brandName} · Secured by Firebase Authentication
       </p>
     </div>
