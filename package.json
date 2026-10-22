@@ -4,6 +4,7 @@
   "private": true,
   "description": "Exam Cracker — JEE/NEET learning web app (Next.js + Firebase Auth + Cloudflare D1)",
   "scripts": {
+    "predev": "node scripts/prepare-dev-env.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
