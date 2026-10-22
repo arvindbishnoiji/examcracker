@@ -4,7 +4,6 @@ import { inspectDriveStatus } from "./drive.js";
 
 const env = {
   GOOGLE_APPS_SCRIPT_URL: "https://script.google.com/macros/s/test-deployment/exec",
-  GOOGLE_APPS_SCRIPT_SHARED_SECRET: "test-secret-never-log-0123456789abcd",
   GOOGLE_DRIVE_FOLDER_ID: "folder_123",
 };
 
@@ -13,17 +12,16 @@ function jsonResponse(payload, status = 200, headers = {}) {
 }
 
 describe("Apps Script personal Gmail Drive bridge", () => {
-  it("requires a valid server-side URL and shared secret", () => {
+  it("requires only a valid server-side Apps Script URL", () => {
     expect(isAppsScriptDriveConfigured(env)).toBe(true);
-    expect(isAppsScriptDriveConfigured({ ...env, GOOGLE_APPS_SCRIPT_SHARED_SECRET: "" })).toBe(false);
     expect(isAppsScriptDriveConfigured({ ...env, GOOGLE_APPS_SCRIPT_URL: "https://example.com/exec" })).toBe(false);
     expect(isAppsScriptDriveConfigured({ ...env, GOOGLE_APPS_SCRIPT_URL: "http://script.google.com/macros/s/x/exec" })).toBe(false);
   });
 
-  it("posts bytes as base64 with the shared secret and returns confirmed file metadata", async () => {
+  it("posts bytes as base64 without a shared secret and returns confirmed file metadata", async () => {
     const fetchImpl = vi.fn(async (_url, options) => {
       const body = JSON.parse(options.body);
-      expect(body.secret).toBe("test-secret-never-log-0123456789abcd");
+      expect(body.secret).toBeUndefined();
       expect(body.action).toBe("upload");
       expect(body.folderId).toBe("folder_123");
       expect(body.base64Data).toBe("aGVsbG8=");
@@ -79,16 +77,16 @@ describe("Apps Script personal Gmail Drive bridge", () => {
     })).rejects.toThrow("Folder unavailable");
   });
 
-  it("probes the folder through Apps Script without exposing the secret in status", async () => {
+  it("probes the folder through Apps Script without sending a shared secret", async () => {
     const fetchImpl = vi.fn(async (_url, options) => {
       const body = JSON.parse(options.body);
       expect(body.action).toBe("status");
-      expect(body.secret).toBe("test-secret-never-log-0123456789abcd");
+      expect(body.secret).toBeUndefined();
       return jsonResponse({ status: "success", folderName: "Exam Cracker Images", canAddChildren: true });
     });
     const result = await inspectAppsScriptDriveStatus(env, "folder_123", fetchImpl);
     expect(result).toMatchObject({ ok: true, code: "READY", folderName: "Exam Cracker Images", canAddChildren: true });
-    expect(JSON.stringify(result)).not.toContain("test-secret-never-log-0123456789abcd");
+    expect(JSON.stringify(result)).not.toContain("secret");
   });
 
   it("does not report the full private file system ready when service-account credentials are missing", async () => {
