@@ -21,8 +21,10 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { saveStudentProfile } from '@/lib/api';
+import { formatClassLevel } from '@/lib/validation';
 import { useToast } from '@/hooks/useToast';
 import { ScreenAnnouncementBanner, ScreenHelpNote } from '@/components/student/ScreenScaffold';
+import type { ClassLevel } from '@/types';
 
 type Step = 1 | 2 | 3 | 4;
 const DRAFT_KEY = 'ec-onboarding-draft-v1';
@@ -30,7 +32,7 @@ const DRAFT_KEY = 'ec-onboarding-draft-v1';
 interface Draft {
   displayName: string;
   exam: 'JEE' | 'NEET';
-  classLevel: '11' | '12';
+  classLevel: ClassLevel;
   step: Step;
 }
 
@@ -49,7 +51,7 @@ export default function OnboardingPage() {
 
   const [displayName, setDisplayName] = useState('');
   const [exam, setExam] = useState<'JEE' | 'NEET'>('JEE');
-  const [classLevel, setClassLevel] = useState<'11' | '12'>('11');
+  const [classLevel, setClassLevel] = useState<ClassLevel>('11');
   const [step, setStep] = useState<Step>(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export default function OnboardingPage() {
         if (
           typeof draft.displayName === 'string' &&
           (draft.exam === 'JEE' || draft.exam === 'NEET') &&
-          (draft.classLevel === '11' || draft.classLevel === '12')
+          (draft.classLevel === '11' || draft.classLevel === '12' || draft.classLevel === 'Dropper')
         ) {
           setDisplayName(draft.displayName);
           setExam(draft.exam);
@@ -415,10 +417,26 @@ export default function OnboardingPage() {
                   <fieldset className="ec-fade-in">
                     <legend className="text-sm font-semibold text-ink-800">{screen.classQuestion}</legend>
                     <p className="mt-1 text-xs text-ink-500">{screen.classHelp}</p>
-                    <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+                    <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
                       {[
-                        { value: '11' as const, title: 'Class 11', subtitle: 'First year of preparation' },
-                        { value: '12' as const, title: 'Class 12', subtitle: 'Final year + revision' },
+                        {
+                          value: '11' as const,
+                          title: 'Class 11',
+                          subtitle: 'Foundation & core concepts',
+                          detail: 'Shows Class 11 batches, lectures & tests',
+                        },
+                        {
+                          value: '12' as const,
+                          title: 'Class 12',
+                          subtitle: 'Board + entrance syllabus',
+                          detail: 'Shows Class 12 batches, lectures & tests',
+                        },
+                        {
+                          value: 'Dropper' as const,
+                          title: 'Dropper',
+                          subtitle: 'Dedicated repeat-year batch',
+                          detail: 'Unlocks Class 11 + Class 12 + Dropper syllabus',
+                        },
                       ].map((option) => (
                         <button
                           key={option.value}
@@ -432,10 +450,11 @@ export default function OnboardingPage() {
                           }`}
                         >
                           <span className={`grid h-10 w-10 place-items-center rounded-xl ${classLevel === option.value ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-600'}`}>
-                            <GraduationCap size={20} />
+                            {option.value === 'Dropper' ? <Target size={20} /> : <GraduationCap size={20} />}
                           </span>
                           <span className="mt-2 block text-sm font-extrabold">{option.title}</span>
-                          <span className="block text-[11px] text-ink-500">{option.subtitle}</span>
+                          <span className="block text-[11px] font-medium text-ink-600">{option.subtitle}</span>
+                          <span className="mt-1.5 block text-[10.5px] leading-snug text-ink-500">{option.detail}</span>
                           {classLevel === option.value && (
                             <span className="absolute right-3 top-3 grid h-5 w-5 place-items-center rounded-full bg-brand-600 text-white">
                               <Check size={12} />
@@ -462,13 +481,15 @@ export default function OnboardingPage() {
                         </div>
                         <div className="flex items-center justify-between gap-3">
                           <dt className="text-ink-500">Class</dt>
-                          <dd className="font-semibold text-ink-900">Class {classLevel}</dd>
+                          <dd className="font-semibold text-ink-900">{formatClassLevel(classLevel)}</dd>
                         </div>
                       </dl>
                     </div>
                     <ul className="space-y-1.5 text-[11px] text-ink-600">
                       {[
-                        'Your Home shows only content for this exam and class.',
+                        classLevel === 'Dropper'
+                          ? `Dropper access enabled: you can study eligible Class 11, Class 12, and Dropper content for ${exam}.`
+                          : `Your Home shows content tailored to ${exam} · ${formatClassLevel(classLevel)}.`,
                         'Batches and series still require enrollment or a valid access code.',
                         'You can update your profile later; restricted content stays server-validated.',
                       ].map((line) => (

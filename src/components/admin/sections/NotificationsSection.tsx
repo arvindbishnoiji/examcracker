@@ -25,7 +25,7 @@ export function NotificationsSection() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [target, setTarget] = useState<'all' | 'JEE' | 'NEET' | 'class'>('all');
-  const [classLevel, setClassLevel] = useState<'11' | '12'>('12');
+  const [classLevel, setClassLevel] = useState<'11' | '12' | 'Dropper'>('12');
   const [singleUid, setSingleUid] = useState('');
   const [form, setForm] = useState({ title: '', body: '', deepLink: '', type: 'info' as (typeof NOTIFICATION_TYPES)[number]['value'] });
   const [sending, setSending] = useState(false);
@@ -196,9 +196,10 @@ export function NotificationsSection() {
               </div>
               {target === 'class' && !singleUid && (
                 <Field label="Class">
-                  <select className="ec-field" value={classLevel} onChange={(event) => setClassLevel(event.target.value as '11' | '12')}>
+                  <select className="ec-field" value={classLevel} onChange={(event) => setClassLevel(event.target.value as '11' | '12' | 'Dropper')}>
                     <option value="11">Class 11</option>
                     <option value="12">Class 12</option>
+                    <option value="Dropper">Dropper</option>
                   </select>
                 </Field>
               )}

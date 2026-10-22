@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Banner, BannerPlacement } from '@/types';
 import { useSettingWorkspace } from '@/hooks/useSettingWorkspace';
-import { getBannerState, makeId, type BannerDerivedState } from '@/lib/site-config';
+import { AUDIENCE_TARGETS, getBannerState, makeId, type BannerDerivedState } from '@/lib/site-config';
 import { formatISTDateTime, fromISTDateTimeLocalInput, toISTDateTimeLocalInput } from '@/lib/date';
 import { BannerArtwork } from '@/components/banners/BannerArtwork';
 import {
@@ -397,13 +397,9 @@ export function BannersSection({ autoCreate = false }: { autoCreate?: boolean })
               <div className="grid sm:grid-cols-2 gap-4">
                 <Field label="Audience">
                   <select className="ec-field" value={editing.audience} onChange={(event) => patchBanner(editing.id, { audience: event.target.value as Banner['audience'] })}>
-                    <option value="all">All students</option>
-                    <option value="JEE">JEE</option>
-                    <option value="NEET">NEET</option>
-                    <option value="JEE-11">JEE · Class 11</option>
-                    <option value="JEE-12">JEE · Class 12</option>
-                    <option value="NEET-11">NEET · Class 11</option>
-                    <option value="NEET-12">NEET · Class 12</option>
+                    {AUDIENCE_TARGETS.map((target) => (
+                      <option key={target.value} value={target.value}>{target.label}</option>
+                    ))}
                   </select>
                 </Field>
                 <Field label="Status">

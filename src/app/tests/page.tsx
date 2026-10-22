@@ -7,6 +7,9 @@ import { getStudentTests } from '@/lib/api';
 import { Badge, Skeleton } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { formatISTDateTime } from '@/lib/date';
+import { formatClassLevel, formatClassList } from '@/lib/validation';
+import { selectBannersForPlacement } from '@/lib/site-config';
+import { BannerCarousel } from '@/components/banners/BannerCarousel';
 import { useAuth } from '@/context/AuthContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import type { TestCardItem } from '@/types';
@@ -83,6 +86,15 @@ export default function TestsPage() {
 
   const sections = visibleSectionIds('tests', screen);
   const gridClass = screenGridClass(screen.layout);
+  const testBanners = useMemo(
+    () =>
+      selectBannersForPlacement(
+        config.banners,
+        profile ? { exam: profile.exam, classLevel: profile.class_level } : null,
+        'tests'
+      ),
+    [config.banners, profile]
+  );
 
   function renderCatalogue() {
     if (loading) {
@@ -144,11 +156,12 @@ export default function TestsPage() {
               </div>
               <p className="mt-1 text-xs text-ink-500 line-clamp-2">{test.description || 'No description.'}</p>
 
-              <div className="mt-2 flex flex-wrap gap-1">
-                {test.subject && <Badge>{test.subject}</Badge>}
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {test.subject && <Badge variant="info">{test.subject}</Badge>}
+                {test.classes?.length ? <Badge>{formatClassList(test.classes)}</Badge> : null}
                 <Badge variant="default"><Clock3 size={9} className="mr-0.5" /> {test.durationMinutes || 0} min</Badge>
-                <Badge variant="default"><ListChecks size={9} className="mr-0.5" /> {test.totalQuestions} questions</Badge>
-                {test.totalMarks ? <Badge variant="info">{test.totalMarks} marks</Badge> : null}
+                <Badge variant="default"><ListChecks size={9} className="mr-0.5" /> {test.totalQuestions} Qs</Badge>
+                {test.totalMarks ? <Badge variant="default">{test.totalMarks} marks</Badge> : null}
               </div>
 
               <div className="mt-3 space-y-1 text-[10.5px] text-ink-500">
@@ -197,7 +210,7 @@ export default function TestsPage() {
                   onClick={() => setFilter(item)}
                   aria-pressed={filter === item}
                   className={`ec-btn px-3 py-1.5 text-[11px] font-bold transition ${
-                    filter === item ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-100'
+                    filter === item ? 'bg-brand-600 text-white shadow-sm' : 'text-ink-600 hover:bg-ink-100'
                   }`}
                 >
                   {screen.filterLabels[item]}
@@ -259,7 +272,7 @@ export default function TestsPage() {
         description={screen.pageSubtitle}
         meta={
           <>
-            {profile ? <span className="ec-chip"><BookOpenCheck size={12} /> {profile.exam} · Class {profile.class_level}</span> : null}
+            {profile ? <span className="ec-chip"><BookOpenCheck size={12} /> {profile.exam} · {formatClassLevel(profile.class_level)}</span> : null}
             {counts.live > 0 ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-800">
                 <span className="ec-live-dot" /> {counts.live} live now
@@ -274,6 +287,10 @@ export default function TestsPage() {
           </Button>
         }
       />
+
+      {testBanners.length > 0 && (
+        <BannerCarousel banners={testBanners} settings={config.banners} compact />
+      )}
 
       <ScreenAnnouncementBanner announcement={screen.announcement} />
 

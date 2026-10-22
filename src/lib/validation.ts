@@ -1,4 +1,95 @@
-import type { ClassLevel, ExamTrack, TestQuestion } from '@/types';
+import type { ClassLevel, ContentExam, ExamTrack, TestQuestion } from '@/types';
+
+export const CLASS_LEVELS: readonly ClassLevel[] = ['11', '12', 'Dropper'] as const;
+
+export function normalizeClassLevel(value: unknown): ClassLevel | null {
+  const cleaned = String(value === undefined || value === null ? '' : value).trim();
+  if (cleaned === '11' || cleaned === '12') return cleaned;
+  if (/^dropper$/i.test(cleaned)) return 'Dropper';
+  return null;
+}
+
+/**
+ * Class access policy:
+ * - Class 11 students access Class 11 content on their track.
+ * - Class 12 students access Class 12 content on their track.
+ * - Dropper students access Class 11, Class 12, and Dropper content on their track.
+ */
+export function studentEligibleClassLevels(
+  classLevel?: ClassLevel | string | null
+): ClassLevel[] {
+  const normalized = normalizeClassLevel(classLevel);
+  if (normalized === 'Dropper') return ['11', '12', 'Dropper'];
+  if (normalized === '11' || normalized === '12') return [normalized];
+  return [];
+}
+
+export function formatClassLevel(classLevel?: string | null): string {
+  const normalized = normalizeClassLevel(classLevel);
+  if (normalized === 'Dropper') return 'Dropper';
+  if (normalized === '11' || normalized === '12') return `Class ${normalized}`;
+  return classLevel ? String(classLevel) : '—';
+}
+
+export function formatClassList(classes?: readonly string[] | null): string {
+  if (!Array.isArray(classes) || classes.length === 0) return 'All classes';
+  const normalized = Array.from(
+    new Set(classes.map(normalizeClassLevel).filter((c): c is ClassLevel => Boolean(c)))
+  );
+  if (!normalized.length) return 'All classes';
+  return normalized.map((cls) => formatClassLevel(cls)).join(', ');
+}
+
+export function inheritChildAudience(
+  parent?: { exam?: ContentExam | string | null; classes?: readonly string[] | null } | null,
+  subject?: { exam?: ContentExam | string | null; classes?: readonly string[] | null } | null,
+  fallback?: { exam?: ContentExam | string | null; classes?: readonly string[] | null } | null
+): { exam: ContentExam; classes: ClassLevel[] } {
+  const parentExam: ContentExam | null =
+    parent?.exam === 'JEE' || parent?.exam === 'NEET' || parent?.exam === 'Both'
+      ? parent.exam
+      : null;
+  const subjectExam: ContentExam | null =
+    subject?.exam === 'JEE' || subject?.exam === 'NEET' || subject?.exam === 'Both'
+      ? subject.exam
+      : null;
+  const fallbackExam: ContentExam =
+    fallback?.exam === 'JEE' || fallback?.exam === 'NEET' || fallback?.exam === 'Both'
+      ? fallback.exam
+      : 'JEE';
+  const exam: ContentExam =
+    parentExam && parentExam !== 'Both'
+      ? parentExam
+      : subjectExam && subjectExam !== 'Both'
+        ? subjectExam
+        : parentExam || subjectExam || fallbackExam;
+
+  const parentClasses = Array.isArray(parent?.classes)
+    ? parent.classes.map(normalizeClassLevel).filter((c): c is ClassLevel => Boolean(c))
+    : [];
+  const subjectClasses = Array.isArray(subject?.classes)
+    ? subject.classes.map(normalizeClassLevel).filter((c): c is ClassLevel => Boolean(c))
+    : [];
+  const fallbackClasses = Array.isArray(fallback?.classes)
+    ? fallback.classes.map(normalizeClassLevel).filter((c): c is ClassLevel => Boolean(c))
+    : [];
+
+  let classes: ClassLevel[];
+  if (parentClasses.length && subjectClasses.length) {
+    const overlap = parentClasses.filter((cls) => subjectClasses.includes(cls));
+    classes = overlap.length ? overlap : parentClasses;
+  } else if (parentClasses.length) {
+    classes = parentClasses;
+  } else if (subjectClasses.length) {
+    classes = subjectClasses;
+  } else if (fallbackClasses.length) {
+    classes = fallbackClasses;
+  } else {
+    classes = ['11', '12', 'Dropper'];
+  }
+
+  return { exam, classes: Array.from(new Set(classes)) };
+}
 
 export function isSafeHttpUrl(value?: string | null): boolean {
   if (!value || typeof value !== 'string') return false;
@@ -19,10 +110,13 @@ const ALLOWED_INTERNAL_PREFIXES = [
   '/leaderboard',
   '/profile',
   '/chat',
+  '/feedback',
+  '/challenges',
   '/home',
   '/events',
   '/search',
   '/notifications',
+  '/onboarding',
   '/admin',
 ];
 
@@ -44,11 +138,14 @@ export function matchesStudentExamAndClass(
   studentClass: ClassLevel
 ): boolean {
   const examOk = !item.exam || item.exam === 'Both' || item.exam === studentExam;
-  const classOk =
-    !Array.isArray(item.classes) ||
-    item.classes.length === 0 ||
-    item.classes.map(String).includes(String(studentClass));
-  return examOk && classOk;
+  if (!examOk) return false;
+  if (!Array.isArray(item.classes) || item.classes.length === 0) return true;
+  const allowed = studentEligibleClassLevels(studentClass);
+  if (!allowed.length) return false;
+  return item.classes
+    .map((entry) => normalizeClassLevel(entry))
+    .filter((entry): entry is ClassLevel => Boolean(entry))
+    .some((entry) => allowed.includes(entry));
 }
 
 export interface QuestionValidationError {

@@ -138,10 +138,10 @@ export function ScreenSection({
   return (
     <Tag>
       {title || subtitle || action ? (
-        <div className="mb-2.5 flex flex-wrap items-end justify-between gap-2">
+        <div className="mb-3.5 flex flex-wrap items-end justify-between gap-2 border-b border-ink-100 pb-2.5">
           <div className="min-w-0">
-            {title ? <h2 className="text-[15px] font-extrabold tracking-tight sm:text-lg">{title}</h2> : null}
-            {subtitle ? <p className="mt-0.5 text-[11.5px] text-ink-500">{subtitle}</p> : null}
+            {title ? <h2 className="text-base font-bold tracking-tight text-ink-900 sm:text-lg">{title}</h2> : null}
+            {subtitle ? <p className="mt-0.5 text-xs text-ink-500">{subtitle}</p> : null}
           </div>
           {action}
         </div>

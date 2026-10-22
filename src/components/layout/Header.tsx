@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { Button } from '@/components/ui/Button';
 import { isActivePath, isRouteEnabled } from '@/lib/navigation';
-import { isSafeHttpUrl } from '@/lib/validation';
+import { formatClassLevel, isSafeHttpUrl } from '@/lib/validation';
 import { NavIcon } from '@/components/ui/AppIcon';
 import { Bell, LogOut, Search } from 'lucide-react';
 import { ProfileImage } from '@/components/student/ProfileImage';
@@ -124,7 +124,7 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
                     {profile?.display_name || user.displayName || user.email}
                   </p>
                   <p className="text-[11px] text-current opacity-70 truncate">
-                    {profile ? `${profile.exam} • Class ${profile.class_level}` : user.email}
+                    {profile ? `${profile.exam} • ${formatClassLevel(profile.class_level)}` : user.email}
                   </p>
                 </div>
                 {isAdmin && (

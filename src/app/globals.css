@@ -8,51 +8,51 @@
    at runtime with the published admin theme (and handles light/dark/system).
 --------------------------------------------------------------------------- */
 :root {
-  --ec-bg: #f7f8fc;
+  --ec-bg: #f8fafc;
   --ec-surface: #ffffff;
-  --ec-surface-2: #fbfcfe;
+  --ec-surface-2: #f1f5f9;
   --ec-text: #0f172a;
-  --ec-muted: #7a7e8b;
-  --ec-border: #ececee;
-  --ec-brand: #6d28d9;
-  --ec-secondary: #4c1d95;
-  --ec-accent: #f59e0b;
+  --ec-muted: #64748b;
+  --ec-border: #e2e8f0;
+  --ec-brand: #1d4ed8;
+  --ec-secondary: #1e3a8a;
+  --ec-accent: #0284c7;
   --ec-on-brand: #ffffff;
-  --ec-radius: 18px;
+  --ec-radius: 14px;
   --ec-radius-sm: 10px;
-  --ec-radius-lg: 26px;
-  --ec-button-radius: 15px;
-  --ec-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 10px 30px rgba(15, 23, 42, 0.07);
+  --ec-radius-lg: 20px;
+  --ec-button-radius: 10px;
+  --ec-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 20px -6px rgba(15, 23, 42, 0.06);
   --ec-font-body: Inter, "Noto Sans Devanagari", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --ec-font-heading: Inter, "Noto Sans Devanagari", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --ec-heading-weight: 800;
-  --ec-heading-tracking: -0.03em;
-  --ec-max-width: 1200px;
+  --ec-heading-weight: 700;
+  --ec-heading-tracking: -0.025em;
+  --ec-max-width: 1240px;
   --ec-page-pad: 20px;
-  --ec-section-gap: 20px;
+  --ec-section-gap: 24px;
   --ec-anim: 0.85;
-  --ec-header-bg: rgba(255, 255, 255, 0.9);
+  --ec-header-bg: rgba(255, 255, 255, 0.94);
   --ec-header-text: #0f172a;
-  --ec-header-border: #ececee;
-  --ec-nav-bg: rgba(255, 255, 255, 0.96);
+  --ec-header-border: #e2e8f0;
+  --ec-nav-bg: rgba(255, 255, 255, 0.97);
 
-  --ec-brand-50: 245 243 255;
-  --ec-brand-100: 237 233 254;
-  --ec-brand-200: 221 214 254;
-  --ec-brand-300: 196 181 253;
-  --ec-brand-400: 167 139 250;
-  --ec-brand-500: 139 92 246;
-  --ec-brand-600: 109 40 217;
-  --ec-brand-700: 91 33 182;
-  --ec-brand-800: 76 29 149;
-  --ec-brand-900: 59 7 100;
+  --ec-brand-50: 239 246 255;
+  --ec-brand-100: 219 234 254;
+  --ec-brand-200: 191 219 254;
+  --ec-brand-300: 147 197 253;
+  --ec-brand-400: 96 165 250;
+  --ec-brand-500: 59 130 246;
+  --ec-brand-600: 29 78 216;
+  --ec-brand-700: 30 64 175;
+  --ec-brand-800: 30 58 138;
+  --ec-brand-900: 23 37 84;
 
-  --ec-ink-50: 251 252 254;
-  --ec-ink-100: 236 236 238;
-  --ec-ink-200: 219 220 223;
-  --ec-ink-300: 193 195 200;
-  --ec-ink-500: 122 126 139;
-  --ec-ink-700: 63 69 85;
+  --ec-ink-50: 248 250 252;
+  --ec-ink-100: 226 232 240;
+  --ec-ink-200: 203 213 225;
+  --ec-ink-300: 148 163 184;
+  --ec-ink-500: 100 116 139;
+  --ec-ink-700: 51 65 85;
   --ec-ink-900: 15 23 42;
 }
 
@@ -377,18 +377,27 @@ button, a, input, select, textarea {
   position: relative;
   overflow: hidden;
   border: 1px solid rgb(var(--ec-ink-100));
-  border-radius: calc(var(--ec-radius) + 6px);
+  border-radius: calc(var(--ec-radius) + 4px);
   background:
-    radial-gradient(720px 320px at 92% -20%, rgb(var(--ec-brand-200) / 0.75), transparent 62%),
-    radial-gradient(520px 260px at 6% 110%, rgb(var(--ec-accent) / 0.16), transparent 65%),
-    var(--ec-surface);
+    radial-gradient(680px 280px at 94% -18%, rgb(var(--ec-brand-100) / 0.65), transparent 64%),
+    linear-gradient(180deg, var(--ec-surface), var(--ec-surface-2));
   box-shadow: var(--ec-shadow-xs);
 }
 [data-ec-theme='dark'] .ec-hero-panel {
   background:
-    radial-gradient(720px 320px at 92% -20%, rgb(var(--ec-brand-600) / 0.34), transparent 62%),
-    radial-gradient(520px 260px at 6% 110%, rgb(var(--ec-accent) / 0.12), transparent 65%),
+    radial-gradient(680px 280px at 94% -18%, rgb(var(--ec-brand-600) / 0.25), transparent 64%),
     var(--ec-surface);
+}
+
+.ec-section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid rgb(var(--ec-ink-100));
+  margin-bottom: 1rem;
 }
 
 .ec-hero-lines {

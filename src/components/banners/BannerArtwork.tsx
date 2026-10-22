@@ -1,34 +1,46 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { ArrowRight, ExternalLink } from 'lucide-react';
 import type { Banner } from '@/types';
 import { isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
 
-function Cta({ banner, className = '' }: { banner: Banner; className?: string }) {
-  if (!banner.ctaLabel || !banner.ctaHref) return null;
-  const classes = `inline-flex items-center gap-1.5 px-4 py-2 text-xs sm:text-sm font-bold transition ${className}`;
-  const style = { borderRadius: 'var(--ec-button-radius)' };
-  if (isValidInternalDeepLink(banner.ctaHref)) {
+function BannerCta({ banner }: { banner: Banner }) {
+  const label = banner.ctaLabel?.trim();
+  const href = banner.ctaHref?.trim();
+  if (!label || !href) return null;
+
+  const baseClass =
+    'inline-flex items-center gap-1.5 rounded-[var(--ec-button-radius)] bg-white px-4 py-2 text-xs sm:text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white';
+
+  if (isValidInternalDeepLink(href)) {
     return (
-      <Link href={banner.ctaHref} className={`${classes} bg-[var(--ec-surface)] text-ink-900 hover:opacity-90`} style={style}>
-        {banner.ctaLabel} <span aria-hidden>→</span>
+      <Link href={href} className={baseClass}>
+        <span>{label}</span>
+        <ArrowRight size={14} aria-hidden />
       </Link>
     );
   }
-  if (isSafeHttpUrl(banner.ctaHref)) {
+  if (isSafeHttpUrl(href)) {
     return (
       <a
-        href={banner.ctaHref}
+        href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className={`${classes} bg-[var(--ec-surface)] text-ink-900 hover:opacity-90`}
-        style={style}
+        className={baseClass}
       >
-        {banner.ctaLabel} <span aria-hidden>↗</span>
+        <span>{label}</span>
+        <ExternalLink size={13} aria-hidden />
       </a>
     );
   }
   return null;
+}
+
+function formatAudienceBadge(audience?: Banner['audience']): string | null {
+  if (!audience || audience === 'all') return null;
+  return audience.replace('-', ' • Class ');
 }
 
 export function BannerArtwork({
@@ -40,60 +52,107 @@ export function BannerArtwork({
   compact?: boolean;
   className?: string;
 }) {
+  const desktop = isSafeHttpUrl(banner.desktopImageUrl) ? banner.desktopImageUrl.trim() : '';
+  const mobile = isSafeHttpUrl(banner.mobileImageUrl) ? banner.mobileImageUrl.trim() : '';
+  const hasConfiguredImage = Boolean(desktop || mobile);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [desktop, mobile]);
+
+  const showImage = hasConfiguredImage && !imageFailed;
   const align =
-    banner.textAlign === 'center' ? 'items-center text-center' : banner.textAlign === 'right' ? 'items-end text-right' : 'items-start text-left';
-  const desktop = isSafeHttpUrl(banner.desktopImageUrl) ? banner.desktopImageUrl : '';
-  const mobile = isSafeHttpUrl(banner.mobileImageUrl) ? banner.mobileImageUrl : '';
-  const primaryImage = mobile || desktop;
-  const overlay = Math.max(0, Math.min(90, banner.overlay)) / 100;
+    banner.textAlign === 'center'
+      ? 'items-center text-center'
+      : banner.textAlign === 'right'
+        ? 'items-end text-right'
+        : 'items-start text-left';
+
+  const overlayAlpha = Math.max(0.28, Math.min(0.9, (Number(banner.overlay) || 38) / 100));
+  const badgeText = banner.badge?.trim() || formatAudienceBadge(banner.audience);
+
+  const sizeClasses = compact
+    ? 'min-h-[148px] sm:min-h-[168px]'
+    : showImage
+      ? 'aspect-[16/9] sm:aspect-[21/8] min-h-[196px] sm:min-h-[248px]'
+      : 'min-h-[188px] sm:min-h-[228px]';
+
+  const scrimDirection =
+    banner.textAlign === 'right'
+      ? `linear-gradient(270deg, rgba(10, 18, 36, ${Math.min(0.92, overlayAlpha + 0.28)}) 0%, rgba(10, 18, 36, ${overlayAlpha}) 62%, rgba(10, 18, 36, ${Math.max(0.18, overlayAlpha - 0.16)}) 100%)`
+      : banner.textAlign === 'center'
+        ? `linear-gradient(180deg, rgba(10, 18, 36, ${Math.max(0.26, overlayAlpha - 0.08)}) 0%, rgba(10, 18, 36, ${Math.min(0.9, overlayAlpha + 0.26)}) 100%)`
+        : `linear-gradient(90deg, rgba(10, 18, 36, ${Math.min(0.92, overlayAlpha + 0.28)}) 0%, rgba(10, 18, 36, ${overlayAlpha}) 62%, rgba(10, 18, 36, ${Math.max(0.18, overlayAlpha - 0.16)}) 100%)`;
 
   return (
-    <div
-      className={`relative overflow-hidden rounded-[var(--ec-radius)] ${compact ? 'min-h-[150px]' : 'min-h-[210px] sm:min-h-[280px]'} ${className}`}
-      style={{ background: banner.backgroundColor || 'linear-gradient(120deg, var(--ec-brand), var(--ec-secondary))' }}
+    <article
+      className={`relative overflow-hidden rounded-[var(--ec-radius)] border border-slate-900/10 ${sizeClasses} ${className}`}
+      style={{
+        background:
+          banner.backgroundColor ||
+          'linear-gradient(125deg, var(--ec-secondary, #1e3a8a) 0%, var(--ec-brand, #1d4ed8) 65%, #0f172a 100%)',
+      }}
     >
-      {primaryImage && (
+      {showImage ? (
         <picture>
           {mobile && <source media="(max-width: 640px)" srcSet={mobile} />}
           <img
             src={desktop || mobile}
-            alt={banner.title}
-            className="absolute inset-0 h-full w-full object-cover"
+            alt={banner.title || 'Featured announcement'}
+            onError={() => setImageFailed(true)}
+            className="absolute inset-0 h-full w-full object-cover object-center"
             loading="lazy"
           />
         </picture>
-      )}
-      {!primaryImage && (
+      ) : (
         <div
+          aria-hidden
           className="absolute inset-0"
           style={{
             background:
-              'radial-gradient(700px 300px at 85% -10%, rgb(255 255 255 / 0.24), transparent 60%), radial-gradient(500px 260px at 0% 110%, rgb(var(--ec-accent) / 0.35), transparent 60%)',
+              'radial-gradient(640px 260px at 88% -12%, rgba(255, 255, 255, 0.20), transparent 62%), radial-gradient(480px 240px at 8% 115%, rgba(56, 189, 248, 0.22), transparent 60%)',
           }}
         />
       )}
-      <div className="absolute inset-0" style={{ background: `rgba(5, 10, 25, ${overlay})` }} />
-      <div className={`relative h-full flex flex-col justify-end p-4 sm:p-6 ${align}`}>
-        {banner.badge && (
-          <span className="inline-flex rounded-full bg-white/15 text-white border border-white/25 backdrop-blur px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] mb-2">
-            {banner.badge}
+
+      <div aria-hidden className="absolute inset-0" style={{ background: scrimDirection }} />
+
+      <div className={`relative z-[1] flex h-full flex-col justify-end p-4 sm:p-6 lg:p-7 ${align}`}>
+        {badgeText && (
+          <span className="mb-2 inline-flex items-center rounded-full border border-white/25 bg-white/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white backdrop-blur-sm">
+            {badgeText}
           </span>
         )}
-        <h3 className={`text-white drop-shadow-sm ${compact ? 'text-base' : 'text-xl sm:text-3xl'} leading-tight max-w-2xl`}>
-          {banner.title}
-        </h3>
+        {banner.title && (
+          <h3
+            className={`max-w-2xl font-bold tracking-tight text-white drop-shadow-sm ${
+              compact ? 'text-base sm:text-lg' : 'text-lg sm:text-2xl lg:text-[26px]'
+            } leading-snug`}
+          >
+            {banner.title}
+          </h3>
+        )}
         {banner.subtitle && (
-          <p className={`text-white/90 mt-1 max-w-xl ${compact ? 'text-[11px]' : 'text-xs sm:text-sm'}`}>{banner.subtitle}</p>
+          <p
+            className={`mt-1 max-w-xl font-medium text-slate-100/95 ${
+              compact ? 'text-xs' : 'text-xs sm:text-sm'
+            }`}
+          >
+            {banner.subtitle}
+          </p>
         )}
         {banner.description && !compact && (
-          <p className="text-white/75 text-[11px] sm:text-xs mt-1.5 max-w-lg line-clamp-2">{banner.description}</p>
+          <p className="mt-1.5 max-w-lg text-xs leading-relaxed text-slate-200/85 line-clamp-2">
+            {banner.description}
+          </p>
         )}
         {banner.ctaLabel && banner.ctaHref && (
-          <div className="mt-3">
-            <Cta banner={banner} />
+          <div className="mt-3.5">
+            <BannerCta banner={banner} />
           </div>
         )}
       </div>
-    </div>
+    </article>
   );
 }

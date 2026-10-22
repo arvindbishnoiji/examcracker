@@ -48,6 +48,7 @@ import type {
   EnrollmentScope,
 } from '@/types';
 import { formatISTDateTime } from '@/lib/date';
+import { formatClassLevel, formatClassList } from '@/lib/validation';
 import { useToast } from '@/hooks/useToast';
 import { isPaidCourse, coursePriceLabel } from '@/lib/enrollment';
 import {
@@ -64,7 +65,7 @@ import {
 
 type Tab = 'students' | 'records' | 'rules' | 'history';
 type ExamFilter = '' | 'JEE' | 'NEET';
-type ClassFilter = '' | '11' | '12';
+type ClassFilter = '' | '11' | '12' | 'Dropper';
 
 const SOURCE_LABEL: Record<string, string> = {
   manual: 'Admin grant',
@@ -88,7 +89,7 @@ function catalogMeta(item: CourseCatalogItem): Record<string, unknown> {
 }
 
 function catalogLabel(item: CourseCatalogItem): string {
-  return `${item.kind === 'batch' ? 'Batch' : 'Series'} · ${item.exam} · Class ${item.classes.join('/')}`;
+  return `${item.kind === 'batch' ? 'Batch' : 'Series'} · ${item.exam} · ${formatClassList(item.classes)}`;
 }
 
 function formatDate(value?: string | null): string {
@@ -429,6 +430,7 @@ function EnrollModal({
                   <option value="">All classes</option>
                   <option value="11">Class 11</option>
                   <option value="12">Class 12</option>
+                  <option value="Dropper">Dropper</option>
                 </select>
               </div>
             )}
@@ -717,6 +719,7 @@ function StudentDirectory({
           <option value="">All classes</option>
           <option value="11">Class 11</option>
           <option value="12">Class 12</option>
+          <option value="Dropper">Dropper</option>
         </select>
       </div>
 
@@ -750,7 +753,7 @@ function StudentDirectory({
                 </div>
                 <div className="hidden sm:flex items-center gap-1.5 shrink-0">
                   <StatusPill tone="brand">{student.exam}</StatusPill>
-                  <StatusPill tone="neutral">Class {student.class_level}</StatusPill>
+                  <StatusPill tone="neutral">{formatClassLevel(student.class_level)}</StatusPill>
                 </div>
                 <button
                   type="button"
@@ -959,7 +962,7 @@ function EnrollmentRecords({ refreshKey }: { refreshKey: number }) {
                       </td>
                       <td>
                         <p className="font-medium">{row.item_title || 'Untitled'}</p>
-                        <p className="text-[10px] text-ink-400">{row.item_type} · {row.exam || '—'} · Class {row.class_level || '—'}</p>
+                        <p className="text-[10px] text-ink-400">{row.item_type} · {row.exam || '—'} · {row.class_level ? formatClassLevel(row.class_level) : '—'}</p>
                       </td>
                       <td>
                         <StatusPill tone={row.active ? 'success' : 'danger'}>
@@ -1203,7 +1206,7 @@ function RulesPanel({ refreshKey, onChanged }: { refreshKey: number; onChanged: 
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold truncate">{rule.item_title || rule.name || rule.item_id}</p>
                   <p className="text-[10px] text-ink-500">
-                    {rule.item_type} · {rule.filter_exam || 'all exams'} · {rule.filter_class ? `Class ${rule.filter_class}` : 'all classes'} ·
+                    {rule.item_type} · {rule.filter_exam || 'all exams'} · {rule.filter_class ? formatClassLevel(rule.filter_class) : 'all classes'} ·
                     {' '}{rule.respect_eligibility ? 'eligibility enforced' : 'eligibility override'} ·{' '}
                     {rule.last_applied_count} auto-enrolled
                   </p>

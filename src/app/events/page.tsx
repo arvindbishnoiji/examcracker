@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { formatCountdown, formatISTDateTime } from '@/lib/date';
-import { isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
+import { formatClassLevel, isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
 import type { CourseCatalogItem, EventsScreenConfig } from '@/types';
 import { visibleSectionIds } from '@/lib/screen-config';
 import {
@@ -282,7 +282,7 @@ export default function EventsPage() {
         eyebrow={screen.eyebrow}
         title={screen.pageTitle}
         description={screen.pageSubtitle}
-        meta={profile ? <span className="ec-chip">{profile.exam} · Class {profile.class_level}</span> : undefined}
+        meta={profile ? <span className="ec-chip">{profile.exam} · {formatClassLevel(profile.class_level)}</span> : undefined}
         actions={
           <Link href="/home" className="ec-btn border border-ink-200 px-3.5 py-2 text-xs font-bold">
             ← Dashboard

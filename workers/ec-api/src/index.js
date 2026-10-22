@@ -13,12 +13,14 @@
 import {
   deleteDriveFile,
   downloadDriveFile,
+  inspectDriveStatus,
   uploadDriveFile,
 } from "./drive.js";
-import { RUNTIME_MIGRATIONS } from "./runtime-migrations.js";
+import { DROPPER_SCHEMA_UPGRADE_SQL, RUNTIME_MIGRATIONS } from "./runtime-migrations.js";
 
 const FIREBASE_PROJECT_ID = "darvo1";
 const ADMIN_EMAIL = "arvinddarabishnoi@gmail.com";
+const VALID_CLASS_LEVELS = ["11", "12", "Dropper"];
 const ALLOWED_ORIGINS = new Set([
   "https://examcrack.pages.dev",
   "https://exam-cracker-web.arvinddara0290.workers.dev",
@@ -477,10 +479,46 @@ function classOverlap(a, b) {
   return left.some((item) => right.includes(item));
 }
 
+function normalizeClassLevel(value) {
+  const cleaned = String(value === undefined || value === null ? "" : value).trim();
+  if (cleaned === "11" || cleaned === "12") return cleaned;
+  if (/^dropper$/i.test(cleaned)) return "Dropper";
+  return "";
+}
+
+function studentEligibleClassLevels(classLevel) {
+  const normalized = normalizeClassLevel(classLevel);
+  if (normalized === "Dropper") return ["11", "12", "Dropper"];
+  if (normalized === "11" || normalized === "12") return [normalized];
+  return [];
+}
+
+function studentMatchesClasses(courseClasses, studentClassLevel) {
+  const allowed = studentEligibleClassLevels(studentClassLevel);
+  if (!allowed.length) return false;
+  const itemClasses = readStringArray(courseClasses, []).map(normalizeClassLevel).filter(Boolean);
+  return itemClasses.some((itemClass) => allowed.includes(itemClass));
+}
+
+function announcementMatchesProfile(audienceRaw, profile) {
+  if (!profile) return false;
+  const audience = String(audienceRaw || "All").trim();
+  if (!audience || /^all$/i.test(audience)) return true;
+  if (audience === profile.exam) return true;
+  if (normalizeClassLevel(audience) === profile.class_level) return true;
+  if (audience.includes("-")) {
+    const [audExam, audClassRaw] = audience.split("-");
+    const audClass = normalizeClassLevel(audClassRaw);
+    if (audExam && audExam !== profile.exam && audExam !== "Both") return false;
+    return audClass ? studentEligibleClassLevels(profile.class_level).includes(audClass) : false;
+  }
+  return studentEligibleClassLevels(profile.class_level).some((cls) => audience.includes(cls));
+}
+
 function profileMatchesCourse(course, profile) {
   if (!profile) return false;
   if (!examCompatible(course.exam, profile.exam)) return false;
-  return readStringArray(course.classes, []).includes(profile.class_level);
+  return studentMatchesClasses(course.classes, profile.class_level);
 }
 
 function visibleBySchedule(row) {
@@ -494,6 +532,17 @@ function visibleBySchedule(row) {
 function isPreviewContent(row) {
   const metadata = row.metadata || {};
   return metadata.isPreview === true || metadata.preview === true;
+}
+
+function isFreeCourse(row) {
+  if (!row) return false;
+  const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : readJson(row.metadata, {});
+  if (row.access_code || metadata.requiresAccessCode || metadata.hasAccessCode) return false;
+  if (metadata.paid === true || metadata.isPaid === true || metadata.isFree === false) return false;
+  if (metadata.isFree === true) return true;
+  const numericPrice = Number(metadata.price);
+  if (Number.isFinite(numericPrice) && numericPrice > 0) return false;
+  return true;
 }
 
 async function courseRow(db, id) {
@@ -511,7 +560,15 @@ async function courseRow(db, id) {
 
 async function contentRows(
   db,
-  { activeOnly = false, kind = "", exam = "", classLevel = "", parentId = "", subjectId = "" } = {}
+  {
+    activeOnly = false,
+    kind = "",
+    exam = "",
+    classLevel = "",
+    studentClass = "",
+    parentId = "",
+    subjectId = "",
+  } = {}
 ) {
   const clauses = [];
   const values = [];
@@ -528,6 +585,7 @@ async function contentRows(
     clauses.push("c.subject_id = ?");
     values.push(subjectId);
   }
+  const exactClass = normalizeClassLevel(classLevel);
   const sql = `SELECT c.*, s.name AS subject_name, s.active AS subject_active,
                       s.archived AS subject_archived
                  FROM course_catalog c
@@ -537,15 +595,150 @@ async function contentRows(
   return rows
     .map((row) => mapCourse(row, false))
     .filter((row) => {
-      if (activeOnly && row.subjectId && !asBool(row.subject_active)) return false;
-      if (classLevel && !row.classes.includes(classLevel)) return false;
+      if (activeOnly && row.subjectId && (!asBool(row.subject_active) || asBool(row.subject_archived))) {
+        return false;
+      }
+      if (exactClass && !row.classes.map(normalizeClassLevel).includes(exactClass)) return false;
+      if (studentClass && !studentMatchesClasses(row.classes, studentClass)) return false;
       if (parentId && String(row.parentId || "") !== parentId) return false;
       return true;
     })
     .sort((a, b) => {
       if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-      return String(a.created_at).localeCompare(String(b.created_at));
+      const cmp = String(a.created_at).localeCompare(String(b.created_at));
+      if (cmp !== 0) return cmp;
+      return String(a.id).localeCompare(String(b.id));
     });
+}
+
+async function buildSubjectLectureQueue(db, currentItem, { user, profile, admin = false } = {}) {
+  const emptyQueue = (reason) => ({
+    items: [],
+    meta: {
+      subjectId: currentItem?.subjectId || null,
+      subjectName: currentItem?.subjectName || null,
+      parentId: currentItem?.parentId || null,
+      totalInSubject: 0,
+      currentIndex: -1,
+      previousLectureId: null,
+      nextLectureId: null,
+      reason,
+    },
+  });
+
+  if (!currentItem || currentItem.kind !== "lecture") {
+    return emptyQueue("not_a_lecture");
+  }
+  if (!currentItem.subjectId) {
+    return emptyQueue("missing_subject");
+  }
+
+  let enrolledInParent = admin;
+  if (currentItem.parentId) {
+    const parentRow = await courseRow(db, currentItem.parentId);
+    if (!parentRow || !asBool(parentRow.active) || !["batch", "series"].includes(parentRow.kind)) {
+      return emptyQueue("inactive_parent");
+    }
+    if (!admin && !profileMatchesCourse(mapCourse(parentRow, false), profile)) {
+      return emptyQueue("ineligible_parent");
+    }
+    if (!admin) {
+      enrolledInParent = await hasEnrollment(db, user.uid, currentItem.parentId);
+    }
+  }
+
+  const sql = currentItem.parentId
+    ? `SELECT c.*, s.name AS subject_name, s.active AS subject_active, s.archived AS subject_archived
+         FROM course_catalog c
+         JOIN subjects s ON s.id = c.subject_id
+        WHERE c.kind = 'lecture'
+          AND c.active = 1
+          AND c.subject_id = ?
+          AND c.parent_id = ?
+          AND s.active = 1
+          AND s.archived = 0`
+    : `SELECT c.*, s.name AS subject_name, s.active AS subject_active, s.archived AS subject_archived
+         FROM course_catalog c
+         JOIN subjects s ON s.id = c.subject_id
+        WHERE c.kind = 'lecture'
+          AND c.active = 1
+          AND c.subject_id = ?
+          AND c.parent_id IS NULL
+          AND s.active = 1
+          AND s.archived = 0`;
+
+  const rawRows = currentItem.parentId
+    ? await all(db, sql, currentItem.subjectId, currentItem.parentId)
+    : await all(db, sql, currentItem.subjectId);
+
+  const candidates = rawRows
+    .map((row) => mapCourse(row, false))
+    .filter(Boolean)
+    .filter((candidate) => {
+      // Defensive assertion: strictly same subjectId & lecture kind only.
+      if (candidate.kind !== "lecture" || candidate.subjectId !== currentItem.subjectId) return false;
+      if (String(candidate.parentId || "") !== String(currentItem.parentId || "")) return false;
+      if (!visibleBySchedule(candidate)) return false;
+      if (admin) return true;
+      if (!profileMatchesCourse(candidate, profile)) return false;
+      if (!candidate.parentId) return true;
+      return enrolledInParent || isPreviewContent(candidate);
+    })
+    .sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      const cmp = String(a.created_at).localeCompare(String(b.created_at));
+      if (cmp !== 0) return cmp;
+      return String(a.id).localeCompare(String(b.id));
+    });
+
+  const progressByLecture = new Map();
+  if (user?.uid && candidates.length) {
+    const ids = candidates.map((item) => item.id);
+    const placeholders = ids.map(() => "?").join(",");
+    const progressRows = await all(
+      db,
+      `SELECT lecture_id, watched_seconds, completed, updated_at
+         FROM lesson_progress
+        WHERE firebase_uid = ? AND lecture_id IN (${placeholders})`,
+      user.uid,
+      ...ids
+    );
+    for (const pRow of progressRows) {
+      progressByLecture.set(String(pRow.lecture_id), {
+        watchedSeconds: Number(pRow.watched_seconds) || 0,
+        completed: asBool(pRow.completed),
+        updatedAt: pRow.updated_at || null,
+      });
+    }
+  }
+
+  const hydrated = candidates.map((candidate) => ({
+    ...candidate,
+    progress: progressByLecture.get(candidate.id) || {
+      watchedSeconds: 0,
+      completed: false,
+      updatedAt: null,
+    },
+  }));
+
+  const currentIndex = hydrated.findIndex((entry) => entry.id === currentItem.id);
+  const previousLectureId = currentIndex > 0 ? hydrated[currentIndex - 1].id : null;
+  const nextLectureId =
+    currentIndex >= 0 && currentIndex < hydrated.length - 1 ? hydrated[currentIndex + 1].id : null;
+
+  return {
+    items: hydrated,
+    meta: {
+      subjectId: currentItem.subjectId,
+      subjectName: hydrated[0]?.subjectName || currentItem.subjectName || null,
+      parentId: currentItem.parentId || null,
+      totalInSubject: hydrated.length,
+      currentIndex,
+      previousLectureId,
+      nextLectureId,
+      reason: hydrated.length ? "ok" : "empty",
+    },
+  };
 }
 
 async function hasEnrollment(db, uid, itemId) {
@@ -562,7 +755,7 @@ async function hasEnrollment(db, uid, itemId) {
 async function canAccessCourse(db, user, row, profile, admin = false) {
   if (admin || isAdmin(user)) return true;
   if (!row || !asBool(row.active)) return false;
-  if (row.subject_id && !asBool(row.subject_active)) return false;
+  if (row.subject_id && (!asBool(row.subject_active) || asBool(row.subject_archived))) return false;
   const course = mapCourse(row, false);
   if (!profileMatchesCourse(course, profile)) return false;
   if (!course.parentId) return true;
@@ -594,9 +787,10 @@ async function validateCourseRelations(db, kind, parentId, subjectId, existing =
     if (parentId || subjectId) {
       throw httpError("Only lectures and resources can belong to a subject inside a batch or series.");
     }
-    return { parentId: null, subjectId: null };
+    return { parentId: null, subjectId: null, parent: null, subject: null };
   }
   let parent = null;
+  let subject = null;
   if (parentId) {
     parent = await courseRow(db, parentId);
     if (!parent) throw httpError("The selected batch or series was not found.", 400);
@@ -613,7 +807,7 @@ async function validateCourseRelations(db, kind, parentId, subjectId, existing =
     }
     const assignment = await first(
       db,
-      `SELECT cs.course_id, cs.subject_id, s.name, s.active, s.archived
+      `SELECT cs.course_id, cs.subject_id, s.name, s.exam, s.classes, s.active, s.archived
          FROM course_subjects cs
          JOIN subjects s ON s.id = cs.subject_id
         WHERE cs.course_id = ? AND cs.subject_id = ?`,
@@ -630,8 +824,68 @@ async function validateCourseRelations(db, kind, parentId, subjectId, existing =
     if (!unchanged && (!asBool(assignment.active) || asBool(assignment.archived))) {
       throw httpError("This subject is archived or inactive. Choose an active subject.");
     }
+    subject = assignment;
   }
-  return { parentId: parentId || null, subjectId: subjectId || null };
+  return { parentId: parentId || null, subjectId: subjectId || null, parent, subject };
+}
+
+function alignChildAudienceWithParent(payload, relations, rawBody = {}) {
+  if (!relations || !relations.parent) return payload;
+  const parentClasses = readStringArray(relations.parent.classes, ["11", "12"])
+    .map(normalizeClassLevel)
+    .filter(Boolean);
+  const subjectClasses = relations.subject
+    ? readStringArray(relations.subject.classes, parentClasses)
+        .map(normalizeClassLevel)
+        .filter(Boolean)
+    : parentClasses;
+  const compatibleClasses = parentClasses.filter((cls) => subjectClasses.includes(cls));
+  const inheritedClasses = compatibleClasses.length ? compatibleClasses : parentClasses;
+
+  const parentExam = relations.parent.exam || "Both";
+  const subjectExam = relations.subject?.exam || "Both";
+  const inheritedExam =
+    parentExam !== "Both" ? parentExam : subjectExam !== "Both" ? subjectExam : "Both";
+
+  const explicitExam = rawBody.exam !== undefined && String(rawBody.exam).trim() !== "";
+  const explicitClasses = Array.isArray(rawBody.classes) && rawBody.classes.length > 0;
+
+  let nextExam = explicitExam ? payload.exam : inheritedExam;
+  if (nextExam === "Both" && inheritedExam !== "Both") {
+    nextExam = inheritedExam;
+  }
+  if (!examCompatible(nextExam, parentExam)) {
+    throw httpError(
+      `Selected exam track (${nextExam}) does not match the parent ${relations.parent.kind} (${parentExam}).`,
+      400
+    );
+  }
+  if (relations.subject && !examCompatible(nextExam, subjectExam)) {
+    throw httpError(
+      `Selected exam track (${nextExam}) does not match subject “${relations.subject.name}” (${subjectExam}).`,
+      400
+    );
+  }
+
+  const nextClasses = explicitClasses ? payload.classes : inheritedClasses;
+  if (!classOverlap(nextClasses, parentClasses)) {
+    throw httpError(
+      `Selected classes (${nextClasses.join(", ")}) do not overlap with the parent ${relations.parent.kind} (${parentClasses.join(", ")}).`,
+      400
+    );
+  }
+  if (relations.subject && !classOverlap(nextClasses, subjectClasses)) {
+    throw httpError(
+      `Selected classes (${nextClasses.join(", ")}) do not overlap with subject “${relations.subject.name}” (${subjectClasses.join(", ")}).`,
+      400
+    );
+  }
+
+  return {
+    ...payload,
+    exam: nextExam,
+    classes: nextClasses,
+  };
 }
 
 function coursePayload(body) {
@@ -639,16 +893,15 @@ function coursePayload(body) {
   const title = asText(body.title, 180);
   const description = String(body.description || "").slice(0, 12000);
   const exam = asText(body.exam || "Both", 10) || "Both";
-  const classes = Array.from(
-    new Set((Array.isArray(body.classes) ? body.classes : ["11", "12"]).map(String))
-  );
+  const rawClasses = Array.isArray(body.classes) ? body.classes : ["11", "12"];
+  const classes = Array.from(new Set(rawClasses.map(normalizeClassLevel).filter(Boolean)));
   if (!COURSE_KINDS.has(kind)) throw httpError("Invalid content type.");
   if (!title || title.length > 180) {
     throw httpError("Title is required and must be 180 characters or fewer.");
   }
   if (!["JEE", "NEET", "Both"].includes(exam)) throw httpError("Invalid exam track.");
-  if (!classes.length || classes.some((item) => !["11", "12"].includes(item))) {
-    throw httpError("Choose Class 11, Class 12, or both.");
+  if (!classes.length || rawClasses.some((item) => !normalizeClassLevel(item))) {
+    throw httpError("Choose Class 11, Class 12, or Dropper.");
   }
   const metadata =
     body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
@@ -1004,12 +1257,13 @@ async function adminSubjectList(db, { query = "", exam = "", classLevel = "", in
   const assignments = await subjectAssignments(db, ids);
   const usage = await subjectUsage(db);
   const q = query.trim().toLowerCase();
+  const exactClass = normalizeClassLevel(classLevel);
   return rows
     .map((row) => mapSubject(row, assignments.get(row.id) || [], usage.get(row.id) || 0))
     .filter((subject) => {
       if (!includeArchived && (subject.archived || !subject.active)) return false;
       if (exam && !examCompatible(subject.exam, exam)) return false;
-      if (classLevel && !subject.classes.includes(classLevel)) return false;
+      if (exactClass && !subject.classes.map(normalizeClassLevel).includes(exactClass)) return false;
       if (
         q &&
         !`${subject.name} ${subject.description} ${subject.assignments.map((item) => item.courseTitle).join(" ")}`
@@ -1132,13 +1386,10 @@ function subjectPayload(body, current = null) {
   const name = asText(body.name ?? current?.name, 80);
   const description = String(body.description ?? current?.description ?? "").slice(0, 1000);
   const exam = asText(body.exam ?? current?.exam ?? "Both", 10) || "Both";
-  const classes = Array.from(
-    new Set(
-      (Array.isArray(body.classes) ? body.classes : readStringArray(current?.classes, ["11", "12"])).map(
-        String
-      )
-    )
-  );
+  const rawClasses = Array.isArray(body.classes)
+    ? body.classes
+    : readStringArray(current?.classes, ["11", "12"]);
+  const classes = Array.from(new Set(rawClasses.map(normalizeClassLevel).filter(Boolean)));
   const active = body.active === undefined ? (current ? asBool(current.active) : true) : body.active === true;
   const archived =
     body.archived === undefined ? (current ? asBool(current.archived) : false) : body.archived === true;
@@ -1150,8 +1401,8 @@ function subjectPayload(body, current = null) {
     throw httpError("Subject name must be between 2 and 80 characters.");
   }
   if (!["JEE", "NEET", "Both"].includes(exam)) throw httpError("Choose JEE, NEET or Both.");
-  if (!classes.length || classes.some((item) => !["11", "12"].includes(item))) {
-    throw httpError("Choose Class 11, Class 12, or both for this subject.");
+  if (!classes.length || rawClasses.some((item) => !normalizeClassLevel(item))) {
+    throw httpError("Choose Class 11, Class 12, or Dropper for this subject.");
   }
   return { name, description, exam, classes, active: active && !archived, archived, sortOrder };
 }
@@ -1197,6 +1448,25 @@ function migrationStatements(sql) {
     .filter(Boolean);
 }
 
+async function ensureDropperSchemaUpgrade(db) {
+  if (typeof db.batch !== "function") return;
+  const profileSchema = await first(
+    db,
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='student_profiles'"
+  );
+  const sqlText = String(profileSchema?.sql || "");
+  if (!sqlText || sqlText.includes("'Dropper'")) {
+    await run(
+      db,
+      "CREATE INDEX IF NOT EXISTS course_catalog_subject_queue_idx ON course_catalog(kind, active, subject_id, parent_id, sort_order, created_at)"
+    );
+    return;
+  }
+  const statements = migrationStatements(DROPPER_SCHEMA_UPGRADE_SQL);
+  if (!statements.length) return;
+  await db.batch(statements.map((sql) => db.prepare(sql)));
+}
+
 async function initializeRuntimeSchemaIfNeeded(db) {
   const tableRows = await all(
     db,
@@ -1210,7 +1480,10 @@ async function initializeRuntimeSchemaIfNeeded(db) {
   const appTables = [...tableNames].filter((name) => !runtimeMetadataTables.has(name.toLowerCase()));
   const missing = RUNTIME_REQUIRED_TABLES.filter((name) => !tableNames.has(name));
 
-  if (missing.length === 0) return;
+  if (missing.length === 0) {
+    await ensureDropperSchemaUpgrade(db);
+    return;
+  }
 
   // Empty database only. If any application table exists, don't risk rerunning
   // non-idempotent ALTER TABLE statements against real or partial user data.
@@ -1373,12 +1646,12 @@ export async function handleApiRequest(request, env) {
       const body = await readBody(request);
       const displayName = asText(body.displayName || body.display_name || user.name, 80);
       const exam = asText(body.exam, 10).toUpperCase();
-      const classLevel = asText(body.classLevel || body.class_level, 2);
+      const classLevel = normalizeClassLevel(body.classLevel || body.class_level);
       if (displayName.length < 2 || displayName.length > 80) {
         return fail("Name must be 2-80 characters.");
       }
-      if (!["JEE", "NEET"].includes(exam) || !["11", "12"].includes(classLevel)) {
-        return fail("Choose JEE or NEET and class 11 or 12.");
+      if (!["JEE", "NEET"].includes(exam) || !VALID_CLASS_LEVELS.includes(classLevel)) {
+        return fail("Choose JEE or NEET and class 11, 12, or Dropper.");
       }
       const timestamp = now();
       const legacyAvatar = isSafeHttpUrl(user.picture) ? user.picture : null;
@@ -1402,7 +1675,33 @@ export async function handleApiRequest(request, env) {
         timestamp,
         timestamp
       );
-      return json({ profile: await getProfile(db, user.uid) });
+      const savedProfile = await getProfile(db, user.uid);
+      if (savedProfile) {
+        const activeRules = await all(db, "SELECT * FROM enrollment_rules WHERE active=1");
+        for (const rule of activeRules) {
+          if (rule.filter_exam && rule.filter_exam !== savedProfile.exam) continue;
+          if (rule.filter_class && normalizeClassLevel(rule.filter_class) !== normalizeClassLevel(savedProfile.class_level)) continue;
+          const targetCourse = await courseRow(db, rule.item_id);
+          if (!targetCourse || !asBool(targetCourse.active)) continue;
+          if (asBool(rule.respect_eligibility) && !profileMatchesCourse(mapCourse(targetCourse, false), savedProfile)) continue;
+          await run(
+            db,
+            `INSERT INTO enrollments
+               (id,firebase_uid,item_type,item_id,active,status,source,granted_by,expires_at,created_at,updated_at,metadata)
+             VALUES (?,?,?,?,1,'active','auto_rule',?,?,?,?,'{}')
+             ON CONFLICT(firebase_uid,item_type,item_id) DO NOTHING`,
+            uuid(),
+            user.uid,
+            rule.item_type,
+            rule.item_id,
+            rule.created_by || "system",
+            rule.expires_at || null,
+            timestamp,
+            timestamp
+          );
+        }
+      }
+      return json({ profile: savedProfile });
     }
 
     // Bootstrap ------------------------------------------------------------
@@ -1424,7 +1723,7 @@ export async function handleApiRequest(request, env) {
       const allVisibleRows = await contentRows(db, {
         activeOnly: true,
         exam: profile.exam,
-        classLevel: profile.class_level,
+        studentClass: profile.class_level,
       });
       const activeParentIds = new Set(
         allVisibleRows.filter((item) => ["batch", "series"].includes(item.kind)).map((item) => item.id)
@@ -1443,9 +1742,7 @@ export async function handleApiRequest(request, env) {
         .filter(
           (item) =>
             (!item.scheduled_at || Date.parse(item.scheduled_at) <= Date.now()) &&
-            (item.audience === "All" ||
-              item.audience === profile.exam ||
-              String(item.audience).includes(profile.class_level))
+            announcementMatchesProfile(item.audience, profile)
         )
         .map(mapAnnouncement);
       return json({
@@ -1487,7 +1784,10 @@ export async function handleApiRequest(request, env) {
       const filtered = rows.filter(
         (row) =>
           examCompatible(row.exam, parent ? parent.exam : profile.exam) &&
-          classOverlap(row.classes, parent ? parent.classes : [profile.class_level])
+          classOverlap(
+            row.classes,
+            parent ? parent.classes : studentEligibleClassLevels(profile.class_level)
+          )
       );
       const items = [];
       for (const row of filtered) {
@@ -1515,7 +1815,7 @@ export async function handleApiRequest(request, env) {
       const parent = await courseRow(db, parentId);
       if (!parent || !asBool(parent.active)) return fail("Batch or series not found.", 404);
       if (!["batch", "series"].includes(parent.kind)) return fail("Invalid parent content.", 400);
-      const profile = admin ? await getProfile(db, user.uid) : await getProfile(db, user.uid);
+      const profile = await getProfile(db, user.uid);
       if (!admin) {
         requireProfile(profile);
         if (!profileMatchesCourse(mapCourse(parent, false), profile)) {
@@ -1534,46 +1834,90 @@ export async function handleApiRequest(request, env) {
       const visibleSubjects = subjectRows.filter((row) =>
         examCompatible(row.exam, parent.exam) && classOverlap(row.classes, parent.classes)
       );
-      const items = (await contentRows(db, {
+      const allCourseItems = (await contentRows(db, {
         activeOnly: true,
         parentId,
-        exam: profile ? profile.exam : parent.exam,
-        classLevel: profile ? profile.class_level : null,
+        exam: admin ? "" : profile ? profile.exam : parent.exam,
+        studentClass: admin ? "" : profile ? profile.class_level : "",
       }))
         .filter((item) => ["lecture", "resource"].includes(item.kind))
-        .filter(visibleBySchedule)
-        .filter((item) => (enrolled ? true : isPreviewContent(item)));
+        .filter(visibleBySchedule);
+
+      const items = allCourseItems.filter((item) => (enrolled ? true : isPreviewContent(item)));
 
       const bySubject = new Map(
         visibleSubjects.map((row) => [
           row.id,
-          { subject: row, lectures: [], resources: [] },
+          { subject: row, lectures: [], resources: [], totalLectures: 0, totalResources: 0 },
         ])
       );
-      const unassigned = { lectures: [], resources: [] };
+      const unassigned = { lectures: [], resources: [], totalLectures: 0, totalResources: 0 };
+
+      for (const item of allCourseItems) {
+        const bucket = item.subjectId ? bySubject.get(item.subjectId) : null;
+        const target = bucket || unassigned;
+        if (item.kind === "lecture") target.totalLectures += 1;
+        else target.totalResources += 1;
+      }
+
       for (const item of items) {
         const bucket = item.subjectId ? bySubject.get(item.subjectId) : null;
         const target = bucket || unassigned;
         if (item.kind === "lecture") target.lectures.push(item);
         else target.resources.push(item);
       }
+
       const subjects = visibleSubjects.map((row) => {
         const group = bySubject.get(row.id);
+        const lockedLectureCount = enrolled
+          ? 0
+          : Math.max(0, group.totalLectures - group.lectures.length);
+        const lockedResourceCount = enrolled
+          ? 0
+          : Math.max(0, group.totalResources - group.resources.length);
         return {
-          ...mapSubject(row, [], group.lectures.length + group.resources.length),
+          ...mapSubject(row, [], group.totalLectures + group.totalResources),
           lectures: group.lectures,
           resources: group.resources,
+          totalLectureCount: group.totalLectures,
+          totalResourceCount: group.totalResources,
+          lockedLectureCount,
+          lockedResourceCount,
         };
       });
+
+      const totalLectureCount = allCourseItems.filter((item) => item.kind === "lecture").length;
+      const totalResourceCount = allCourseItems.filter((item) => item.kind === "resource").length;
+      const visibleLectureCount = items.filter((item) => item.kind === "lecture").length;
+      const lockedLectureCount = enrolled ? 0 : Math.max(0, totalLectureCount - visibleLectureCount);
+
       return json({
         parent: mapCourse(parent, false),
         enrolled,
         locked: !enrolled,
-        previewCount: items.filter(isPreviewContent).length,
+        adminPreview: Boolean(admin),
+        isFree: isFreeCourse(parent),
+        previewCount: allCourseItems.filter(isPreviewContent).length,
+        totalLectureCount,
+        totalResourceCount,
+        lockedLectureCount,
         subjects,
         unassigned:
-          unassigned.lectures.length || unassigned.resources.length
-            ? { id: null, name: "General", lectures: unassigned.lectures, resources: unassigned.resources }
+          unassigned.lectures.length ||
+          unassigned.resources.length ||
+          unassigned.totalLectures ||
+          unassigned.totalResources
+            ? {
+                id: null,
+                name: "General",
+                lectures: unassigned.lectures,
+                resources: unassigned.resources,
+                totalLectureCount: unassigned.totalLectures,
+                totalResourceCount: unassigned.totalResources,
+                lockedLectureCount: enrolled
+                  ? 0
+                  : Math.max(0, unassigned.totalLectures - unassigned.lectures.length),
+              }
             : null,
       });
     }
@@ -1581,7 +1925,7 @@ export async function handleApiRequest(request, env) {
     // Catalogue ------------------------------------------------------------
     if (path === "/content" && method === "GET") {
       const profile = await getProfile(db, user.uid);
-      requireProfile(profile);
+      if (!admin) requireProfile(profile);
       const kind = url.searchParams.get("kind") || "";
       const parentId = url.searchParams.get("parentId") || "";
       const subjectId = url.searchParams.get("subjectId") || "";
@@ -1591,7 +1935,7 @@ export async function handleApiRequest(request, env) {
         parent = await courseRow(db, parentId);
         if (!parent || !asBool(parent.active)) return fail("Batch or series not found.", 404);
         if (!["batch", "series"].includes(parent.kind)) return fail("Invalid parent content.", 400);
-        if (!profileMatchesCourse(mapCourse(parent, false), profile)) {
+        if (!admin && !profileMatchesCourse(mapCourse(parent, false), profile)) {
           return fail("This content is not available for your exam and class.", 403);
         }
         enrolled = admin || (await hasEnrollment(db, user.uid, parentId));
@@ -1601,8 +1945,8 @@ export async function handleApiRequest(request, env) {
         kind,
         parentId,
         subjectId,
-        exam: profile.exam,
-        classLevel: profile.class_level,
+        exam: admin && !profile ? "" : profile?.exam || "",
+        studentClass: admin && !profile ? "" : profile?.class_level || "",
       });
       items = items.filter(visibleBySchedule);
       if (!parentId) {
@@ -1613,7 +1957,7 @@ export async function handleApiRequest(request, env) {
         const activeParentIds = new Set(activeParents.map((row) => String(row.id)));
         items = items.filter((item) => !item.parentId || activeParentIds.has(item.parentId));
       }
-      if (["lecture", "resource"].includes(kind) || !kind) {
+      if (!admin && (["lecture", "resource"].includes(kind) || !kind)) {
         const enrollmentRows = await all(
           db,
           "SELECT item_id FROM enrollments WHERE firebase_uid=? AND active=1 AND status='active' AND (expires_at IS NULL OR expires_at > ?)",
@@ -1641,7 +1985,9 @@ export async function handleApiRequest(request, env) {
       const profile = await getProfile(db, user.uid);
       if (!admin) {
         requireProfile(profile);
-        if (row.subject_id && !asBool(row.subject_active)) return fail("Content not found.", 404);
+        if (row.subject_id && (!asBool(row.subject_active) || asBool(row.subject_archived))) {
+          return fail("Content not found.", 404);
+        }
         const course = mapCourse(row, false);
         if (!profileMatchesCourse(course, profile)) {
           return fail("This content is not available for your exam and class.", 403);
@@ -1658,10 +2004,37 @@ export async function handleApiRequest(request, env) {
         const parentRow = await courseRow(db, item.parentId);
         if (parentRow && asBool(parentRow.active)) parent = mapCourse(parentRow, false);
       }
+
+      let progress = null;
+      if (["lecture", "resource"].includes(item.kind) && user?.uid) {
+        const pRow = await first(
+          db,
+          "SELECT lecture_id, watched_seconds, completed, updated_at FROM lesson_progress WHERE firebase_uid=? AND lecture_id=?",
+          user.uid,
+          item.id
+        );
+        if (pRow) {
+          progress = {
+            lectureId: item.id,
+            watchedSeconds: Number(pRow.watched_seconds) || 0,
+            completed: asBool(pRow.completed),
+            updatedAt: pRow.updated_at || null,
+          };
+        }
+      }
+
+      const queueResult =
+        item.kind === "lecture"
+          ? await buildSubjectLectureQueue(db, item, { user, profile, admin })
+          : { items: [], meta: null };
+
       return json({
         item,
         parent,
         subject: item.subjectId ? { id: item.subjectId, name: item.subjectName } : null,
+        progress,
+        subjectQueue: queueResult.items,
+        queueMeta: queueResult.meta,
       });
     }
 
@@ -1777,7 +2150,7 @@ export async function handleApiRequest(request, env) {
         activeOnly: true,
         kind: "test",
         exam: profile.exam,
-        classLevel: profile.class_level,
+        studentClass: profile.class_level,
       });
       return json({ items: rows.filter(visibleBySchedule).map(mapTestCard) });
     }
@@ -1907,12 +2280,13 @@ export async function handleApiRequest(request, env) {
       let where = "WHERE e.test_id=?";
       params.push(testId);
       if (!admin) {
-        where += " AND e.exam=? AND e.class_level=?";
-        params.push(profile.exam, profile.class_level);
+        const eligibleClasses = studentEligibleClassLevels(profile.class_level);
+        where += ` AND e.exam=? AND e.class_level IN (${eligibleClasses.map(() => "?").join(",")})`;
+        params.push(profile.exam, ...eligibleClasses);
       }
       const rows = await all(
         db,
-        `SELECT e.firebase_uid,e.score,e.max_score,e.correct_count,e.submitted_at,
+        `SELECT e.firebase_uid,e.class_level,e.score,e.max_score,e.correct_count,e.submitted_at,
                 p.display_name,p.avatar_file_id
            FROM exam_attempts e
            LEFT JOIN student_profiles p ON p.firebase_uid=e.firebase_uid
@@ -1927,6 +2301,7 @@ export async function handleApiRequest(request, env) {
           rank: index + 1,
           testId,
           firebaseUid: item.firebase_uid,
+          classLevel: item.class_level || null,
           name:
             item.firebase_uid === user.uid
               ? profile?.display_name || "You"
@@ -2135,7 +2510,7 @@ export async function handleApiRequest(request, env) {
             (item) =>
               !profile ||
               ((!item.exam || item.exam === "Both" || item.exam === profile.exam) &&
-                (!item.classes || item.classes.includes(profile.class_level)))
+                (!item.classes || studentMatchesClasses(item.classes, profile.class_level)))
           ),
       });
     }
@@ -2567,13 +2942,15 @@ export async function handleApiRequest(request, env) {
         return json({ items: hydrated });
       }
       if (path === "/admin/content" && method === "POST") {
-        const payload = coursePayload(await readBody(request));
+        const rawBody = await readBody(request);
+        const rawPayload = coursePayload(rawBody);
         const relations = await validateCourseRelations(
           db,
-          payload.kind,
-          payload.parentId,
-          payload.subjectId
+          rawPayload.kind,
+          rawPayload.parentId,
+          rawPayload.subjectId
         );
+        const payload = alignChildAudienceWithParent(rawPayload, relations, rawBody);
         const id = uuid();
         const metadata = withRelationMetadata(payload, relations);
         const timestamp = now();
@@ -2755,14 +3132,18 @@ export async function handleApiRequest(request, env) {
           subjectId: body.subjectId === undefined ? old.subjectId : body.subjectId,
           sortOrder: body.sortOrder === undefined ? old.sortOrder : body.sortOrder,
         };
-        const payload = coursePayload(merged);
+        const rawPayload = coursePayload(merged);
         const relations = await validateCourseRelations(
           db,
-          payload.kind,
-          payload.parentId,
-          payload.subjectId,
+          rawPayload.kind,
+          rawPayload.parentId,
+          rawPayload.subjectId,
           old
         );
+        const payload = alignChildAudienceWithParent(rawPayload, relations, {
+          exam: body.exam !== undefined ? body.exam : old.exam,
+          classes: body.classes !== undefined ? body.classes : old.classes,
+        });
         const metadata = withRelationMetadata(payload, relations);
         await run(
           db,
@@ -3188,20 +3569,31 @@ export async function handleApiRequest(request, env) {
         const item = await courseRow(db, asText(body.itemId, 120));
         if (!item || !["batch", "series"].includes(item.kind)) return fail("Batch or series not found.", 404);
         let students = await all(db, "SELECT * FROM student_profiles");
+        const mappedItem = mapCourse(item, false);
+        const filterClass = normalizeClassLevel(body.classLevel);
         if (body.mode === "selected") {
           const chosen = new Set((Array.isArray(body.studentUids) ? body.studentUids : []).slice(0, 500));
           students = students.filter((student) => chosen.has(student.firebase_uid));
-        } else if (body.mode === "filter" || body.exam || body.classLevel) {
+        } else if (body.mode === "filter" || body.exam || filterClass) {
           students = students.filter(
             (student) =>
               (!body.exam || student.exam === body.exam) &&
-              (!body.classLevel || student.class_level === body.classLevel)
+              (!filterClass || normalizeClassLevel(student.class_level) === filterClass)
           );
         }
+        const targetedCount = students.length;
+        if (body.respectEligibility !== false) {
+          students = students.filter((student) => profileMatchesCourse(mappedItem, student));
+        }
+        const skippedCount = Math.max(0, targetedCount - students.length);
         if (students.length > 500 && !body.dryRun) {
           return fail("Audience is too large; narrow the filter or process in smaller batches.", 409);
         }
-        if ((body.mode === "all" || body.mode === "filter") && !body.confirmAll && !body.dryRun) {
+        if (
+          (body.mode === "all" || body.mode === "filter" || body.mode === "all_current_and_future") &&
+          !body.confirmAll &&
+          !body.dryRun
+        ) {
           return json(
             {
               error: "CONFIRMATION_REQUIRED",
@@ -3214,10 +3606,10 @@ export async function handleApiRequest(request, env) {
         if (body.dryRun) {
           return json({
             dryRun: true,
-            total: students.length,
+            total: targetedCount,
             eligible: students.length,
             created: 0,
-            skipped: 0,
+            skipped: skippedCount,
             failed: 0,
           });
         }
@@ -3246,16 +3638,43 @@ export async function handleApiRequest(request, env) {
         for (let index = 0; index < statements.length; index += 100) {
           await batch(db, statements.slice(index, index + 100));
         }
+        let ruleId = null;
+        if (body.mode === "all_current_and_future" || (body.includeFuture === true && body.mode !== "selected")) {
+          ruleId = uuid();
+          await run(
+            db,
+            `INSERT INTO enrollment_rules
+               (id,name,item_type,item_id,filter_exam,filter_class,respect_eligibility,active,expires_at,created_by,created_by_email,last_applied_at,last_applied_count,created_at,updated_at)
+             VALUES (?,?,?,?,?,?,?,1,?,?,?,?,?,?,?)`,
+            ruleId,
+            `${item.title} auto-enrollment`,
+            item.kind,
+            item.id,
+            body.exam === "JEE" || body.exam === "NEET" ? body.exam : null,
+            filterClass || null,
+            body.respectEligibility !== false ? 1 : 0,
+            body.expiresAt || null,
+            user.uid,
+            user.email || null,
+            timestamp,
+            students.length,
+            timestamp,
+            timestamp
+          );
+        }
         await activity(db, user, "enrollment.bulk", "enrollment", item.id, "Bulk enrollment", {
           students: students.length,
           itemType: item.kind,
+          ruleId,
         });
         return json({
           created: students.length,
           reactivated: 0,
-          skipped: 0,
+          skipped: skippedCount,
           failed: 0,
-          total: students.length,
+          total: targetedCount,
+          eligible: students.length,
+          ruleId,
         });
       }
       if (path === "/admin/enrollments/bulk-revoke" && method === "POST") {
@@ -3502,6 +3921,11 @@ export async function handleApiRequest(request, env) {
       }
 
       // Google Drive administration ----------------------------------------
+      if (path === "/admin/drive/status" && method === "GET") {
+        const probe = url.searchParams.get("probe") === "1";
+        const status = await inspectDriveStatus(env, { probe });
+        return json({ status });
+      }
       if (path === "/admin/drive/files" && method === "GET") {
         const courseId = url.searchParams.get("courseId") || "";
         const purpose = url.searchParams.get("purpose") || "";

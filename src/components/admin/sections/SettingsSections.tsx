@@ -1,7 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type {
+  CourseCatalogItem,
+  DriveStatusResponse,
   FeatureFlags,
   FooterLinkColumn,
   LinkItem,
@@ -12,7 +14,8 @@ import type {
   StudyChallenge,
 } from '@/types';
 import { useSettingWorkspace, type SettingWorkspace } from '@/hooks/useSettingWorkspace';
-import { makeId } from '@/lib/site-config';
+import { AUDIENCE_TARGETS, makeId } from '@/lib/site-config';
+import { getAdminContentList, getAdminDriveStatus, uploadAdminPdf } from '@/lib/api';
 import { isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
 import { formatISTDateTime, fromISTDateTimeLocalInput, toISTDateTimeLocalInput } from '@/lib/date';
 import { useToast } from '@/hooks/useToast';
@@ -427,7 +430,87 @@ export function MediaSection() {
   const [query, setQuery] = useState('');
   const [type, setType] = useState<'all' | MediaAssetType>('all');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [assetModalOpen, setAssetModalOpen] = useState(false);
   const [form, setForm] = useState({ name: '', url: '', type: 'image' as MediaAssetType, tags: '' });
+
+  // Server-side Google Drive diagnostics & private PDF upload modal
+  const [driveStatus, setDriveStatus] = useState<DriveStatusResponse | null>(null);
+  const [probingDrive, setProbingDrive] = useState(false);
+  const [courses, setCourses] = useState<CourseCatalogItem[]>([]);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [pdfCourseId, setPdfCourseId] = useState('');
+  const [pdfDisplayName, setPdfDisplayName] = useState('');
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  useEffect(() => {
+    getAdminDriveStatus(false)
+      .then((res) => setDriveStatus(res))
+      .catch(() => {});
+  }, []);
+
+  async function runDriveProbe() {
+    setProbingDrive(true);
+    try {
+      const status = await getAdminDriveStatus(true);
+      setDriveStatus(status);
+      if (status.probe?.ok) {
+        push(`Google Drive folder verified (${status.probe.folderName || 'Accessible'}).`, 'success');
+      } else {
+        push(status.probe?.detail || status.credentialError || 'Google Drive folder check reported an issue.', 'error');
+      }
+    } catch (err) {
+      push(err instanceof Error ? err.message : 'Unable to check Google Drive status.', 'error');
+    } finally {
+      setProbingDrive(false);
+    }
+  }
+
+  async function openUploadModal() {
+    setUploadModalOpen(true);
+    if (courses.length === 0) {
+      try {
+        const all = await getAdminContentList();
+        const eligible = all.filter((item: CourseCatalogItem) => item.kind === 'batch' || item.kind === 'series');
+        setCourses(eligible);
+        if (eligible[0] && !pdfCourseId) setPdfCourseId(eligible[0].id);
+      } catch {
+        setCourses([]);
+      }
+    }
+  }
+
+  async function handlePrivatePdfUpload(event: React.FormEvent) {
+    event.preventDefault();
+    if (!pdfCourseId) {
+      push('Select a batch or series for this PDF.', 'error');
+      return;
+    }
+    if (!pdfFile) {
+      push('Choose a PDF file to upload.', 'error');
+      return;
+    }
+    setUploadingPdf(true);
+    setUploadProgress(0);
+    try {
+      const uploaded = await uploadAdminPdf({
+        courseId: pdfCourseId,
+        file: pdfFile,
+        displayName: pdfDisplayName.trim() || undefined,
+        onProgress: setUploadProgress,
+      });
+      push(`Uploaded "${uploaded.displayName}" to private Google Drive.`, 'success');
+      setUploadModalOpen(false);
+      setPdfFile(null);
+      setPdfDisplayName('');
+      setUploadProgress(0);
+    } catch (err) {
+      push(err instanceof Error ? err.message : 'Google Drive upload failed.', 'error');
+    } finally {
+      setUploadingPdf(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -460,24 +543,117 @@ export function MediaSection() {
     };
     update({ items: [asset, ...draft.items] });
     setForm({ name: '', url: '', type: 'image', tags: '' });
+    setAssetModalOpen(false);
     push('Asset added to the library. Publish to make it available site-wide.', 'success');
   }
 
   return (
     <div>
       <AdminPageHeader
-        eyebrow="Website settings"
-        title="Media Library"
-        description="A single registry of reusable image, PDF and video URLs. The library stores references — files stay on your hosting/CDN."
-        meta={<StatusPill tone="brand">{draft.items.length} assets</StatusPill>}
+        eyebrow="Website & Storage"
+        title="Media Library & Google Drive"
+        description="Manage public CDN media references and verify private Google Drive course storage."
+        meta={
+          <>
+            <StatusPill tone="brand">{draft.items.length} media URLs</StatusPill>
+            {driveStatus && (
+              <StatusPill tone={driveStatus.configured ? 'success' : 'warning'}>
+                {driveStatus.configured ? 'Drive credentials configured' : 'Drive setup required'}
+              </StatusPill>
+            )}
+          </>
+        }
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void openUploadModal()}
+              className="ec-btn px-3.5 py-2 text-xs font-semibold border border-ink-200 bg-[var(--ec-surface)] text-ink-800 hover:bg-ink-50"
+            >
+              ↑ Upload Course PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssetModalOpen(true)}
+              className="ec-btn px-3.5 py-2 text-xs font-semibold bg-brand-600 text-white"
+            >
+              + Add Media URL
+            </button>
+          </div>
+        }
       />
       <PublishBar workspace={workspace} />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] mt-5 items-start">
+
+      <div className="mt-5 space-y-4">
         <Panel
-          title="Assets"
-          description="Search by name, URL or tag."
+          title="Google Drive Private Storage"
+          description="Course PDFs and student profile photos are stored privately via your server-side Drive service account."
           action={
-            <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={probingDrive}
+              onClick={() => void runDriveProbe()}
+              className="ec-btn px-3 py-1.5 text-xs font-semibold border border-ink-200 bg-[var(--ec-surface)] text-ink-800 disabled:opacity-50"
+            >
+              {probingDrive ? 'Checking folder…' : 'Verify Drive Folder'}
+            </button>
+          }
+        >
+          {driveStatus ? (
+            <div className="space-y-3 text-xs">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-ink-100 bg-ink-50/60 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500">Configuration</p>
+                  <p className="mt-1 font-semibold text-ink-900">
+                    {driveStatus.configured ? 'Ready on server' : 'Missing server credentials'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-ink-100 bg-ink-50/60 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500">Target Folder</p>
+                  <p className="mt-1 truncate font-mono text-[11px] font-semibold text-ink-900">
+                    {driveStatus.folderId || 'Not set'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-ink-100 bg-ink-50/60 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500">Service Account</p>
+                  <p className="mt-1 truncate font-mono text-[11px] font-semibold text-ink-900">
+                    {driveStatus.serviceAccountEmail || 'Not configured'}
+                  </p>
+                </div>
+              </div>
+              {driveStatus.probe && (
+                <Banner
+                  tone={driveStatus.probe.ok ? 'success' : 'danger'}
+                  title={
+                    driveStatus.probe.ok
+                      ? `Folder verified: ${driveStatus.probe.folderName || 'Accessible'}${
+                          driveStatus.probe.canAddChildren === false ? ' (Read-only — grant Editor role)' : ' (Write access confirmed)'
+                        }`
+                      : `Drive folder check failed (HTTP ${driveStatus.probe.httpStatus})`
+                  }
+                >
+                  {driveStatus.probe.ok
+                    ? 'Server-side uploads can write private PDFs and profile photos into this folder.'
+                    : driveStatus.probe.detail ||
+                      'Share the target Google Drive folder with the service account email above as Editor.'}
+                </Banner>
+              )}
+              {(driveStatus.credentialError || driveStatus.scopeWarning) && (
+                <Banner tone="warning" title="Drive configuration warning">
+                  {driveStatus.credentialError || driveStatus.scopeWarning}
+                </Banner>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-ink-500">Click &ldquo;Verify Drive Folder&rdquo; to test live folder permissions.</p>
+          )}
+        </Panel>
+
+        <Panel
+          title="Public Media URLs"
+          description="Search reusable banner, poster, and resource URLs by name or tag."
+          action={
+            <div className="flex flex-wrap gap-2">
               <SearchInput value={query} onChange={setQuery} placeholder="Search assets…" />
               <select className="ec-field !py-1.5 !text-xs !w-auto" value={type} onChange={(event) => setType(event.target.value as typeof type)}>
                 <option value="all">All types</option>
@@ -488,22 +664,24 @@ export function MediaSection() {
             </div>
           }
         >
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {filtered.map((asset) => (
-              <div key={asset.id} className="rounded-xl border border-ink-200 p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-xs font-semibold truncate">{asset.name}</p>
-                  <StatusPill tone="neutral">{asset.type}</StatusPill>
-                </div>
-                <p className="text-[10px] text-ink-400 truncate mt-1">{asset.url}</p>
-                {asset.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {asset.tags.map((tag) => (
-                      <span key={tag} className="text-[9px] rounded-full bg-ink-100 px-1.5 py-0.5 text-ink-600">{tag}</span>
-                    ))}
+              <div key={asset.id} className="rounded-xl border border-ink-200 p-3 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-semibold truncate">{asset.name}</p>
+                    <StatusPill tone="neutral">{asset.type}</StatusPill>
                   </div>
-                )}
-                <div className="flex gap-1.5 mt-2">
+                  <p className="text-[10px] text-ink-400 truncate mt-1">{asset.url}</p>
+                  {asset.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {asset.tags.map((tag) => (
+                        <span key={tag} className="text-[9px] rounded-full bg-ink-100 px-1.5 py-0.5 text-ink-600">{tag}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-1.5 mt-3">
                   <button
                     type="button"
                     onClick={() => {
@@ -520,18 +698,45 @@ export function MediaSection() {
               </div>
             ))}
             {filtered.length === 0 && (
-              <p className="sm:col-span-2 text-xs text-ink-500 py-6 text-center">No assets match this view.</p>
+              <p className="sm:col-span-2 lg:col-span-3 text-xs text-ink-500 py-8 text-center">No media URLs match this view.</p>
             )}
           </div>
         </Panel>
-        <Panel title="Add asset" description="Validate the URL before saving.">
-          <div className="space-y-3">
-            <Field label="Name" required>
-              <input className="ec-field" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
-            </Field>
-            <Field label="Asset URL" required>
-              <input className={`ec-field ${form.url && !isSafeHttpUrl(form.url) ? '!border-red-300' : ''}`} value={form.url} placeholder="https://…" onChange={(event) => setForm({ ...form, url: event.target.value })} />
-            </Field>
+      </div>
+
+      <Modal
+        open={assetModalOpen}
+        onClose={() => setAssetModalOpen(false)}
+        title="Add Media URL"
+        description="Register a validated https:// image, video, or document URL for reuse in banners and cards."
+        size="md"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setAssetModalOpen(false)}
+              className="ec-btn px-3.5 py-2 text-xs font-semibold border border-ink-200 bg-[var(--ec-surface)]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={addAsset}
+              className="ec-btn px-4 py-2 text-xs font-semibold bg-brand-600 text-white"
+            >
+              Add to Library
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3.5">
+          <Field label="Name" required>
+            <input className="ec-field" value={form.name} placeholder="JEE Hero Banner 16:9" onChange={(event) => setForm({ ...form, name: event.target.value })} />
+          </Field>
+          <Field label="Asset URL" required help="Must be an https:// URL.">
+            <input className={`ec-field ${form.url && !isSafeHttpUrl(form.url) ? '!border-red-300' : ''}`} value={form.url} placeholder="https://…" onChange={(event) => setForm({ ...form, url: event.target.value })} />
+          </Field>
+          <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Type">
               <select className="ec-field" value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as MediaAssetType })}>
                 {ASSET_TYPES.map((assetType) => (
@@ -542,12 +747,78 @@ export function MediaSection() {
             <Field label="Tags" help="Comma separated.">
               <input className="ec-field" value={form.tags} placeholder="hero, jee, 2026" onChange={(event) => setForm({ ...form, tags: event.target.value })} />
             </Field>
-            <button type="button" onClick={addAsset} className="w-full ec-btn px-3 py-2 text-xs font-semibold bg-brand-600 text-white">
-              Add to library
-            </button>
           </div>
-        </Panel>
-      </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={uploadModalOpen}
+        onClose={() => !uploadingPdf && setUploadModalOpen(false)}
+        title="Upload Private Course PDF"
+        description="Uploads directly to your private Google Drive folder on the server and binds access to enrolled students."
+        size="md"
+        footer={
+          <>
+            <button
+              type="button"
+              disabled={uploadingPdf}
+              onClick={() => setUploadModalOpen(false)}
+              className="ec-btn px-3.5 py-2 text-xs font-semibold border border-ink-200 bg-[var(--ec-surface)] disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              form="media-drive-pdf-upload-form"
+              disabled={uploadingPdf || !pdfFile || !pdfCourseId}
+              className="ec-btn px-4 py-2 text-xs font-semibold bg-brand-600 text-white disabled:opacity-50"
+            >
+              {uploadingPdf ? `Uploading (${uploadProgress}%)…` : 'Upload PDF'}
+            </button>
+          </>
+        }
+      >
+        <form id="media-drive-pdf-upload-form" onSubmit={handlePrivatePdfUpload} className="space-y-3.5">
+          <Field label="Batch or Series" required help="Only students enrolled in this course will be authorized to stream or download the PDF.">
+            <select
+              className="ec-field"
+              value={pdfCourseId}
+              onChange={(event) => setPdfCourseId(event.target.value)}
+              required
+            >
+              <option value="">Select a batch or series…</option>
+              {courses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.title} ({course.exam} · {course.kind})
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Display Title (optional)" help="Defaults to the PDF filename if left blank.">
+            <input
+              className="ec-field"
+              value={pdfDisplayName}
+              onChange={(event) => setPdfDisplayName(event.target.value)}
+              placeholder="Rotational Motion Formula Sheet"
+            />
+          </Field>
+          <Field label="PDF File (max 20 MB)" required>
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={(event) => setPdfFile(event.target.files?.[0] || null)}
+              className="ec-field !py-2 text-xs"
+              required
+            />
+          </Field>
+          {uploadingPdf && (
+            <div className="ec-progress">
+              <span style={{ width: `${uploadProgress}%` }} />
+            </div>
+          )}
+        </form>
+      </Modal>
+
       <ConfirmDialog
         open={Boolean(deleteId)}
         title="Remove this asset?"
@@ -690,13 +961,9 @@ export function ChallengesSection() {
             </Field>
             <Field label="Audience">
               <select className="ec-field" value={editing.audience} onChange={(event) => patch(editing.id, { audience: event.target.value as StudyChallenge['audience'] })}>
-                <option value="all">All students</option>
-                <option value="JEE">JEE</option>
-                <option value="NEET">NEET</option>
-                <option value="JEE-11">JEE · Class 11</option>
-                <option value="JEE-12">JEE · Class 12</option>
-                <option value="NEET-11">NEET · Class 11</option>
-                <option value="NEET-12">NEET · Class 12</option>
+                {AUDIENCE_TARGETS.map((target) => (
+                  <option key={target.value} value={target.value}>{target.label}</option>
+                ))}
               </select>
             </Field>
             <Field label="Accent colour">

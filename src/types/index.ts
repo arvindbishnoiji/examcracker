@@ -1,6 +1,6 @@
 export type ExamTrack = 'JEE' | 'NEET';
 export type ContentExam = 'JEE' | 'NEET' | 'Both';
-export type ClassLevel = '11' | '12';
+export type ClassLevel = '11' | '12' | 'Dropper';
 export type ContentKind =
   | 'batch'
   | 'series'
@@ -178,26 +178,93 @@ export interface Subject {
 export interface CourseTreeSubject extends Subject {
   lectures: CourseCatalogItem[];
   resources: CourseCatalogItem[];
+  totalLectureCount?: number;
+  totalResourceCount?: number;
+  lockedLectureCount?: number;
+  lockedResourceCount?: number;
 }
 
 export interface CourseTreeResponse {
   parent: CourseCatalogItem;
   enrolled: boolean;
   locked: boolean;
+  adminPreview?: boolean;
+  isFree?: boolean;
   previewCount: number;
+  totalLectureCount?: number;
+  totalResourceCount?: number;
+  lockedLectureCount?: number;
   subjects: CourseTreeSubject[];
   unassigned: {
     id: null;
     name: string;
     lectures: CourseCatalogItem[];
     resources: CourseCatalogItem[];
+    totalLectureCount?: number;
+    totalResourceCount?: number;
+    lockedLectureCount?: number;
   } | null;
+}
+
+export interface SubjectQueueProgress {
+  watchedSeconds: number;
+  completed: boolean;
+  updatedAt: string | null;
+}
+
+export interface SubjectQueueItem extends CourseCatalogItem<LectureMetadata> {
+  progress?: SubjectQueueProgress;
+}
+
+export interface SubjectQueueMeta {
+  subjectId: string | null;
+  subjectName: string | null;
+  parentId: string | null;
+  totalInSubject: number;
+  currentIndex: number;
+  previousLectureId: string | null;
+  nextLectureId: string | null;
+  reason?: string;
 }
 
 export interface CatalogItemResponse {
   item: CourseCatalogItem;
   parent: CourseCatalogItem | null;
   subject: { id: string; name: string | null } | null;
+  progress?: {
+    lectureId: string;
+    watchedSeconds: number;
+    completed: boolean;
+    updatedAt: string | null;
+  } | null;
+  subjectQueue?: SubjectQueueItem[];
+  queueMeta?: SubjectQueueMeta | null;
+}
+
+export interface DriveProbeResult {
+  ok: boolean;
+  httpStatus: number;
+  code: string;
+  reason?: string;
+  detail?: string;
+  folderId?: string;
+  folderName?: string;
+  sharedDrive?: boolean;
+  canAddChildren?: boolean;
+}
+
+export interface DriveStatusResponse {
+  configured: boolean;
+  serviceAccountConfigured: boolean;
+  serviceAccountEmail: string | null;
+  folderIdConfigured: boolean;
+  folderId: string | null;
+  pdfFolderId: string | null;
+  profileFolderId: string | null;
+  scope: string;
+  scopeWarning: string | null;
+  credentialError: string | null;
+  probe: DriveProbeResult | null;
 }
 
 export interface DriveFileItem {
@@ -307,6 +374,7 @@ export interface LeaderboardEntry {
   rank: number;
   testId: string;
   firebaseUid: string;
+  classLevel?: ClassLevel | null;
   name: string;
   avatarUrl: string | null;
   score: number;

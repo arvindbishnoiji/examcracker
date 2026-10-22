@@ -26,6 +26,7 @@ import {
   updateAdminSubject,
   type AdminSubjectInput,
 } from '@/lib/api';
+import { formatClassLevel, formatClassList } from '@/lib/validation';
 import type { ClassLevel, ContentExam, CourseCatalogItem, Subject } from '@/types';
 
 type FormState = {
@@ -41,7 +42,7 @@ const EMPTY_FORM: FormState = {
   name: '',
   description: '',
   exam: 'Both',
-  classes: ['11', '12'],
+  classes: ['11', '12', 'Dropper'],
   active: true,
   sortOrder: '',
 };
@@ -331,6 +332,7 @@ export function SubjectsSection() {
               <option value="">All classes</option>
               <option value="11">Class 11</option>
               <option value="12">Class 12</option>
+              <option value="Dropper">Dropper</option>
             </select>
           </Field>
           <Field label="Archived subjects">
@@ -406,7 +408,7 @@ export function SubjectsSection() {
             >
               <div className="flex flex-wrap gap-1.5">
                 <StatusPill tone="brand">{subject.exam}</StatusPill>
-                <StatusPill tone="neutral">Class {subject.classes.join(' / ')}</StatusPill>
+                <StatusPill tone="neutral">{formatClassList(subject.classes)}</StatusPill>
                 <StatusPill tone={subject.archived ? 'danger' : subject.active ? 'success' : 'warning'}>
                   {subject.archived ? 'Archived' : subject.active ? 'Active' : 'Hidden'}
                 </StatusPill>
@@ -511,8 +513,8 @@ export function SubjectsSection() {
             </Field>
           </div>
           <Field label="Applies to classes" required>
-            <div className="flex gap-3 pt-1">
-              {(['11', '12'] as ClassLevel[]).map((level) => (
+            <div className="flex flex-wrap gap-4 pt-1">
+              {(['11', '12', 'Dropper'] as ClassLevel[]).map((level) => (
                 <label key={level} className="flex items-center gap-2 text-sm font-medium">
                   <input
                     type="checkbox"
@@ -526,7 +528,7 @@ export function SubjectsSection() {
                       }))
                     }
                   />
-                  Class {level}
+                  {formatClassLevel(level)}
                 </label>
               ))}
             </div>

@@ -5,6 +5,7 @@ import { CheckCircle2, Clock3, MessageSquareText, Send } from 'lucide-react';
 import { Card, Badge, EmptyState, Skeleton } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/hooks/useToast';
+import { formatClassLevel } from '@/lib/validation';
 import { getAdminFeedback, getAdminFeedbackThread, replyToFeedback, updateFeedbackStatus, type AdminFeedbackItem, type FeedbackMessageItem } from '@/lib/api';
 
 function timeLabel(value?: string | null) {
@@ -132,7 +133,7 @@ export function FeedbackSection() {
                 <div className="min-w-0">
                   <h3 className="break-words font-bold">{selected.subject}</h3>
                   <p className="mt-1 text-xs text-ink-500">{selected.display_name || 'Student'} · {selected.email || selected.firebase_uid}</p>
-                  <p className="mt-1 text-[11px] text-ink-500">{selected.exam || 'Exam not set'} · Class {selected.class_level || '—'} · {selected.category}</p>
+                  <p className="mt-1 text-[11px] text-ink-500">{selected.exam || 'Exam not set'} · {selected.class_level ? formatClassLevel(selected.class_level) : '—'} · {selected.category}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={selected.status === 'resolved' ? 'success' : selected.status === 'in_progress' ? 'info' : 'warning'}>{statusText(selected.status)}</Badge>

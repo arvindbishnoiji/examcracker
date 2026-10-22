@@ -8,7 +8,7 @@
 export type EnrollmentItemType = 'batch' | 'series';
 export type AudienceMode = 'selected' | 'all' | 'filter';
 export type ExamTrack = 'JEE' | 'NEET';
-export type ClassLevel = '11' | '12';
+export type ClassLevel = '11' | '12' | 'Dropper';
 
 export interface CatalogItemLike {
   id: string;
@@ -97,7 +97,18 @@ export function isUuid(value: unknown): boolean {
 
 export function classListOf(classes: unknown): string[] {
   if (!Array.isArray(classes)) return [];
-  return classes.map((entry) => String(entry)).filter((entry) => entry === '11' || entry === '12');
+  const normalized: string[] = [];
+  for (const entry of classes) {
+    const cleaned = String(entry || '').trim();
+    const mapped =
+      cleaned === '11' || cleaned === '12'
+        ? cleaned
+        : /^dropper$/i.test(cleaned)
+          ? 'Dropper'
+          : '';
+    if (mapped && !normalized.includes(mapped)) normalized.push(mapped);
+  }
+  return normalized;
 }
 
 export function examMatchesItem(itemExam: unknown, studentExam: unknown): boolean {
@@ -110,7 +121,14 @@ export function examMatchesItem(itemExam: unknown, studentExam: unknown): boolea
 export function classMatchesItem(classes: unknown, classLevel: unknown): boolean {
   const list = classListOf(classes);
   if (!list.length) return false;
-  return list.includes(String(classLevel || ''));
+  const studentClass = String(classLevel || '').trim();
+  if (/^dropper$/i.test(studentClass)) {
+    return list.some((entry) => entry === '11' || entry === '12' || entry === 'Dropper');
+  }
+  if (studentClass === '11' || studentClass === '12') {
+    return list.includes(studentClass);
+  }
+  return false;
 }
 
 export function isEligibleForItem(item: CatalogItemLike, student: StudentLike): boolean {
@@ -184,7 +202,9 @@ function normalizeExam(value: unknown): ExamTrack | '' {
 
 function normalizeClass(value: unknown): ClassLevel | '' {
   const level = String(value || '').trim();
-  return level === '11' || level === '12' ? level : '';
+  if (level === '11' || level === '12') return level;
+  if (/^dropper$/i.test(level)) return 'Dropper';
+  return '';
 }
 
 export interface ParseResult<T> {
@@ -317,7 +337,7 @@ export function resolveAudience(
   const itemClasses = classListOf(item.classes);
   const outsideExam = itemExam !== 'Both' && Array.from(exams).some((exam) => exam !== itemExam);
   const outsideClass =
-    itemClasses.length > 0 && Array.from(classes).some((level) => !itemClasses.includes(level));
+    itemClasses.length > 0 && Array.from(classes).some((level) => !classMatchesItem(itemClasses, level));
   const crossTrack =
     !input.respectEligibility && eligible.length > 0 && (outsideExam || outsideClass);
   const requiresConfirmation = !input.respectEligibility && input.mode !== 'selected';
