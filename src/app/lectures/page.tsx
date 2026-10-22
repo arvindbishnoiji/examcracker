@@ -1,6 +1,7 @@
 'use client';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import YoutubeThumbnail from '@/components/YoutubeThumbnail';
+import { StudyPromoBanner } from '@/components/student/StudyPromoBanner';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -473,6 +474,8 @@ function LecturesHubPageInner() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
+      <StudyPromoBanner exam={profile?.exam} classLevel={profile?.class_level} compact />
+
       <ScreenPageHeader
         showHeader={screen.showHeader}
         eyebrow={screen.eyebrow}
