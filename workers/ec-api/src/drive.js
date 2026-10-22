@@ -11,6 +11,8 @@
  * token and proxies authorized reads from Drive.
  */
 
+import { inspectAppsScriptDriveStatus, isAppsScriptDriveConfigured, uploadViaAppsScript } from "./apps-script-drive.js";
+
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const DRIVE_UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/drive/v3/files";
 const DRIVE_FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files";
@@ -428,10 +430,17 @@ export async function inspectDriveStatus(env, { probe = false, fetchImpl = fetch
     credentialError = err instanceof Error ? err.message : "Service account is not configured.";
   }
 
-  const configured = Boolean(accountInfo && (defaultFolderId || (pdfFolderId && profileFolderId)) && !scopeWarning);
+  const appsScriptConfigured = isAppsScriptDriveConfigured(env);
+  const configured = Boolean(
+    (appsScriptConfigured || accountInfo) &&
+      (defaultFolderId || (pdfFolderId && profileFolderId)) &&
+      (appsScriptConfigured || !scopeWarning)
+  );
   const result = {
     configured,
     serviceAccountConfigured: Boolean(accountInfo),
+    uploadMode: appsScriptConfigured ? "personal-gmail-apps-script" : "service-account",
+    appsScriptConfigured,
     serviceAccountEmail: accountInfo ? accountInfo.clientEmail : null,
     workspaceDelegationConfigured: Boolean(
       String((env && env.GOOGLE_DRIVE_IMPERSONATE_EMAIL) || "").trim()
@@ -447,7 +456,9 @@ export async function inspectDriveStatus(env, { probe = false, fetchImpl = fetch
     probe: null,
   };
 
-  if (probe && accountInfo && effectivePdfFolder) {
+  if (probe && appsScriptConfigured && effectivePdfFolder) {
+    result.probe = await inspectAppsScriptDriveStatus(env, effectivePdfFolder, fetchImpl);
+  } else if (probe && accountInfo && effectivePdfFolder) {
     try {
       const token = await getDriveAccessToken(env, fetchImpl);
       result.probe = await probeDriveFolder(env, effectivePdfFolder, token, fetchImpl);
@@ -476,6 +487,11 @@ export async function uploadDriveFile(
     throw httpError("The selected file is empty.", 400);
   }
   const folderId = folderFor(env, purpose);
+  // Personal Gmail uploads must be created by the account owner through Apps Script;
+  // service-account uploads to personal My Drive fail with storageQuotaExceeded.
+  if (env?.GOOGLE_APPS_SCRIPT_URL || env?.GOOGLE_APPS_SCRIPT_SHARED_SECRET) {
+    return uploadViaAppsScript(env, { bytes, mimeType, name, purpose, folderId, fetchImpl });
+  }
   const token = await getDriveAccessToken(env, fetchImpl);
 
   const boundary = `examcracker_${crypto.randomUUID().replace(/-/g, "")}`;
