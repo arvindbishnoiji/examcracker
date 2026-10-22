@@ -38,6 +38,29 @@ describe("Pages API Drive runtime selection", () => {
     }
   });
 
+  it("delegates profile-photo and PDF uploads when Apps Script secrets exist only on the Worker, even if Pages has a service-account key", async () => {
+    for (const [path, method] of [
+      ["/api/ec/drive/profile-photo", "POST"],
+      ["/api/ec/admin/drive/upload", "POST"],
+    ]) {
+      const workerFetch = vi.fn(async () => new Response("uploaded by Apps Script Worker", { status: 200 }));
+      const env = {
+        GOOGLE_SERVICE_ACCOUNT_JSON: JSON.stringify({
+          client_email: "pages-service-account@example.iam.gserviceaccount.com",
+          private_key: "not-used-in-this-routing-test",
+        }),
+        DB: { prepare: vi.fn() },
+        EXAM_CRACKER_WEB: { fetch: workerFetch },
+      };
+      const response = await onRequest({
+        request: new Request(`https://exam.example${path}`, { method }),
+        env,
+      });
+      expect(workerFetch, `${method} ${path}`).toHaveBeenCalledTimes(1);
+      expect(await response.text()).toBe("uploaded by Apps Script Worker");
+    }
+  });
+
   it("keeps profile-photo and PDF uploads local when Apps Script credentials are present", async () => {
     for (const [path, method] of [
       ["/api/ec/drive/profile-photo", "POST"],
