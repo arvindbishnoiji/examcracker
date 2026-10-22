@@ -13,6 +13,7 @@ import {
   readBatchLook,
   sanitizeAnimations,
   sanitizeBatchStudio,
+  safeAnimationRewardHref,
 } from '../lib/studio-config';
 import { DEFAULT_SITE_CONFIG, SITE_SETTING_KEYS, mergeSiteConfig } from '../lib/site-config';
 import { validateSettingValue } from '../lib/site-validation';
@@ -184,6 +185,15 @@ describe('Batch Studio + Animation Studio model', () => {
     const validation = validateSettingValue('animations', oversized);
     expect(validation.ok).toBe(false);
     expect(validation.errors.join(' ')).toContain('Combined animation settings are too large');
+  });
+
+  it('allows only internal or HTTPS links for animation rewards', () => {
+    expect(safeAnimationRewardHref('/tests?mode=practice')).toBe('/tests?mode=practice');
+    expect(safeAnimationRewardHref('https://example.com/reward')).toBe('https://example.com/reward');
+    expect(safeAnimationRewardHref(' javascript:alert(1) ')).toBe('');
+    expect(safeAnimationRewardHref('data:text/html,hello')).toBe('');
+    expect(safeAnimationRewardHref('http://example.com/reward')).toBe('');
+    expect(safeAnimationRewardHref('//example.com/reward')).toBe('');
   });
 
   it('builds a sandbox-ready document with the authored code', () => {
