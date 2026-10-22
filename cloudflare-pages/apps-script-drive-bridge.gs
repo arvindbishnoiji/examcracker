@@ -15,7 +15,7 @@ function doPost(e) {
     var props = PropertiesService.getScriptProperties();
     var expectedSecret = props.getProperty("EXAM_CRACKER_SHARED_SECRET") || "";
     var allowedFolderId = props.getProperty("EXAM_CRACKER_FOLDER_ID") || "";
-    if (!expectedSecret || !allowedFolderId || !constantTimeEquals(String(body.secret || ""), expectedSecret)) {
+    if (expectedSecret.length < 32 || !allowedFolderId || !constantTimeEquals(String(body.secret || ""), expectedSecret)) {
       return jsonOutput({ status: "error", message: "Unauthorized or server configuration missing." });
     }
     var folderId = String(body.folderId || "");
