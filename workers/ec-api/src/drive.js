@@ -104,9 +104,11 @@ function folderFor(env, purpose) {
   const specificRaw =
     purpose === "profile_photo"
       ? env && env.GOOGLE_DRIVE_PROFILE_FOLDER_ID
-      : purpose === "pdf"
-        ? env && env.GOOGLE_DRIVE_PDF_FOLDER_ID
-        : "";
+      : purpose === "site_image"
+        ? (env && (env.GOOGLE_DRIVE_IMAGE_FOLDER_ID || env.GOOGLE_DRIVE_PROFILE_FOLDER_ID))
+        : purpose === "pdf"
+          ? env && env.GOOGLE_DRIVE_PDF_FOLDER_ID
+          : "";
   const chosenRaw = String(specificRaw || (env && env.GOOGLE_DRIVE_FOLDER_ID) || "").trim();
   const folderId = normalizeDriveFolderId(chosenRaw);
   if (!folderId) {

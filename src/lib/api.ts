@@ -38,6 +38,7 @@ import type {
   CourseTreeResponse,
   CatalogItemResponse,
   DriveFileItem,
+  DriveMediaAsset,
   DriveStatusResponse,
   SubjectQueueItem,
   BadgeDefinition,
@@ -45,6 +46,10 @@ import type {
   BadgeAwardRecord,
   BadgeCategory,
   BadgeRarity,
+  BadgeAnimationPreset,
+  BadgeAutoRule,
+  BadgeCatalogueEntry,
+  StudentBadgeMetrics,
 } from '@/types';
 
 export class ApiError extends Error {
@@ -414,7 +419,14 @@ export async function getStudentAnalysis(): Promise<AnalysisResponse> {
 // Admin API endpoints (server-verified against arvinddarabishnoi@gmail.com)
 // ---------------------------------------------------------------------------
 
-export async function getMyBadges(): Promise<{ items: StudentBadge[]; verified: boolean }> {
+export interface MyBadgesResponse {
+  items: StudentBadge[];
+  verified: boolean;
+  catalogue?: BadgeCatalogueEntry[];
+  metrics?: StudentBadgeMetrics;
+}
+
+export async function getMyBadges(): Promise<MyBadgesResponse> {
   return requestApi('/my/badges');
 }
 
@@ -437,6 +449,9 @@ export async function saveAdminBadge(input: {
   category: BadgeCategory;
   rarity: BadgeRarity;
   imageUrl: string;
+  animationPreset?: BadgeAnimationPreset;
+  animationCode?: string;
+  autoRule?: BadgeAutoRule;
   active: boolean;
   sortOrder: number;
 }): Promise<BadgeDefinition> {
@@ -445,6 +460,10 @@ export async function saveAdminBadge(input: {
     ? await requestApi<{ item: BadgeDefinition }>(`/admin/badges/${encodeURIComponent(id)}`, { method: 'PATCH', body })
     : await requestApi<{ item: BadgeDefinition }>('/admin/badges', { method: 'POST', body });
   return response.item;
+}
+
+export async function deleteAdminBadge(id: string): Promise<{ deleted: boolean; deactivated: boolean }> {
+  return requestApi(`/admin/badges/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export async function awardAdminBadge(badgeId: string, studentUid: string, reason: string): Promise<{ alreadyAwarded: boolean }> {
@@ -1073,6 +1092,37 @@ export async function uploadProfilePhoto(
   const formData = new FormData();
   formData.append('file', file, file.name);
   return uploadMultipart('/drive/profile-photo', formData, options);
+}
+
+export async function uploadAdminDriveImage(
+  file: File,
+  options: UploadOptions & { context?: string; displayName?: string } = {}
+): Promise<{ item: DriveMediaAsset }> {
+  const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+  if (!allowed.includes(file.type)) {
+    throw new ApiError('Choose a JPEG, PNG, WebP or GIF image file.', 415);
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    throw new ApiError('Images must be 8 MB or smaller.', 413);
+  }
+  if (file.size === 0) {
+    throw new ApiError('The selected image file is empty.', 400);
+  }
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  if (options.context) formData.append('context', options.context);
+  if (options.displayName) formData.append('displayName', options.displayName);
+  return uploadMultipart('/admin/drive/upload-image', formData, options);
+}
+
+export async function getAdminDriveImages(context?: string): Promise<DriveMediaAsset[]> {
+  const qs = context ? `?context=${encodeURIComponent(context)}` : '';
+  const response = await requestApi<{ items: DriveMediaAsset[] }>(`/admin/drive/images${qs}`);
+  return response.items || [];
+}
+
+export async function deleteAdminDriveImage(id: string): Promise<{ deleted: boolean; driveDeleted: boolean }> {
+  return requestApi(`/admin/drive/images/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export async function uploadAdminPdf(input: {

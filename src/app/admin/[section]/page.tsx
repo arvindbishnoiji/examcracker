@@ -7,11 +7,8 @@ import { BannersSection } from '@/components/admin/sections/BannersSection';
 import { ContentToolSection } from '@/components/admin/sections/ContentSections';
 import {
   AnalyticsSection,
-  CampaignsSection,
   HealthSection,
   LeaderboardsSection,
-  ReportsSection,
-  SchedulingSection,
 } from '@/components/admin/sections/DataSections';
 import { FeedbackSection } from '@/components/admin/sections/FeedbackSection';
 import { BadgesSection } from '@/components/admin/sections/BadgesSection';
@@ -32,7 +29,6 @@ import {
 } from '@/components/admin/sections/SettingsSections';
 import { ImportExportSection, PreferencesSection } from '@/components/admin/sections/SystemSections';
 import { TestimonialsSection } from '@/components/admin/sections/TestimonialsSection';
-import AdminLegacyPanel from '@/app/admin/_legacy/AdminLegacyPanel';
 import { findAdminSection } from '@/lib/admin-sections';
 
 const CONTENT_TABS = ['goals', 'batches', 'series', 'lectures', 'tests', 'events', 'announcements'] as const;
@@ -47,8 +43,7 @@ export default function AdminSectionPage() {
   const slug = typeof params?.section === 'string' ? params.section : '';
   const meta = findAdminSection(slug);
 
-  // Login / Signup are code-managed on purpose. `/admin/login` historically
-  // opened a designer; it now explains the decision instead of editing auth.
+  // Login / Signup stay code-managed so auth can never break.
   if (slug === 'login') {
     return (
       <div className="max-w-2xl mx-auto py-10">
@@ -76,15 +71,26 @@ export default function AdminSectionPage() {
     );
   }
 
+  // Deep link compatibility for Batch Studio (merged inside Batches).
+  if (slug === 'batch-studio') {
+    return <BatchStudioSection />;
+  }
+
   if (!meta) {
     return (
       <div className="max-w-lg mx-auto py-16 text-center">
-        <p className="text-4xl">🧭</p>
-        <h1 className="text-xl font-bold mt-3">Section not found</h1>
-        <p className="text-sm text-ink-500 mt-1">“{slug}” is not part of the admin console.</p>
-        <Link href="/admin" className="mt-5 inline-flex px-4 py-2 rounded-[var(--ec-button-radius)] bg-ink-900 text-white text-sm font-semibold">
-          Back to overview
-        </Link>
+        <div className="ec-card p-6 sm:p-8">
+          <h1 className="text-xl font-bold">Section removed or moved</h1>
+          <p className="text-sm text-ink-500 mt-1">
+            Duplicate tools and activity logs have been cleaned up to keep your admin workspace clear and fast.
+          </p>
+          <Link
+            href="/admin"
+            className="mt-5 inline-flex px-4 py-2 rounded-[var(--ec-button-radius)] bg-brand-600 text-white text-sm font-semibold"
+          >
+            Back to Dashboard Overview
+          </Link>
+        </div>
       </div>
     );
   }
@@ -94,8 +100,6 @@ export default function AdminSectionPage() {
       return <AppearanceSection />;
     case 'homepage':
       return <HomepageBuilderSection />;
-    case 'batch-studio':
-      return <BatchStudioSection />;
     case 'animation-studio':
       return <AnimationStudioSection />;
     case 'banners':
@@ -130,28 +134,12 @@ export default function AdminSectionPage() {
       return <NotificationsSection />;
     case 'feedback':
       return <FeedbackSection />;
-    case 'campaigns':
-      return <CampaignsSection />;
-    case 'scheduling':
-      return <SchedulingSection />;
-    case 'reports':
-      return <ReportsSection />;
     case 'health':
       return <HealthSection />;
     case 'import-export':
       return <ImportExportSection />;
     case 'preferences':
       return <PreferencesSection />;
-    case 'classic':
-      return (
-        <div>
-          <div className="mb-4 rounded-[var(--ec-radius)] border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">
-            <strong>Classic console.</strong> These tools are unchanged from the original admin build, including the
-            preserved YouTube playlist importer. New sections use the settings workspace above.
-          </div>
-          <AdminLegacyPanel embedded />
-        </div>
-      );
     default:
       if (isContentTab(slug)) return <ContentToolSection slug={slug} />;
       return (

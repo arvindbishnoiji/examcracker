@@ -91,10 +91,19 @@ export function inheritChildAudience(
   return { exam, classes: Array.from(new Set(classes)) };
 }
 
+export const DRIVE_MEDIA_URL_PATTERN = /^\/api\/ec\/media\/[A-Za-z0-9_-]{8,80}$/;
+
+export function isDriveMediaUrl(value?: string | null): boolean {
+  if (!value || typeof value !== 'string') return false;
+  return DRIVE_MEDIA_URL_PATTERN.test(value.trim());
+}
+
 export function isSafeHttpUrl(value?: string | null): boolean {
   if (!value || typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (DRIVE_MEDIA_URL_PATTERN.test(trimmed)) return true;
   try {
-    const parsed = new URL(value.trim());
+    const parsed = new URL(trimmed);
     return parsed.protocol === 'https:' || parsed.protocol === 'http:';
   } catch {
     return false;

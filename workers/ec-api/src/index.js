@@ -272,18 +272,206 @@ async function activity(db, user, action, targetType = "", targetId = "", summar
   );
 }
 
+const DRIVE_MEDIA_URL_RE = /^\/api\/ec\/media\/[A-Za-z0-9_-]{8,80}$/;
+
 function isSafeHttpUrl(value) {
-  return typeof value === "string" && /^https?:\/\/[^\s]+$/i.test(value.trim());
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  return DRIVE_MEDIA_URL_RE.test(trimmed) || /^https?:\/\/[^\s]+$/i.test(trimmed);
 }
 
 function isSafePublicImageUrl(value) {
   if (typeof value !== "string" || value.length > 1000) return false;
+  const trimmed = value.trim();
+  if (DRIVE_MEDIA_URL_RE.test(trimmed)) return true;
   try {
-    const parsed = new URL(value);
+    const parsed = new URL(trimmed);
     return parsed.protocol === "https:" && Boolean(parsed.hostname) && !parsed.username && !parsed.password;
   } catch {
     return false;
   }
+}
+
+const driveMediaSchemaReadyDbs = new WeakSet();
+
+async function ensureDriveMediaSchema(db) {
+  if (!db || driveMediaSchemaReadyDbs.has(db)) return;
+  await run(
+    db,
+    `CREATE TABLE IF NOT EXISTS drive_media_assets (
+      id TEXT PRIMARY KEY NOT NULL,
+      drive_file_id TEXT NOT NULL UNIQUE,
+      uploader_uid TEXT NOT NULL,
+      context TEXT NOT NULL DEFAULT 'general',
+      mime_type TEXT NOT NULL,
+      display_name TEXT NOT NULL DEFAULT '',
+      size_bytes INTEGER NOT NULL DEFAULT 0 CHECK (size_bytes >= 0),
+      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'superseded', 'deleted', 'orphan')),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TEXT
+    )`
+  );
+  await run(
+    db,
+    "CREATE INDEX IF NOT EXISTS drive_media_assets_status_created_idx ON drive_media_assets(status, created_at DESC)"
+  );
+  driveMediaSchemaReadyDbs.add(db);
+}
+
+function mapDriveMediaAsset(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    url: `/api/ec/media/${encodeURIComponent(row.id)}`,
+    context: row.context || "general",
+    mimeType: row.mime_type,
+    displayName: row.display_name || "",
+    sizeBytes: Number(row.size_bytes) || 0,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function isSafeBadgeImageSource(value) {
+  if (typeof value !== "string" || value.length > 280000) return false;
+  if (isSafePublicImageUrl(value)) return true;
+  return /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]{16,}$/.test(value);
+}
+
+const BADGE_ANIMATION_PRESETS = new Set(["none", "shimmer", "halo", "orbit", "float", "flame", "prism", "custom"]);
+const BADGE_AUTO_RULE_TYPES = new Set([
+  "manual",
+  "lectures_completed",
+  "tests_taken",
+  "best_score_pct",
+  "avg_score_pct",
+  "watch_minutes",
+  "profile_complete",
+]);
+const badgeSchemaReadyDbs = new WeakSet();
+
+function sanitizeBadgeAutoRule(raw) {
+  const obj = raw && typeof raw === "object" ? raw : readJson(raw, {});
+  const type = typeof obj.type === "string" && BADGE_AUTO_RULE_TYPES.has(obj.type) ? obj.type : "manual";
+  if (type === "manual") return { type: "manual", target: 0 };
+  if (type === "profile_complete") return { type: "profile_complete", target: 1 };
+  const numeric = Number(obj.target);
+  const maxTarget = type === "best_score_pct" || type === "avg_score_pct" ? 100 : 10000;
+  const target = Number.isFinite(numeric) ? Math.max(1, Math.min(maxTarget, Math.round(numeric))) : 1;
+  return { type, target };
+}
+
+async function ensureBadgeSchema(db) {
+  if (!db || badgeSchemaReadyDbs.has(db)) return;
+  await run(
+    db,
+    `CREATE TABLE IF NOT EXISTS badge_definitions (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT NOT NULL CHECK (length(title) BETWEEN 2 AND 80),
+      description TEXT NOT NULL DEFAULT '' CHECK (length(description) <= 280),
+      criteria TEXT NOT NULL DEFAULT '' CHECK (length(criteria) <= 1000),
+      category TEXT NOT NULL DEFAULT 'achievement',
+      rarity TEXT NOT NULL DEFAULT 'standard' CHECK (rarity IN ('standard','rare','epic','legendary')),
+      image_url TEXT NOT NULL DEFAULT '',
+      active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`
+  );
+  await run(
+    db,
+    `CREATE TABLE IF NOT EXISTS student_badges (
+      id TEXT PRIMARY KEY NOT NULL,
+      badge_id TEXT NOT NULL,
+      firebase_uid TEXT NOT NULL,
+      awarded_by TEXT NOT NULL DEFAULT '',
+      reason TEXT NOT NULL DEFAULT '' CHECK (length(reason) <= 500),
+      awarded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      revoked_at TEXT,
+      revoked_by TEXT,
+      revoke_reason TEXT NOT NULL DEFAULT '',
+      FOREIGN KEY (badge_id) REFERENCES badge_definitions(id) ON DELETE RESTRICT
+    )`
+  );
+  await run(
+    db,
+    `CREATE UNIQUE INDEX IF NOT EXISTS student_badges_one_active_award_idx
+       ON student_badges(badge_id, firebase_uid) WHERE revoked_at IS NULL`
+  );
+  await run(
+    db,
+    `CREATE TABLE IF NOT EXISTS badge_award_history (
+      id TEXT PRIMARY KEY NOT NULL,
+      award_id TEXT NOT NULL,
+      badge_id TEXT NOT NULL,
+      firebase_uid TEXT NOT NULL,
+      actor_uid TEXT NOT NULL DEFAULT '',
+      action TEXT NOT NULL CHECK (action IN ('awarded','revoked')),
+      reason TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (award_id) REFERENCES student_badges(id) ON DELETE RESTRICT,
+      FOREIGN KEY (badge_id) REFERENCES badge_definitions(id) ON DELETE RESTRICT
+    )`
+  );
+  const cols = new Set((await all(db, "PRAGMA table_info('badge_definitions')")).map((row) => String(row.name)));
+  if (!cols.has("animation_preset")) {
+    await run(db, "ALTER TABLE badge_definitions ADD COLUMN animation_preset TEXT NOT NULL DEFAULT 'shimmer'");
+  }
+  if (!cols.has("animation_code")) {
+    await run(db, "ALTER TABLE badge_definitions ADD COLUMN animation_code TEXT NOT NULL DEFAULT ''");
+  }
+  if (!cols.has("auto_rule")) {
+    await run(db, "ALTER TABLE badge_definitions ADD COLUMN auto_rule TEXT NOT NULL DEFAULT '{}'");
+  }
+  badgeSchemaReadyDbs.add(db);
+}
+
+function metricForAutoRule(rule, metrics) {
+  switch (rule.type) {
+    case "lectures_completed":
+      return metrics.completedLessons;
+    case "tests_taken":
+      return metrics.testsTaken;
+    case "best_score_pct":
+      return Math.round(metrics.bestScorePct);
+    case "avg_score_pct":
+      return Math.round(metrics.avgScorePct);
+    case "watch_minutes":
+      return metrics.watchMinutes;
+    case "profile_complete":
+      return metrics.hasProfile ? 1 : 0;
+    default:
+      return 0;
+  }
+}
+
+async function computeStudentBadgeMetrics(db, uid) {
+  const profileRow = await first(db, "SELECT exam, class_level, display_name FROM student_profiles WHERE firebase_uid=?", uid);
+  const progressAgg = await first(
+    db,
+    "SELECT COALESCE(SUM(CASE WHEN completed=1 THEN 1 ELSE 0 END),0) AS done, COALESCE(SUM(watched_seconds),0) AS secs FROM lesson_progress WHERE firebase_uid=?",
+    uid
+  );
+  const attemptAgg = await first(
+    db,
+    `SELECT COUNT(*) AS total,
+            COALESCE(MAX(CASE WHEN max_score > 0 THEN (score * 100.0) / max_score ELSE 0 END), 0) AS best_pct,
+            COALESCE(AVG(CASE WHEN max_score > 0 THEN (score * 100.0) / max_score ELSE 0 END), 0) AS avg_pct
+       FROM exam_attempts WHERE firebase_uid=?`,
+    uid
+  );
+  return {
+    hasProfile: Boolean(profileRow && profileRow.display_name && profileRow.exam && profileRow.class_level),
+    completedLessons: Number(progressAgg?.done || 0),
+    watchMinutes: Math.floor(Number(progressAgg?.secs || 0) / 60),
+    testsTaken: Number(attemptAgg?.total || 0),
+    bestScorePct: Math.round(Number(attemptAgg?.best_pct || 0) * 10) / 10,
+    avgScorePct: Math.round(Number(attemptAgg?.avg_pct || 0) * 10) / 10,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1134,6 +1322,23 @@ function detectProfilePhoto(bytes) {
   return null;
 }
 
+function detectUploadedImage(bytes) {
+  const basic = detectProfilePhoto(bytes);
+  if (basic) return basic;
+  if (
+    bytes.length >= 6 &&
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x38 &&
+    (bytes[4] === 0x37 || bytes[4] === 0x39) &&
+    bytes[5] === 0x61
+  ) {
+    return { mimeType: "image/gif", extension: "gif" };
+  }
+  return null;
+}
+
 function detectPdf(bytes) {
   let offset = 0;
   while (offset < 8 && [0x09, 0x0a, 0x0d, 0x20].includes(bytes[offset])) offset += 1;
@@ -1647,22 +1852,129 @@ export async function handleApiRequest(request, env) {
       return json({ config, publishedAt, degraded: false });
     }
 
+    // Public streaming route for admin-uploaded Google Drive site & course images
+    // (raw Google Drive file IDs remain private on the server).
+    if (segments[0] === "media" && segments.length === 2 && method === "GET") {
+      const mediaId = segments[1];
+      if (!/^[A-Za-z0-9_-]{8,80}$/.test(mediaId)) {
+        return fail("Image asset not found.", 404);
+      }
+      await ensureDriveMediaSchema(db);
+      const row = await first(
+        db,
+        "SELECT id, drive_file_id, mime_type, display_name, size_bytes, status FROM drive_media_assets WHERE id=? AND status='active'",
+        mediaId
+      );
+      if (!row) return fail("Image asset not found.", 404);
+      let driveResponse;
+      try {
+        driveResponse = await downloadDriveFile(env, row.drive_file_id);
+      } catch (error) {
+        const status = Number(error && error.status) || 502;
+        return fail(error instanceof Error ? error.message : "Image could not be loaded from Google Drive.", status);
+      }
+      const headers = new Headers();
+      headers.set("Content-Type", row.mime_type || "image/jpeg");
+      headers.set("Content-Disposition", contentDisposition(row.display_name || "image", false));
+      headers.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+      headers.set("X-Content-Type-Options", "nosniff");
+      headers.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'");
+      if (Number(row.size_bytes) > 0) headers.set("Content-Length", String(row.size_bytes));
+      return new Response(driveResponse.body, { status: 200, headers });
+    }
+
     const user = await verifyFirebaseToken(request);
     const admin = isAdmin(user);
 
     // Student achievement view. Award state is read from D1 and never accepted
     // from profile-edit payloads or other student-controlled fields.
     if (path === "/my/badges" && method === "GET") {
+      await ensureBadgeSchema(db);
+      const metrics = await computeStudentBadgeMetrics(db, user.uid);
+      const definitions = await all(
+        db,
+        `SELECT id, title, description, criteria, category, rarity, image_url,
+                animation_preset, animation_code, auto_rule, sort_order
+           FROM badge_definitions
+          WHERE active=1
+          ORDER BY sort_order ASC, created_at DESC LIMIT 200`
+      );
+      const existingRows = await all(
+        db,
+        "SELECT badge_id, awarded_at, reason, revoked_at FROM student_badges WHERE firebase_uid=?",
+        user.uid
+      );
+      const activeAwardMap = new Map();
+      const revokedSet = new Set();
+      for (const row of existingRows) {
+        if (row.revoked_at === null || row.revoked_at === undefined) activeAwardMap.set(row.badge_id, row);
+        else revokedSet.add(row.badge_id);
+      }
+
+      const newlyEarnedStatements = [];
+      for (const def of definitions) {
+        const rule = sanitizeBadgeAutoRule(def.auto_rule);
+        if (rule.type === "manual" || activeAwardMap.has(def.id) || revokedSet.has(def.id)) continue;
+        const current = metricForAutoRule(rule, metrics);
+        if (current >= rule.target && rule.target > 0) {
+          const awardId = uuid();
+          const timestamp = now();
+          const autoReason = def.criteria ? String(def.criteria).slice(0, 200) : "Milestone unlocked automatically";
+          newlyEarnedStatements.push(
+            db.prepare(`INSERT INTO student_badges (id,badge_id,firebase_uid,awarded_by,reason,awarded_at)
+              VALUES (?,?,?,?,?,?)`).bind(awardId, def.id, user.uid, "system:auto", autoReason, timestamp),
+            db.prepare(`INSERT INTO badge_award_history (id,award_id,badge_id,firebase_uid,actor_uid,action,reason,created_at)
+              VALUES (?,?,?,?,?,'awarded',?,?)`).bind(uuid(), awardId, def.id, user.uid, "system:auto", autoReason, timestamp)
+          );
+          activeAwardMap.set(def.id, { badge_id: def.id, awarded_at: timestamp, reason: autoReason, revoked_at: null });
+        }
+      }
+      if (newlyEarnedStatements.length) {
+        try {
+          await batch(db, newlyEarnedStatements);
+        } catch {
+          // Concurrent request race guard via partial unique index.
+        }
+      }
+
       const items = await all(
         db,
         `SELECT b.id, b.title, b.description, b.criteria, b.category, b.rarity,
-                b.image_url, sb.awarded_at, sb.reason
+                b.image_url, b.animation_preset, b.animation_code, b.auto_rule,
+                sb.awarded_at, sb.reason
            FROM student_badges sb JOIN badge_definitions b ON b.id=sb.badge_id
           WHERE sb.firebase_uid=? AND sb.revoked_at IS NULL AND b.active=1
           ORDER BY b.sort_order ASC, sb.awarded_at DESC LIMIT 100`,
         user.uid
       );
-      return json({ items, verified: items.some((item) => item.category === "verified") });
+      const earnedById = new Map(items.map((item) => [item.id, item]));
+      const catalogue = definitions.map((def) => {
+        const rule = sanitizeBadgeAutoRule(def.auto_rule);
+        const earned = earnedById.get(def.id);
+        const currentValue = rule.type === "manual" ? (earned ? 1 : 0) : metricForAutoRule(rule, metrics);
+        const targetValue = rule.type === "manual" ? 1 : rule.target;
+        const progressPercent = earned
+          ? 100
+          : rule.type === "manual"
+            ? 0
+            : Math.max(0, Math.min(100, Math.round((currentValue / Math.max(1, targetValue)) * 100)));
+        return {
+          ...def,
+          auto_rule: rule,
+          earned: Boolean(earned),
+          awarded_at: earned?.awarded_at || null,
+          reason: earned?.reason || "",
+          currentValue,
+          targetValue,
+          progressPercent,
+        };
+      });
+      return json({
+        items,
+        verified: items.some((item) => item.category === "verified"),
+        catalogue,
+        metrics,
+      });
     }
 
     // Student profile ------------------------------------------------------
@@ -2784,12 +3096,17 @@ export async function handleApiRequest(request, env) {
 
       // Badge definitions and awards --------------------------------------
       if (path === "/admin/badges" && method === "GET") {
-        const items = await all(
+        await ensureBadgeSchema(db);
+        const rawItems = await all(
           db,
           `SELECT b.*, (SELECT COUNT(*) FROM student_badges sb
                          WHERE sb.badge_id=b.id AND sb.revoked_at IS NULL) AS active_awards
              FROM badge_definitions b ORDER BY b.sort_order ASC, b.created_at DESC LIMIT 250`
         );
+        const items = rawItems.map((item) => ({
+          ...item,
+          auto_rule: sanitizeBadgeAutoRule(item.auto_rule),
+        }));
         const history = await all(
           db,
           `SELECT h.*, b.title AS badge_title, p.display_name, p.email
@@ -2799,7 +3116,8 @@ export async function handleApiRequest(request, env) {
             ORDER BY h.created_at DESC LIMIT 100`
         );
         const activeAwards = await all(db, `SELECT sb.id, sb.badge_id, sb.firebase_uid, sb.reason, sb.awarded_at,
-            b.title AS badge_title, b.category, p.display_name, p.email
+            b.title AS badge_title, b.category, b.image_url, b.rarity, b.animation_preset, b.animation_code,
+            p.display_name, p.email
           FROM student_badges sb JOIN badge_definitions b ON b.id=sb.badge_id
           LEFT JOIN student_profiles p ON p.firebase_uid=sb.firebase_uid
           WHERE sb.revoked_at IS NULL ORDER BY sb.awarded_at DESC LIMIT 100`);
@@ -2814,29 +3132,56 @@ export async function handleApiRequest(request, env) {
       }
 
       if (path === "/admin/badges" && method === "POST") {
+        await ensureBadgeSchema(db);
         const body = await readBody(request);
         const title = asText(body.title, 80).trim();
         const description = asText(body.description, 280).trim();
         const criteria = asText(body.criteria, 1000).trim();
         const category = asText(body.category, 32).trim();
         const rarity = asText(body.rarity, 16).trim();
-        const imageUrl = asText(body.imageUrl, 1000).trim();
+        const imageUrl = asText(body.imageUrl, 280000).trim();
+        const rawPreset = asText(body.animationPreset, 32).trim();
+        const animationPreset = BADGE_ANIMATION_PRESETS.has(rawPreset) ? rawPreset : "shimmer";
+        const animationCode = asText(body.animationCode, 16000);
+        const autoRule = JSON.stringify(sanitizeBadgeAutoRule(body.autoRule));
         const allowedCategories = ["achievement", "consistency", "test_performance", "course_completion", "community", "verified", "custom"];
         if (title.length < 2 || !allowedCategories.includes(category) || !["standard", "rare", "epic", "legendary"].includes(rarity)) {
           return fail("Enter a badge title and choose a supported category and rarity.", 400);
         }
-        if (imageUrl && !isSafePublicImageUrl(imageUrl)) return fail("Badge image URL must be a valid HTTPS URL without embedded credentials.", 400);
+        if (imageUrl && !isSafeBadgeImageSource(imageUrl)) {
+          return fail("Upload a valid PNG/JPG/WebP/GIF badge image or enter a valid HTTPS image URL.", 400);
+        }
         const id = uuid();
         const active = body.active === false ? 0 : 1;
         const sortOrder = Number.isFinite(Number(body.sortOrder)) ? Math.max(0, Math.min(10000, Number(body.sortOrder))) : 0;
-        await run(db, `INSERT INTO badge_definitions
-          (id,title,description,criteria,category,rarity,image_url,active,sort_order,created_by,created_at,updated_at)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, id, title, description, criteria, category, rarity, imageUrl, active, sortOrder, user.uid, now(), now());
-        await activity(db, user, "badge.create", "badge", id, `Created badge: ${title}`, { category, rarity });
-        return json({ item: await first(db, "SELECT * FROM badge_definitions WHERE id=?", id) }, 201);
+        await run(
+          db,
+          `INSERT INTO badge_definitions
+            (id,title,description,criteria,category,rarity,image_url,animation_preset,animation_code,auto_rule,active,sort_order,created_by,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          id,
+          title,
+          description,
+          criteria,
+          category,
+          rarity,
+          imageUrl,
+          animationPreset,
+          animationCode,
+          autoRule,
+          active,
+          sortOrder,
+          user.uid,
+          now(),
+          now()
+        );
+        await activity(db, user, "badge.create", "badge", id, `Created badge: ${title}`, { category, rarity, animationPreset });
+        const saved = await first(db, "SELECT * FROM badge_definitions WHERE id=?", id);
+        return json({ item: saved ? { ...saved, auto_rule: sanitizeBadgeAutoRule(saved.auto_rule) } : null }, 201);
       }
 
       if (segments[1] === "badges" && segments.length === 3 && method === "PATCH") {
+        await ensureBadgeSchema(db);
         const id = segments[2];
         const existing = await first(db, "SELECT * FROM badge_definitions WHERE id=?", id);
         if (!existing) return fail("Badge not found.", 404);
@@ -2846,18 +3191,61 @@ export async function handleApiRequest(request, env) {
         const criteria = asText(body.criteria, 1000).trim();
         const category = asText(body.category, 32).trim();
         const rarity = asText(body.rarity, 16).trim();
-        const imageUrl = asText(body.imageUrl, 1000).trim();
+        const imageUrl = asText(body.imageUrl, 280000).trim();
+        const rawPreset = body.animationPreset !== undefined ? asText(body.animationPreset, 32).trim() : String(existing.animation_preset || "shimmer");
+        const animationPreset = BADGE_ANIMATION_PRESETS.has(rawPreset) ? rawPreset : "shimmer";
+        const animationCode = body.animationCode !== undefined ? asText(body.animationCode, 16000) : String(existing.animation_code || "");
+        const autoRule = JSON.stringify(
+          body.autoRule !== undefined ? sanitizeBadgeAutoRule(body.autoRule) : sanitizeBadgeAutoRule(existing.auto_rule)
+        );
         const allowedCategories = ["achievement", "consistency", "test_performance", "course_completion", "community", "verified", "custom"];
         if (title.length < 2 || !allowedCategories.includes(category) || !["standard", "rare", "epic", "legendary"].includes(rarity)) return fail("Badge fields are invalid.", 400);
-        if (imageUrl && !isSafePublicImageUrl(imageUrl)) return fail("Badge image URL must be a valid HTTPS URL without embedded credentials.", 400);
+        if (imageUrl && !isSafeBadgeImageSource(imageUrl)) {
+          return fail("Upload a valid PNG/JPG/WebP/GIF badge image or enter a valid HTTPS image URL.", 400);
+        }
         const active = body.active === false ? 0 : 1;
         const sortOrder = Number.isFinite(Number(body.sortOrder)) ? Math.max(0, Math.min(10000, Number(body.sortOrder))) : 0;
-        await run(db, `UPDATE badge_definitions SET title=?,description=?,criteria=?,category=?,rarity=?,image_url=?,active=?,sort_order=?,updated_at=? WHERE id=?`, title, description, criteria, category, rarity, imageUrl, active, sortOrder, now(), id);
-        await activity(db, user, "badge.update", "badge", id, `Updated badge: ${title}`, { active: Boolean(active), category, rarity });
-        return json({ item: await first(db, "SELECT * FROM badge_definitions WHERE id=?", id) });
+        await run(
+          db,
+          `UPDATE badge_definitions
+              SET title=?,description=?,criteria=?,category=?,rarity=?,image_url=?,
+                  animation_preset=?,animation_code=?,auto_rule=?,active=?,sort_order=?,updated_at=?
+            WHERE id=?`,
+          title,
+          description,
+          criteria,
+          category,
+          rarity,
+          imageUrl,
+          animationPreset,
+          animationCode,
+          autoRule,
+          active,
+          sortOrder,
+          now(),
+          id
+        );
+        await activity(db, user, "badge.update", "badge", id, `Updated badge: ${title}`, { active: Boolean(active), category, rarity, animationPreset });
+        const saved = await first(db, "SELECT * FROM badge_definitions WHERE id=?", id);
+        return json({ item: saved ? { ...saved, auto_rule: sanitizeBadgeAutoRule(saved.auto_rule) } : null });
+      }
+
+      if (segments[1] === "badges" && segments.length === 3 && method === "DELETE") {
+        await ensureBadgeSchema(db);
+        const id = segments[2];
+        const existing = await first(db, "SELECT id,title FROM badge_definitions WHERE id=?", id);
+        if (!existing) return fail("Badge not found.", 404);
+        const awardCount = Number((await first(db, "SELECT COUNT(*) AS n FROM student_badges WHERE badge_id=?", id))?.n || 0);
+        if (awardCount > 0) {
+          await run(db, "UPDATE badge_definitions SET active=0, updated_at=? WHERE id=?", now(), id);
+          return json({ deleted: false, deactivated: true, id });
+        }
+        await run(db, "DELETE FROM badge_definitions WHERE id=?", id);
+        return json({ deleted: true, deactivated: false, id });
       }
 
       if (segments[1] === "badges" && segments.length === 4 && segments[3] === "awards" && method === "POST") {
+        await ensureBadgeSchema(db);
         const badgeId = segments[2];
         const body = await readBody(request);
         const studentUid = asText(body.studentUid, 128).trim();
@@ -2880,6 +3268,7 @@ export async function handleApiRequest(request, env) {
       }
 
       if (segments[1] === "badge-awards" && segments.length === 4 && segments[3] === "revoke" && method === "POST") {
+        await ensureBadgeSchema(db);
         const awardId = segments[2];
         const body = await readBody(request);
         const reason = asText(body.reason, 500).trim();
@@ -4094,6 +4483,101 @@ export async function handleApiRequest(request, env) {
         );
         return json({ items: rows.map(mapDriveFile) });
       }
+      if (path === "/admin/drive/images" && method === "GET") {
+        await ensureDriveMediaSchema(db);
+        const contextFilter = asText(url.searchParams.get("context"), 48).trim();
+        const rows = contextFilter
+          ? await all(
+              db,
+              "SELECT * FROM drive_media_assets WHERE status='active' AND context=? ORDER BY created_at DESC LIMIT 200",
+              contextFilter
+            )
+          : await all(
+              db,
+              "SELECT * FROM drive_media_assets WHERE status='active' ORDER BY created_at DESC LIMIT 200"
+            );
+        return json({ items: rows.map(mapDriveMediaAsset) });
+      }
+
+      if (path === "/admin/drive/upload-image" && method === "POST") {
+        await ensureDriveMediaSchema(db);
+        const limit = maxUploadBytes(env, "GOOGLE_DRIVE_MAX_IMAGE_MB", 8);
+        const { form, value, bytes } = await readMultipartFile(request, limit);
+        const detected = detectUploadedImage(bytes);
+        if (!detected) {
+          return fail("Choose a valid JPEG, PNG, WebP or GIF image file.", 415);
+        }
+        const context = asText(form.get("context"), 48).trim() || "general";
+        const displayName = safeDisplayName(form.get("displayName") || value.name, `image.${detected.extension}`);
+        let uploaded;
+        try {
+          uploaded = await uploadDriveFile(env, {
+            bytes,
+            mimeType: detected.mimeType,
+            name: `ec-media-${uuid()}.${detected.extension}`,
+            purpose: "site_image",
+          });
+        } catch (error) {
+          const status = Number(error && error.status) || 502;
+          return fail(error instanceof Error ? error.message : "Google Drive image upload failed.", status);
+        }
+        const recordId = uuid();
+        const timestamp = now();
+        try {
+          await run(
+            db,
+            `INSERT INTO drive_media_assets
+              (id, drive_file_id, uploader_uid, context, mime_type, display_name, size_bytes, status, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+            recordId,
+            uploaded.id,
+            user.uid,
+            context,
+            detected.mimeType,
+            displayName,
+            Number(uploaded.size) || bytes.length,
+            timestamp,
+            timestamp
+          );
+        } catch {
+          try {
+            await deleteDriveFile(env, uploaded.id);
+          } catch {
+            // Cleanup best-effort if D1 write fails.
+          }
+          return fail("The image uploaded to Google Drive, but its reference could not be saved. Please retry.", 500);
+        }
+        await activity(db, user, "drive_image.upload", "drive_media_asset", recordId, `Uploaded image: ${displayName}`, {
+          context,
+          mimeType: detected.mimeType,
+          sizeBytes: Number(uploaded.size) || bytes.length,
+        });
+        const row = await first(db, "SELECT * FROM drive_media_assets WHERE id=?", recordId);
+        return json({ item: mapDriveMediaAsset(row) }, 201);
+      }
+
+      if (segments[1] === "drive" && segments[2] === "images" && segments.length === 4 && method === "DELETE") {
+        await ensureDriveMediaSchema(db);
+        const mediaId = segments[3];
+        const row = await first(db, "SELECT * FROM drive_media_assets WHERE id=?", mediaId);
+        if (!row) return fail("Image asset not found.", 404);
+        let driveDeleted = false;
+        try {
+          driveDeleted = await deleteDriveFile(env, row.drive_file_id);
+        } catch {
+          driveDeleted = false;
+        }
+        await run(
+          db,
+          "UPDATE drive_media_assets SET status=?, updated_at=?, deleted_at=? WHERE id=?",
+          driveDeleted ? "deleted" : "orphan",
+          now(),
+          now(),
+          mediaId
+        );
+        return json({ deleted: true, id: mediaId, driveDeleted });
+      }
+
       if (path === "/admin/drive/upload" && method === "POST") {
         const limit = maxUploadBytes(env, "GOOGLE_DRIVE_MAX_PDF_MB", 20);
         const { form, value, bytes } = await readMultipartFile(request, limit);

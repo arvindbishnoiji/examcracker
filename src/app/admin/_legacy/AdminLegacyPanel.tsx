@@ -7,6 +7,7 @@ import { Card, Badge, EmptyState, Skeleton } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea, Select } from '@/components/ui/Input';
 import { ConfirmDialog, Modal, StatusPill } from '@/components/admin/ui';
+import { ImageField } from '@/components/admin/ImageField';
 import { useToast } from '@/hooks/useToast';
 import {
   getAdminOverview,
@@ -963,37 +964,41 @@ function AdminContentTab({ kind }: { kind: 'goal' | 'batch' | 'series' | 'event'
           </div>
 
           {(kind === 'batch' || kind === 'series' || kind === 'event') && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                label="Thumbnail / Artwork URL (16:9 recommended)"
-                placeholder="https://..."
+            <div className="space-y-3">
+              <ImageField
+                label="Thumbnail / Artwork (URL or Google Drive Upload · 16:9 recommended)"
+                context={kind}
                 value={form.thumbnailUrl}
-                onChange={(e) => setForm((s: any) => ({ ...s, thumbnailUrl: e.target.value }))}
+                onChange={(thumbnailUrl) => setForm((s: any) => ({ ...s, thumbnailUrl }))}
               />
-              <Input
-                label={kind === 'event' ? 'Subtitle' : 'Lead Faculty / Instructor'}
-                value={kind === 'event' ? form.subtitle : form.instructor}
-                onChange={(e) =>
-                  setForm((s: any) => ({
-                    ...s,
-                    [kind === 'event' ? 'subtitle' : 'instructor']: e.target.value,
-                  }))
-                }
-              />
-              {kind !== 'event' && (
+              <div className="grid gap-3 sm:grid-cols-2">
                 <Input
-                  label="Code badge hint (optional)"
-                  value={form.codeDisplay}
-                  onChange={(e) => setForm((s: any) => ({ ...s, codeDisplay: e.target.value }))}
+                  label={kind === 'event' ? 'Subtitle' : 'Lead Faculty / Instructor'}
+                  value={kind === 'event' ? form.subtitle : form.instructor}
+                  onChange={(e) =>
+                    setForm((s: any) => ({
+                      ...s,
+                      [kind === 'event' ? 'subtitle' : 'instructor']: e.target.value,
+                    }))
+                  }
                 />
-              )}
-              {kind !== 'event' && (
-                <Input
-                  label="Highlights (comma-separated)"
-                  value={form.features}
-                  onChange={(e) => setForm((s: any) => ({ ...s, features: e.target.value }))}
-                />
-              )}
+                {kind !== 'event' && (
+                  <Input
+                    label="Code badge hint (optional)"
+                    value={form.codeDisplay}
+                    onChange={(e) => setForm((s: any) => ({ ...s, codeDisplay: e.target.value }))}
+                  />
+                )}
+                {kind !== 'event' && (
+                  <div className="sm:col-span-2">
+                    <Input
+                      label="Highlights (comma-separated)"
+                      value={form.features}
+                      onChange={(e) => setForm((s: any) => ({ ...s, features: e.target.value }))}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1035,11 +1040,27 @@ function AdminContentTab({ kind }: { kind: 'goal' | 'batch' | 'series' | 'event'
                 />
               )}
               {kind === 'event' && (
-                <Input
-                  label="Gallery image URLs (comma-separated)"
-                  value={form.images}
-                  onChange={(e) => setForm((s: any) => ({ ...s, images: e.target.value }))}
-                />
+                <div className="space-y-2">
+                  <Input
+                    label="Gallery image URLs (comma-separated)"
+                    value={form.images}
+                    onChange={(e) => setForm((s: any) => ({ ...s, images: e.target.value }))}
+                  />
+                  <ImageField
+                    label="Upload Extra Gallery Image to Google Drive (appends to list above)"
+                    context="event_gallery"
+                    compact
+                    value=""
+                    placeholder="Upload to Google Drive to append URL automatically…"
+                    onChange={(uploadedUrl) => {
+                      if (!uploadedUrl.trim()) return;
+                      setForm((s: any) => ({
+                        ...s,
+                        images: s.images?.trim() ? `${s.images.trim()}, ${uploadedUrl.trim()}` : uploadedUrl.trim(),
+                      }));
+                    }}
+                  />
+                </div>
               )}
             </div>
           )}
@@ -2010,7 +2031,7 @@ function AdminLecturesTab() {
             />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <Input
               label="Duration (MM:SS)"
               placeholder="48:30"
@@ -2024,13 +2045,14 @@ function AdminLecturesTab() {
               value={form.position}
               onChange={(e) => setForm((s: any) => ({ ...s, position: e.target.value }))}
             />
-            <Input
-              label="Custom Thumbnail URL"
-              placeholder="Optional 16:9 image URL"
-              value={form.thumbnailUrl}
-              onChange={(e) => setForm((s: any) => ({ ...s, thumbnailUrl: e.target.value }))}
-            />
           </div>
+
+          <ImageField
+            label="Custom Thumbnail (URL or Google Drive Upload · Optional 16:9)"
+            context="lecture_thumbnail"
+            value={form.thumbnailUrl}
+            onChange={(thumbnailUrl) => setForm((s: any) => ({ ...s, thumbnailUrl }))}
+          />
 
           {/* Private Google Drive PDF Upload Box */}
           <div className="rounded-xl border border-ink-200 bg-ink-50/60 p-3.5 space-y-2.5">
@@ -2764,6 +2786,18 @@ function AdminTestsTab() {
           </div>
 
           <div>
+            <div className="mb-2.5 rounded-2xl border border-ink-200 bg-ink-50/50 p-3">
+              <ImageField
+                label="Question Diagram Uploader (Google Drive → Copy URL into question imageUrl)"
+                help="Need a circuit, graph, or organic structure diagram inside a question? Upload here and copy the generated /api/ec/media/… URL into any question imageUrl field."
+                context="question_diagram"
+                compact
+                value={form.lastDiagramUrl || ''}
+                placeholder="Upload diagram image below to get a ready-to-use URL…"
+                onChange={(url) => setForm((s: any) => ({ ...s, lastDiagramUrl: url }))}
+              />
+            </div>
+
             <label className="block text-sm font-medium text-ink-700 mb-1.5">
               Questions JSON* (paste or upload — preserves LaTeX)
             </label>

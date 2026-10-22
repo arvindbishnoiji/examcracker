@@ -111,11 +111,17 @@ h1, h2, h3, h4, .ec-heading {
   width: 100%;
   max-width: var(--ec-max-width);
   margin-inline: auto;
-  padding: var(--ec-page-pad);
-  padding-bottom: calc(var(--ec-page-pad) + 5rem);
+  padding: 14px;
+  padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 640px) {
+  .ec-main {
+    padding: var(--ec-page-pad);
+    padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 @media (min-width: 768px) {
-  .ec-main { padding-bottom: var(--ec-page-pad); }
+  .ec-main { padding-bottom: 2.5rem; }
 }
 
 .ec-header {
@@ -572,12 +578,13 @@ button, a, input, select, textarea {
   --ec-glass: color-mix(in srgb, var(--ec-surface) 74%, transparent);
 }
 
-/* Bigger baseline type — the brief was "bade bade text", done accessibly. */
-@media (min-width: 768px) {
-  html { font-size: 17.5px; }
+/* Crisp, mature baseline type scale across mobile and desktop viewports */
+html {
+  font-size: 16px;
+  overflow-x: clip;
 }
-@media (min-width: 1280px) {
-  html { font-size: 18px; }
+body {
+  overflow-x: clip;
 }
 
 body {
@@ -1809,16 +1816,99 @@ body::before {
 /* Search */
 .ecc-search { position: relative; }
 .ecc-search input {
-  height: 50px; width: 100%;
+  height: 48px; width: 100%;
   border-radius: var(--ec-button-radius);
   border: 1px solid rgb(var(--ec-ink-200));
   background: var(--ec-surface);
   color: var(--ec-text);
-  padding: 0 7rem 0 2.75rem;
-  font-size: 0.9rem;
+  padding: 0 6.25rem 0 2.65rem;
+  font-size: 0.875rem;
   outline: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
-.ecc-search input:focus { border-color: var(--ec-brand); box-shadow: 0 0 0 3px rgb(var(--ec-brand-500) / 0.18); }
+.ecc-search input:focus { border-color: var(--ec-brand); box-shadow: 0 0 0 3px rgb(var(--ec-brand-500) / 0.16); }
+
+/* Mobile hero & card polish */
+@media (max-width: 639px) {
+  .ecc-page { gap: 1.35rem; }
+  .ecc-hero { padding: 1.15rem; gap: 1.1rem; }
+  .ecc-hero-title { font-size: 1.4rem; line-height: 1.2; }
+  .ecc-hero-sub { font-size: 0.85rem; line-height: 1.5; margin-top: 0.5rem; }
+  .ecc-hero-actions { margin-top: 1rem; gap: 0.5rem; }
+  .ecc-hero-actions .ecc-btn { flex: 1 1 auto; min-height: 42px; padding-inline: 0.9rem; font-size: 0.82rem; }
+  .ecc-stats { padding: 0.9rem; }
+  .ecc-stat { padding: 0.55rem 0.65rem; }
+  .ecc-stat-value { font-size: 1.12rem; }
+}
+
+/* ---------------------------------------------------------------------------
+   Animated Badge Presets (GPU-accelerated 60fps effects)
+--------------------------------------------------------------------------- */
+.ec-badge-emblem .badge-ring {
+  position: relative;
+  overflow: hidden;
+}
+
+.ec-badge-emblem[data-badge-preset='shimmer'] .badge-ring::after {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  background: linear-gradient(
+    115deg,
+    transparent 34%,
+    rgba(255, 255, 255, 0.72) 50%,
+    transparent 66%
+  );
+  transform: translateX(-120%) rotate(12deg);
+  animation: ecBadgeShimmer 3.6s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes ecBadgeShimmer {
+  0%, 58% { transform: translateX(-130%) rotate(12deg); }
+  90%, 100% { transform: translateX(130%) rotate(12deg); }
+}
+
+.ec-badge-emblem[data-badge-preset='halo'] .badge-ring {
+  animation: ecBadgeHalo 2.6s ease-in-out infinite;
+}
+@keyframes ecBadgeHalo {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.28), 0 4px 12px -4px rgba(15, 23, 42, 0.12); }
+  50% { box-shadow: 0 0 0 7px rgba(124, 58, 237, 0), 0 10px 22px -6px rgba(124, 58, 237, 0.45); transform: scale(1.03); }
+}
+
+.ec-badge-emblem[data-badge-preset='orbit'] .badge-fx::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 999px;
+  border: 1.75px dashed rgba(245, 158, 11, 0.75);
+  animation: ecOrbit 10s linear infinite;
+}
+
+.ec-badge-emblem[data-badge-preset='float'] .badge-wrap {
+  animation: ecBadgeFloat 3.4s ease-in-out infinite;
+}
+@keyframes ecBadgeFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.ec-badge-emblem[data-badge-preset='flame'] .badge-ring {
+  animation: ecBadgeFlame 2s ease-in-out infinite;
+}
+@keyframes ecBadgeFlame {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.6), 0 6px 16px -4px rgba(234, 88, 12, 0.35); }
+  50% { box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.9), 0 10px 24px -4px rgba(239, 68, 68, 0.52); transform: translateY(-2px) scale(1.03); }
+}
+
+.ec-badge-emblem[data-badge-preset='prism'] .badge-ring {
+  box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.55), 0 8px 22px -8px rgba(14, 165, 233, 0.5);
+  animation: ecBadgePrism 4s ease-in-out infinite;
+}
+@keyframes ecBadgePrism {
+  0%, 100% { filter: hue-rotate(0deg); transform: scale(1); }
+  50% { filter: hue-rotate(38deg); transform: scale(1.04); }
+}
 
 /* Section heading */
 .ecc-section-head {

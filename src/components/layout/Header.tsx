@@ -7,15 +7,11 @@ import { useSiteConfig } from '@/context/SiteConfigContext';
 import { isActivePath, isRouteEnabled } from '@/lib/navigation';
 import { formatClassLevel, isSafeHttpUrl } from '@/lib/validation';
 import { NavIcon } from '@/components/ui/AppIcon';
-import { Bell, LayoutDashboard, LogOut, Search } from 'lucide-react';
+import { Bell, HelpCircle, LayoutDashboard, LogOut, Search } from 'lucide-react';
 import { ProfileImage } from '@/components/student/ProfileImage';
 import { pageIdentity, pageKeyFromPath } from '@/lib/page-identity';
+import { openStudentTour } from '@/components/student/StudentTour';
 
-/**
- * Floating navigation island (2026 pattern): the brand + links + actions live in
- * one glass bar that hovers over the page instead of a full-width band. The
- * announcement strip stays a separate, quieter line above it.
- */
 export function Header({ showNav = true }: { showNav?: boolean }) {
   const { user, profile, signOut, isAdmin } = useAuth();
   const { config } = useSiteConfig();
@@ -32,7 +28,7 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
     <img src={theme.logoUrl} alt={theme.brandName} className="h-8 w-8 rounded-[11px] object-cover" />
   ) : (
     <span
-      className="grid h-8 w-8 place-items-center rounded-[11px] text-[0.72rem] font-black text-white shadow-[0_10px_24px_-12px_rgba(76,29,149,0.9)]"
+      className="grid h-8 w-8 shrink-0 place-items-center rounded-[11px] text-[0.72rem] font-black text-white shadow-[0_10px_24px_-12px_rgba(76,29,149,0.9)]"
       style={{ background: 'var(--ec-grad-aurora)' }}
     >
       {theme.logoText || 'EC'}
@@ -41,21 +37,21 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
 
   return (
     <>
-      {navigation.announcementBarEnabled && navigation.announcementBarText && (
+      {navigation.announcementBarEnabled && navigation.announcementBarText ? (
         <div className="text-[0.72rem] text-white" style={{ background: 'var(--ec-grad-aurora)' }}>
           <div className="ec-main flex items-center justify-center gap-2 !py-1.5 !pb-1.5 text-center">
-            <span className="opacity-95">{navigation.announcementBarText}</span>
-            {navigation.announcementBarHref && (
+            <span className="truncate opacity-95">{navigation.announcementBarText}</span>
+            {navigation.announcementBarHref ? (
               <Link href={navigation.announcementBarHref} className="whitespace-nowrap font-bold underline">
                 Learn more
               </Link>
-            )}
+            ) : null}
           </div>
         </div>
-      )}
+      ) : null}
 
-      <div className={`z-40 px-3 pt-2.5 sm:px-4 ${theme.stickyHeader ? 'sticky top-0' : 'relative'}`}>
-        <header className="ec-nav-island mx-auto flex h-[58px] w-full max-w-[1240px] items-center justify-between gap-2 px-2.5 sm:px-3">
+      <div className={`z-40 px-2.5 pt-2 sm:px-4 ${theme.stickyHeader ? 'sticky top-0' : 'relative'}`}>
+        <header className="ec-nav-island mx-auto flex h-[56px] w-full max-w-[1240px] items-center justify-between gap-2 px-2.5 sm:px-3.5">
           <Link
             href={user ? (profile ? '/home' : '/onboarding') : '/login'}
             className="flex min-w-0 items-center gap-2 rounded-full py-1 pl-1 pr-2 transition hover:bg-black/[0.04]"
@@ -63,12 +59,12 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
           >
             {logo}
             <span className="flex min-w-0 flex-col leading-none">
-              <span className="truncate text-[0.9rem] font-extrabold tracking-[-0.02em]">{theme.brandName}</span>
-              {theme.tagline && (
-                <span className="mt-0.5 hidden max-w-[190px] truncate text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-ink-400 sm:block">
+              <span className="truncate text-[0.88rem] font-extrabold tracking-[-0.02em]">{theme.brandName}</span>
+              {theme.tagline ? (
+                <span className="mt-0.5 hidden max-w-[180px] truncate text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-ink-400 sm:block">
                   {theme.tagline}
                 </span>
-              )}
+              ) : null}
             </span>
           </Link>
 
@@ -102,8 +98,20 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
               ))}
           </nav>
 
-          <div className="flex items-center gap-1">
-            {user && navigation.showSearch && features.search && (
+          <div className="flex shrink-0 items-center gap-1">
+            {user ? (
+              <button
+                type="button"
+                onClick={openStudentTour}
+                title="How to use Exam Cracker"
+                aria-label="Open student tutorial"
+                className="inline-flex h-8 items-center gap-1 rounded-full border border-brand-200/80 bg-brand-50/80 px-2.5 text-[11px] font-bold text-brand-700 transition hover:bg-brand-100"
+              >
+                <HelpCircle size={13} />
+                <span className="hidden sm:inline">Guide</span>
+              </button>
+            ) : null}
+            {user && navigation.showSearch && features.search ? (
               <Link
                 href="/search"
                 className="grid h-9 w-9 place-items-center rounded-full text-ink-500 transition hover:bg-black/5 hover:text-ink-800"
@@ -111,8 +119,8 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
               >
                 <Search size={17} />
               </Link>
-            )}
-            {user && features.notifications && (
+            ) : null}
+            {user && features.notifications ? (
               <Link
                 href="/notifications"
                 className="relative grid h-9 w-9 place-items-center rounded-full text-ink-500 transition hover:bg-black/5 hover:text-ink-800"
@@ -120,9 +128,13 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
               >
                 <Bell size={17} />
               </Link>
-            )}
-            {user && (
-              <Link href="/profile" className="ml-0.5 grid place-items-center rounded-full p-0.5 ring-1 ring-black/5" aria-label="Profile">
+            ) : null}
+            {user ? (
+              <Link
+                href="/profile"
+                className="ml-0.5 grid place-items-center rounded-full p-0.5 ring-1 ring-black/5"
+                aria-label="Profile"
+              >
                 <ProfileImage
                   src={profile?.avatar_url}
                   name={profile?.display_name || user.displayName || 'Student'}
@@ -130,10 +142,10 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
                   textClassName="text-[10px]"
                 />
               </Link>
-            )}
-            {user && (
+            ) : null}
+            {user ? (
               <div className="ml-1 hidden items-center gap-1.5 border-l border-ink-100 pl-2 lg:flex">
-                <div className="max-w-[150px] text-right">
+                <div className="max-w-[140px] text-right">
                   <p className="truncate text-[0.76rem] font-bold leading-none">
                     {profile?.display_name || user.displayName || user.email}
                   </p>
@@ -141,11 +153,11 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
                     {profile ? `${profile.exam} · ${formatClassLevel(profile.class_level)}` : user.email}
                   </p>
                 </div>
-                {isAdmin && (
+                {isAdmin ? (
                   <Link href="/admin" className="ec-nav-cta">
                     <LayoutDashboard size={13} /> Admin
                   </Link>
-                )}
+                ) : null}
                 <button
                   type="button"
                   onClick={signOut}
@@ -155,17 +167,17 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
                   <LogOut size={16} />
                 </button>
               </div>
-            )}
-            {user && isAdmin && (
+            ) : null}
+            {user && isAdmin ? (
               <Link href="/admin" className="ec-nav-cta lg:hidden">
                 Admin
               </Link>
-            )}
-            {!user && (
+            ) : null}
+            {!user ? (
               <Link href="/login" className="ec-nav-cta">
                 Sign in
               </Link>
-            )}
+            ) : null}
           </div>
         </header>
       </div>

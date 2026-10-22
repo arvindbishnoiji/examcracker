@@ -29,6 +29,7 @@ import {
   visibleItems,
 } from '@/components/home/ClassicHome';
 import { AdminPageHeader, Banner, ConfirmDialog, Field, Panel, Segmented, Spinner, StatusPill, Toggle } from '../ui';
+import { ImageField } from '../ImageField';
 import { PreviewFrame, type PreviewDevice } from '../PreviewFrame';
 import { SettingsPublishBar } from '../SettingsPublishBar';
 
@@ -323,12 +324,13 @@ function HeroEditor({
           </Field>
         </div>
       )}
-      <Field
-        label="Image URL"
+      <ImageField
+        label="Hero Image (URL or Google Drive)"
         help={hero.style === 'image' ? 'Required for this style — used as the panel background.' : 'Optional — shown on the right when quick stats are off.'}
-      >
-        <input className="ec-field" value={hero.imageUrl} placeholder="https://…" onChange={(event) => onChange({ imageUrl: event.target.value })} />
-      </Field>
+        context="home_hero"
+        value={hero.imageUrl}
+        onChange={(imageUrl) => onChange({ imageUrl })}
+      />
       <Toggle
         checked={hero.showProfileChips}
         onChange={(showProfileChips) => onChange({ showProfileChips })}
@@ -624,9 +626,12 @@ export function HomepageBuilderSection() {
                             <Field label="Body copy">
                               <textarea className="ec-field" rows={4} value={section.body} onChange={(event) => patchSection(section.id, { body: event.target.value })} />
                             </Field>
-                            <Field label="Image URL">
-                              <input className="ec-field" value={section.imageUrl} placeholder="https://…" onChange={(event) => patchSection(section.id, { imageUrl: event.target.value })} />
-                            </Field>
+                            <ImageField
+                              label="Section Image (URL or Google Drive)"
+                              context="home_section"
+                              value={section.imageUrl}
+                              onChange={(imageUrl) => patchSection(section.id, { imageUrl })}
+                            />
                           </div>
                         )}
 

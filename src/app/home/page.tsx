@@ -8,14 +8,23 @@ import { useSiteConfig } from '@/context/SiteConfigContext';
 import { useToast } from '@/hooks/useToast';
 import type {
   Announcement,
+  BadgeCatalogueEntry,
   CourseCatalogItem,
   HomeSectionConfig,
   LeaderboardEntry,
   LibraryItem,
+  StudentBadge,
   StudyChallenge,
   TestCardItem,
 } from '@/types';
-import { getStudentAnalysis, getStudentLibrary, getStudentTests, getTestLeaderboard, saveStudentLibraryItem } from '@/lib/api';
+import {
+  getMyBadges,
+  getStudentAnalysis,
+  getStudentLibrary,
+  getStudentTests,
+  getTestLeaderboard,
+  saveStudentLibraryItem,
+} from '@/lib/api';
 import { formatISTDateTime, formatWatchDuration, isScheduleActiveNow } from '@/lib/date';
 import { formatClassLevel, formatClassList, isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
 import { activeEnrollmentKeys } from '@/lib/enrollment';
@@ -30,6 +39,8 @@ import YoutubeThumbnail from '@/components/YoutubeThumbnail';
 import { BannerCarousel } from '@/components/banners/BannerCarousel';
 import { PopupHost } from '@/components/site/PopupHost';
 import { BatchShowcase } from '@/components/batches/BatchShowcase';
+import { BadgeShowcaseSection } from '@/components/student/AnimatedBadge';
+import { StudentStudyHub } from '@/components/student/StudentStudyHub';
 import {
   ClassicSection,
   FeatureCards,
@@ -187,6 +198,8 @@ export default function HomePage() {
   const [tests, setTests] = useState<TestCardItem[]>([]);
   const [analysis, setAnalysis] = useState<Awaited<ReturnType<typeof getStudentAnalysis>> | null>(null);
   const [library, setLibrary] = useState<LibraryItem[]>([]);
+  const [earnedBadges, setEarnedBadges] = useState<StudentBadge[]>([]);
+  const [badgeCatalogue, setBadgeCatalogue] = useState<BadgeCatalogueEntry[]>([]);
   const [leaders, setLeaders] = useState<LeaderboardEntry[]>([]);
   const [leaderError, setLeaderError] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
@@ -201,15 +214,20 @@ export default function HomePage() {
     if (!profile) return;
     setDataLoading(true);
     setLeaderError(false);
-    const [testsResult, analysisResult, libraryResult] = await Promise.allSettled([
+    const [testsResult, analysisResult, libraryResult, badgesResult] = await Promise.allSettled([
       getStudentTests(),
       getStudentAnalysis(),
       getStudentLibrary(),
+      getMyBadges(),
     ]);
     const fetchedTests = testsResult.status === 'fulfilled' ? testsResult.value : [];
     setTests(fetchedTests);
     if (analysisResult.status === 'fulfilled') setAnalysis(analysisResult.value);
     if (libraryResult.status === 'fulfilled') setLibrary(libraryResult.value);
+    if (badgesResult.status === 'fulfilled') {
+      setEarnedBadges(badgesResult.value.items || []);
+      setBadgeCatalogue(badgesResult.value.catalogue || []);
+    }
 
     const primaryTest = fetchedTests.find((t) => t.isLive) || fetchedTests[0];
     if (primaryTest?.id) {
@@ -773,6 +791,33 @@ export default function HomePage() {
             Search
           </button>
         </form>
+      )}
+
+      <StudentStudyHub
+        uid={profile.firebase_uid}
+        exam={profile.exam}
+        enrolledCount={enrolledCount}
+        liveTestsCount={liveTests.length}
+        totalTestsCount={tests.length}
+        earnedBadgesCount={earnedBadges.length}
+        streak={streak}
+        resumeLecture={resumeLecture || null}
+        resumeWatchedMinutes={
+          resumeLecture && progressByLecture.get(resumeLecture.id)
+            ? Math.max(0, Math.round((progressByLecture.get(resumeLecture.id)?.watched_seconds || 0) / 60))
+            : 0
+        }
+        nextTest={nextTest || null}
+      />
+
+      {(earnedBadges.length > 0 || badgeCatalogue.length > 0) && (
+        <BadgeShowcaseSection
+          compact
+          earnedBadges={earnedBadges}
+          catalogue={badgeCatalogue}
+          title="Your Badges & Milestones"
+          subtitle="Tap any badge to check Kaise Milega unlock targets and see live animations."
+        />
       )}
 
       {sections.map((section) => renderSection(section))}

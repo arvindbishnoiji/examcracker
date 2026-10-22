@@ -1,88 +1,97 @@
 'use client';
 
-import Link from 'next/link';
+import { useState } from 'react';
 import AdminLegacyPanel, { type AdminTab } from '@/app/admin/_legacy/AdminLegacyPanel';
-import { AdminPageHeader, Banner } from '../ui';
+import { BatchStudioSection } from './BatchStudioSection';
+import { AdminPageHeader, Banner, Segmented } from '../ui';
 
 const COPY: Record<string, { title: string; description: string }> = {
   goals: {
-    title: "Today's Goals",
-    description: 'Daily targets with IST schedules, CTAs and exam/class targeting — managed by the original, working content console.',
+    title: 'Daily Study Goals',
+    description: 'Create daily targets with IST schedules, CTAs, and JEE/NEET class targeting.',
   },
   batches: {
-    title: 'Batches',
-    description: 'Create a batch, open its workspace, assign subjects and add lectures in the correct learning path.',
+    title: 'Batches & Visual Card Studio',
+    description: 'Manage batches, assign subjects & lectures, or switch to Card Studio to design animated batch cards.',
   },
   series: {
-    title: 'Series',
-    description: 'Organize series by subject or chapter, then add ordered lectures and resources beneath each subject.',
+    title: 'Chapter Series',
+    description: 'Create topic/subject series, assign subjects, and add ordered lectures and PDF resources.',
   },
   lectures: {
-    title: 'Lectures & Resources',
-    description: 'Search the lecture library or open a batch/series subject workspace to add content in context.',
+    title: 'Lectures & PDF Notes',
+    description: 'Add video lectures, attach PDF notes, or import an entire YouTube playlist into a subject.',
   },
   tests: {
-    title: 'Tests & Question Banks',
-    description: 'Schedules, marks and validated JSON question banks.',
+    title: 'Mock Tests & Question Banks',
+    description: 'Configure NTA-style test schedules, marks, negative marking, and question banks.',
   },
   events: {
-    title: 'Events & Calendar',
-    description: 'Mock tests, marathons, doubt sessions and result announcements.',
+    title: 'Events & Revision Marathons',
+    description: 'Schedule live doubt sessions, revision marathons, and mock test announcements.',
   },
   announcements: {
-    title: 'Announcements',
-    description: 'Scheduled notices targeted by exam and class.',
+    title: 'Student Announcements',
+    description: 'Post notices targeted to JEE, NEET, Class 11, Class 12, or Dropper students.',
   },
   students: {
     title: 'Students & Enrollments',
-    description: 'Search student profiles, inspect onboarding choices and manage batch/series access.',
-  },
-  chat: {
-    title: 'Student Chat',
-    description: 'Reply to student threads in real time.',
-  },
-  classic: {
-    title: 'Classic Content Tools',
-    description: 'The complete original admin console. Nothing here has been removed or altered.',
+    description: 'Search student profiles and grant or revoke batch/series access.',
   },
 };
 
 export function ContentToolSection({ slug }: { slug: string }) {
-  const copy = COPY[slug] || COPY.classic;
-  const tab: AdminTab =
-    slug === 'classic'
-      ? 'overview'
-      : (slug as AdminTab);
+  const [batchView, setBatchView] = useState<'manage' | 'studio'>('manage');
+  const copy = COPY[slug] || {
+    title: 'Content Manager',
+    description: 'Manage persisted learning content in Cloudflare D1.',
+  };
+
+  if (slug === 'batches' && batchView === 'studio') {
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Segmented
+            options={[
+              { value: 'manage', label: '1. Manage Batches, Subjects & Lectures' },
+              { value: 'studio', label: '2. Design Batch Card Appearance' },
+            ]}
+            value={batchView}
+            onChange={setBatchView}
+          />
+        </div>
+        <BatchStudioSection />
+      </div>
+    );
+  }
+
+  const tab: AdminTab = slug as AdminTab;
+
   return (
     <div>
       <AdminPageHeader
-        eyebrow={slug === 'classic' ? 'System' : 'Learning'}
+        eyebrow="Courses & Content"
         title={copy.title}
         description={copy.description}
-        meta={
-          <>
-            <span className="rounded-full border border-ink-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-ink-600">
-              Stored in Cloudflare D1
-            </span>
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
-              Preserved workflow
-            </span>
-          </>
+        actions={
+          slug === 'batches' ? (
+            <Segmented
+              options={[
+                { value: 'manage', label: 'Manage Batches & Subjects' },
+                { value: 'studio', label: 'Batch Card Studio' },
+              ]}
+              value={batchView}
+              onChange={setBatchView}
+            />
+          ) : undefined
         }
       />
-      <Banner tone="info" title="Manage persisted learning content">
-        Changes are saved through the authenticated D1 API. For a batch or series, choose Manage → assign or create a subject → Open subject · Add lecture. Disable preserves records; permanent deletion is guarded when students, progress, files or relationships still depend on an item.
+
+      <Banner tone="info" title="Quick workflow tip">
+        For any Batch or Series: click <strong>Manage</strong> → assign or create a <strong>Subject</strong> → click{' '}
+        <strong>Open subject · Add lecture</strong> so students see clean chapter-wise queues.
       </Banner>
-      {(slug === 'batches' || slug === 'series') && (
-        <div className="mb-4">
-          <Banner tone="brand" title="Prefer a visual, animated batch card?">
-            The new <strong>Batch Studio</strong> lets you build the student-facing card directly: cover image link,
-            badge, schedule, class targeting, page placement, accent colour, entrance motion and completion reward —
-            all with a live preview. This classic console still manages subjects, lectures and access codes.
-            <Link href="/admin/batch-studio" className="ml-1.5 font-bold underline">Open Batch Studio →</Link>
-          </Banner>
-        </div>
-      )}
+
       <div className="mt-4">
         <AdminLegacyPanel embedded initialTab={tab} />
       </div>

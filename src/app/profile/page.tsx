@@ -2,7 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Award, BadgeCheck, BookOpenCheck, GraduationCap, LogOut, MessageCircle, Pencil, PlayCircle, Sparkles, Timer, Trophy } from 'lucide-react';
+import {
+  Award,
+  BadgeCheck,
+  BookOpenCheck,
+  GraduationCap,
+  HelpCircle,
+  LogOut,
+  MessageCircle,
+  Pencil,
+  PlayCircle,
+  Sparkles,
+  Timer,
+  Trophy,
+} from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { getMyBadges, getStudentAnalysis, getStudentTests, saveStudentProfile } from '@/lib/api';
@@ -11,11 +24,21 @@ import { Button } from '@/components/ui/Button';
 import { useToast } from '@/hooks/useToast';
 import { formatWatchDuration } from '@/lib/date';
 import { formatClassLevel } from '@/lib/validation';
-import type { AnalysisResponse, ClassLevel, ExamTrack, StudentBadge, StudentProfile, TestCardItem } from '@/types';
+import type {
+  AnalysisResponse,
+  BadgeCatalogueEntry,
+  ClassLevel,
+  ExamTrack,
+  StudentBadge,
+  StudentProfile,
+  TestCardItem,
+} from '@/types';
 import { visibleSectionIds } from '@/lib/screen-config';
 import { ScreenAnnouncementBanner, ScreenHelpNote, ScreenPageHeader } from '@/components/student/ScreenScaffold';
 import { pageIdentity } from '@/lib/page-identity';
 import { ProfileAvatar } from '@/components/student/ProfileAvatar';
+import { BadgeShowcaseSection } from '@/components/student/AnimatedBadge';
+import { openStudentTour } from '@/components/student/StudentTour';
 
 export default function ProfileAnalysisPage() {
   const { profile, user, bootstrap, signOut, refresh } = useAuth();
@@ -25,6 +48,7 @@ export default function ProfileAnalysisPage() {
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
   const [tests, setTests] = useState<TestCardItem[]>([]);
   const [studentBadges, setStudentBadges] = useState<StudentBadge[]>([]);
+  const [badgeCatalogue, setBadgeCatalogue] = useState<BadgeCatalogueEntry[]>([]);
   const [isVerified, setIsVerified] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,11 +68,12 @@ export default function ProfileAnalysisPage() {
       const [analysisData, testData, badgeData] = await Promise.all([
         getStudentAnalysis(),
         getStudentTests().catch(() => []),
-        getMyBadges().catch(() => ({ items: [], verified: false })),
+        getMyBadges().catch(() => ({ items: [], verified: false, catalogue: [] })),
       ]);
       setAnalysis(analysisData);
       setTests(testData);
       setStudentBadges(badgeData.items);
+      setBadgeCatalogue(badgeData.catalogue || []);
       setIsVerified(badgeData.verified);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load your analysis.');
@@ -162,6 +187,9 @@ export default function ProfileAnalysisPage() {
               >
                 <MessageCircle size={14} /> {screen.askDoubtLabel}
               </Link>
+              <Button variant="outline" size="sm" onClick={openStudentTour}>
+                <HelpCircle size={13} className="mr-1.5" /> App Guide
+              </Button>
               {screen.allowProfileEdit ? (
                 <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
                   <Pencil size={13} className="mr-1.5" /> {screen.editLabel}
@@ -367,23 +395,14 @@ export default function ProfileAnalysisPage() {
 
       {sections.map((id) => renderSection(id))}
 
-      <Card className="p-4 sm:p-5" aria-labelledby="achievements-heading">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div><h2 id="achievements-heading" className="text-base font-bold">Achievements</h2><p className="mt-0.5 text-xs text-ink-500">Recognition awarded to your account by Exam Cracker.</p></div>
-          <span className="text-xs text-ink-500">{studentBadges.length} earned</span>
-        </div>
-        {studentBadges.length ? <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {studentBadges.map((badge) => <li key={badge.id} title={`${badge.title}. ${badge.description || badge.criteria || ''}`} className={`min-w-0 rounded-2xl border p-3 ${badge.rarity === 'legendary' ? 'border-amber-300 bg-amber-50/70' : badge.rarity === 'epic' ? 'border-violet-200 bg-violet-50/60' : badge.rarity === 'rare' ? 'border-sky-200 bg-sky-50/60' : 'border-ink-100 bg-[var(--ec-surface)]'}`}>
-            <div className="mx-auto grid h-16 w-16 place-items-center overflow-hidden rounded-2xl bg-white text-brand-700 shadow-sm">
-              {badge.image_url ? <img src={badge.image_url} alt="" loading="lazy" className="h-full w-full object-cover" /> : badge.category === 'verified' ? <BadgeCheck size={30} className="text-blue-600" aria-hidden="true" /> : <Award size={30} aria-hidden="true" />}
-            </div>
-            <p className="mt-2 truncate text-center text-sm font-bold">{badge.title}</p>
-            {badge.description && <p className="mt-0.5 line-clamp-2 text-center text-xs text-ink-500">{badge.description}</p>}
-            <p className="mt-2 text-center text-[10px] text-ink-400">Earned {new Date(badge.awarded_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })}</p>
-            {badge.reason && <p className="mt-1 line-clamp-2 text-center text-[10px] text-ink-500">{badge.reason}</p>}
-          </li>)}
-        </ul> : <p className="mt-4 rounded-xl border border-dashed border-ink-200 bg-ink-50/50 p-4 text-center text-sm text-ink-500">Your earned badges will appear here when you receive one.</p>}
-      </Card>
+      <div id="achievements-heading">
+        <BadgeShowcaseSection
+          earnedBadges={studentBadges}
+          catalogue={badgeCatalogue}
+          title="Achievements & Animated Badges"
+          subtitle="Tap any badge to view its full animation, Kaise Milega unlock rules, and your real-time study progress."
+        />
+      </div>
 
       <ScreenHelpNote help={screen.help} />
 

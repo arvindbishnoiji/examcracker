@@ -7,6 +7,7 @@ import { makeId } from '@/lib/site-config';
 import { isSafeHttpUrl } from '@/lib/validation';
 import { AdminPageHeader, ConfirmDialog, Field, Modal, Panel, Spinner, StatusPill, Toggle } from '../ui';
 import { SettingsPublishBar } from '../SettingsPublishBar';
+import { ImageField } from '../ImageField';
 
 function createTestimonial(order: number): Testimonial {
   return {
@@ -183,9 +184,14 @@ export function TestimonialsSection() {
                 <textarea className="ec-field" rows={4} value={editing.quote} onChange={(event) => patch(editing.id, { quote: event.target.value })} />
               </Field>
             </div>
-            <Field label="Avatar image URL">
-              <input className="ec-field" value={editing.avatarUrl} placeholder="https://…" onChange={(event) => patch(editing.id, { avatarUrl: event.target.value })} />
-            </Field>
+            <ImageField
+              label="Student Avatar Photo (URL or Google Drive)"
+              help="Paste an image link OR upload photo to Google Drive (with square crop)."
+              context="testimonial_avatar"
+              preferSquareCrop
+              value={editing.avatarUrl}
+              onChange={(avatarUrl) => patch(editing.id, { avatarUrl })}
+            />
             <Field label="Rating">
               <select className="ec-field" value={editing.rating} onChange={(event) => patch(editing.id, { rating: Number(event.target.value) })}>
                 {[5, 4, 3, 2, 1].map((rating) => (

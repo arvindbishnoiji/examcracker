@@ -33,6 +33,7 @@ import {
 } from '../ui';
 import { LinkListEditor, StringListEditor } from '../ListEditors';
 import { SettingsPublishBar } from '../SettingsPublishBar';
+import { ImageField } from '../ImageField';
 
 function PublishBar<T extends object>({ workspace }: { workspace: SettingWorkspace<T> }) {
   return (
@@ -307,15 +308,26 @@ export function SearchSeoSection() {
       <div className="grid gap-4 xl:grid-cols-2 mt-5 items-start">
         <Panel title="Metadata">
           <div className="space-y-3">
-            {fields.map((field) => (
-              <Field key={String(field.key)} label={field.label} help={field.help}>
-                {field.textarea ? (
-                  <textarea className="ec-field" rows={3} value={String(draft[field.key] || '')} onChange={(event) => update({ [field.key]: event.target.value } as Partial<SeoConfig>)} />
-                ) : (
-                  <input className="ec-field" value={String(draft[field.key] || '')} onChange={(event) => update({ [field.key]: event.target.value } as Partial<SeoConfig>)} />
-                )}
-              </Field>
-            ))}
+            {fields.map((field) =>
+              field.key === 'ogImageUrl' ? (
+                <ImageField
+                  key={String(field.key)}
+                  label="Open Graph image (URL or Google Drive)"
+                  help={field.help}
+                  context="seo_og"
+                  value={String(draft.ogImageUrl || '')}
+                  onChange={(ogImageUrl) => update({ ogImageUrl })}
+                />
+              ) : (
+                <Field key={String(field.key)} label={field.label} help={field.help}>
+                  {field.textarea ? (
+                    <textarea className="ec-field" rows={3} value={String(draft[field.key] || '')} onChange={(event) => update({ [field.key]: event.target.value } as Partial<SeoConfig>)} />
+                  ) : (
+                    <input className="ec-field" value={String(draft[field.key] || '')} onChange={(event) => update({ [field.key]: event.target.value } as Partial<SeoConfig>)} />
+                  )}
+                </Field>
+              )
+            )}
             <Toggle checked={draft.robotsIndex} onChange={(robotsIndex) => update({ robotsIndex })} label="Allow search engine indexing" />
           </div>
         </Panel>
@@ -733,9 +745,21 @@ export function MediaSection() {
           <Field label="Name" required>
             <input className="ec-field" value={form.name} placeholder="JEE Hero Banner 16:9" onChange={(event) => setForm({ ...form, name: event.target.value })} />
           </Field>
-          <Field label="Asset URL" required help="Must be an https:// URL.">
-            <input className={`ec-field ${form.url && !isSafeHttpUrl(form.url) ? '!border-red-300' : ''}`} value={form.url} placeholder="https://…" onChange={(event) => setForm({ ...form, url: event.target.value })} />
-          </Field>
+          <ImageField
+            label="Asset URL or Google Drive Image Upload"
+            required
+            help="Paste an https:// link OR upload an image directly to Google Drive for instant reuse across banners, cards & pages."
+            context="media_library"
+            value={form.url}
+            onChange={(url, uploaded) =>
+              setForm((prev) => ({
+                ...prev,
+                url,
+                name: prev.name.trim() || uploaded?.displayName?.replace(/\.[^.]+$/, '') || prev.name,
+                type: uploaded ? 'image' : prev.type,
+              }))
+            }
+          />
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Type">
               <select className="ec-field" value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as MediaAssetType })}>

@@ -426,7 +426,7 @@ export function ConfirmDialog({
         </>
       }
     >
-      <p className="text-sm text-ink-500">This action is recorded in the admin activity trail.</p>
+      <p className="text-sm text-ink-500">Please review carefully before confirming.</p>
     </Modal>
   );
 }
