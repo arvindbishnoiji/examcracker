@@ -3,7 +3,7 @@ import { inspectAppsScriptDriveStatus, isAppsScriptDriveConfigured, uploadViaApp
 
 const env = {
   GOOGLE_APPS_SCRIPT_URL: "https://script.google.com/macros/s/test-deployment/exec",
-  GOOGLE_APPS_SCRIPT_SHARED_SECRET: "test-secret-never-log",
+  GOOGLE_APPS_SCRIPT_SHARED_SECRET: "test-secret-never-log-0123456789abcd",
   GOOGLE_DRIVE_FOLDER_ID: "folder_123",
 };
 
@@ -22,7 +22,7 @@ describe("Apps Script personal Gmail Drive bridge", () => {
   it("posts bytes as base64 with the shared secret and returns confirmed file metadata", async () => {
     const fetchImpl = vi.fn(async (_url, options) => {
       const body = JSON.parse(options.body);
-      expect(body.secret).toBe("test-secret-never-log");
+      expect(body.secret).toBe("test-secret-never-log-0123456789abcd");
       expect(body.action).toBe("upload");
       expect(body.folderId).toBe("folder_123");
       expect(body.base64Data).toBe("aGVsbG8=");
@@ -82,12 +82,12 @@ describe("Apps Script personal Gmail Drive bridge", () => {
     const fetchImpl = vi.fn(async (_url, options) => {
       const body = JSON.parse(options.body);
       expect(body.action).toBe("status");
-      expect(body.secret).toBe("test-secret-never-log");
+      expect(body.secret).toBe("test-secret-never-log-0123456789abcd");
       return jsonResponse({ status: "success", folderName: "Exam Cracker Images", canAddChildren: true });
     });
     const result = await inspectAppsScriptDriveStatus(env, "folder_123", fetchImpl);
     expect(result).toMatchObject({ ok: true, code: "READY", folderName: "Exam Cracker Images", canAddChildren: true });
-    expect(JSON.stringify(result)).not.toContain("test-secret-never-log");
+    expect(JSON.stringify(result)).not.toContain("test-secret-never-log-0123456789abcd");
   });
 
   it("enforces the 20 MB Apps Script bridge limit", async () => {
