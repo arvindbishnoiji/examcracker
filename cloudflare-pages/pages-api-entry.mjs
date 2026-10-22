@@ -50,9 +50,7 @@ function hasLocalServiceAccountCredentials(env) {
 function hasLocalAppsScriptCredentials(env) {
   return (
     typeof env?.GOOGLE_APPS_SCRIPT_URL === "string" &&
-    Boolean(env.GOOGLE_APPS_SCRIPT_URL.trim()) &&
-    typeof env?.GOOGLE_APPS_SCRIPT_SHARED_SECRET === "string" &&
-    Boolean(env.GOOGLE_APPS_SCRIPT_SHARED_SECRET.trim())
+    Boolean(env.GOOGLE_APPS_SCRIPT_URL.trim())
   );
 }
 
