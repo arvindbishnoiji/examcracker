@@ -57,7 +57,7 @@ const TILES: FeatureTile[] = [
   {
     key: 'challenges',
     label: 'Challenges',
-    description: 'Sprints that pay you back with real rewards.',
+    description: 'Sprints to help you stay consistent and finish your targets.',
     href: '/challenges',
     tint: 'var(--ec-c3)',
     span: '2x1',
@@ -116,7 +116,7 @@ export function FeatureStrip() {
         <div>
           <p className="text-[0.62rem] font-extrabold uppercase tracking-[0.18em] text-ink-400">Inside the app</p>
           <h2 className="mt-1 text-[1.05rem] font-extrabold tracking-[-0.02em]">
-            Eight doors. One preparation system.
+            {tiles.length} paths. One preparation system.
           </h2>
         </div>
         <Link href="/lectures" className="ec-sec-link">
