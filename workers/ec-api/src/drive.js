@@ -1,9 +1,10 @@
 /**
  * Google Drive server-side integration for the Exam Cracker Worker.
  *
- * The service account is read only from server-side Worker secrets:
- *   GOOGLE_SERVICE_ACCOUNT_JSON  (secret)
- *   GOOGLE_DRIVE_FOLDER_ID       (var or secret)
+ * Credentials are read only from server-side secrets:
+ *   GOOGLE_SERVICE_ACCOUNT_JSON (for private reads/deletes and legacy uploads)
+ *   GOOGLE_APPS_SCRIPT_URL + GOOGLE_APPS_SCRIPT_SHARED_SECRET (personal Gmail uploads)
+ *   GOOGLE_DRIVE_FOLDER_ID (var or secret)
  *   GOOGLE_DRIVE_PROFILE_FOLDER_ID / GOOGLE_DRIVE_PDF_FOLDER_ID (optional)
  *
  * Nothing in this module writes credentials, access tokens or file bytes to
