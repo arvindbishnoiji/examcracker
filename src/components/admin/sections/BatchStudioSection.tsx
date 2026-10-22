@@ -817,6 +817,9 @@ export function BatchStudioSection() {
                     </Field>
 
                     <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+                      <p className="mb-2 text-[11px] leading-relaxed text-amber-900">
+                        Display-only reward messaging. This setting does not automatically grant XP, badges, certificates, discounts, cash awards or course access; fulfillment must be handled separately.
+                      </p>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs font-bold text-amber-900">Completion reward</p>
                         <Toggle
