@@ -9,6 +9,78 @@ import { LoginShell, LoginFormPreview } from '@/components/login/LoginShell';
 import { PlayCircle, ArrowRight, BookOpenCheck, Flame, Trophy, GraduationCap } from 'lucide-react';
 import { BatchShowcase } from '@/components/batches/BatchShowcase';
 import { FeatureStrip } from '@/components/site/FeatureStrip';
+import { PageIdentityHero } from '@/components/student/PageHero';
+import { PAGE_IDENTITIES, identityGradient, type PageKey } from '@/lib/page-identity';
+
+/** The order the gallery walks through, so the page reads like the real nav. */
+const IDENTITY_ORDER: PageKey[] = [
+  'home',
+  'lectures',
+  'tests',
+  'challenges',
+  'leaderboard',
+  'events',
+  'chat',
+  'notifications',
+  'search',
+  'profile',
+  'feedback',
+];
+
+function PageIdentityGallery() {
+  return (
+    <section className="space-y-4">
+      <div>
+        <p className="ec-eyebrow-pill">
+          <Sparkles size={12} /> Per-page identity
+        </p>
+        <h2 className="mt-2 text-xl font-extrabold tracking-[-0.02em]">
+          Eleven screens, eleven personalities
+        </h2>
+        <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-500">
+          Each student page opens with its own gradient, its own pattern, its own glyph and a plain-language
+          &ldquo;you can do this here&rdquo; card. Colour alone tells you where you are.
+        </p>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        {IDENTITY_ORDER.map((key) => {
+          const identity = PAGE_IDENTITIES[key];
+          return (
+            <div
+              key={key}
+              className="relative overflow-hidden rounded-2xl p-3 text-white"
+              style={{ background: identityGradient(identity) }}
+            >
+              <span className="text-[0.62rem] font-extrabold uppercase tracking-[0.14em] text-white/70">
+                {identity.label}
+              </span>
+              <p className="mt-0.5 text-[0.95rem] font-extrabold leading-tight tracking-[-0.02em]">
+                {identity.kicker}
+              </p>
+              <p className="mt-1 text-[0.68rem] leading-snug text-white/70">{identity.canDo[0]}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        {IDENTITY_ORDER.map((key) => {
+          const identity = PAGE_IDENTITIES[key];
+          return (
+            <PageIdentityHero
+              key={key}
+              identity={identity}
+              title={identity.label}
+              description={identity.kicker}
+              headingLevel="h3"
+            />
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 /**
  * Internal storefront style guide (noindex).
@@ -300,6 +372,8 @@ export default function DesignPreviewPage() {
         </section>
 
         <FeatureStrip />
+
+        <PageIdentityGallery />
 
         <BatchShowcase
           batches={SAMPLE_BATCHES}

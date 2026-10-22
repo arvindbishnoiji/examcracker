@@ -40,6 +40,7 @@ import {
   ScreenSection,
   screenGridClass,
 } from '@/components/student/ScreenScaffold';
+import { pageIdentity } from '@/lib/page-identity';
 
 type Tab = 'batches' | 'series' | 'lectures' | 'resources';
 
@@ -603,6 +604,7 @@ function LecturesHubPageInner() {
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <ScreenPageHeader
+        identity={pageIdentity('lectures')}
         showHeader={screen.showHeader}
         eyebrow={screen.eyebrow}
         title={screen.pageTitle}

@@ -15,6 +15,7 @@ import {
   ScreenHelpNote,
   ScreenPageHeader,
 } from '@/components/student/ScreenScaffold';
+import { pageIdentity } from '@/lib/page-identity';
 
 type ResultKind = 'lecture' | 'test' | 'batch' | 'series' | 'event' | 'announcement';
 
@@ -207,6 +208,7 @@ function SearchScreen() {
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <ScreenPageHeader
+        identity={pageIdentity('search')}
         showHeader={screen.showHeader}
         eyebrow={screen.eyebrow}
         title={screen.pageTitle}

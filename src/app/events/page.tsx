@@ -17,6 +17,7 @@ import {
   ScreenSection,
   screenGridClass,
 } from '@/components/student/ScreenScaffold';
+import { pageIdentity } from '@/lib/page-identity';
 
 type EventState = 'live' | 'upcoming' | 'completed' | 'unscheduled';
 
@@ -278,6 +279,7 @@ export default function EventsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <ScreenPageHeader
+        identity={pageIdentity('events')}
         showHeader={screen.showHeader}
         eyebrow={screen.eyebrow}
         title={screen.pageTitle}

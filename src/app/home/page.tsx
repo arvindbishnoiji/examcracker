@@ -20,7 +20,7 @@ import { formatISTDateTime, formatWatchDuration, isScheduleActiveNow } from '@/l
 import { formatClassLevel, formatClassList, isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
 import { activeEnrollmentKeys } from '@/lib/enrollment';
 import { activityStreak } from '@/lib/progress';
-import { ArrowRight, BookOpenCheck, Flame, GraduationCap, PlayCircle, Search, Sparkles, Trophy } from 'lucide-react';
+import { ArrowRight, BookOpenCheck, Flame, GraduationCap, Layers, PlayCircle, Search, Sparkles, Trophy } from 'lucide-react';
 import {
   getHomeSectionsForStudent,
   selectBannersForPlacement,
@@ -31,6 +31,7 @@ import { BannerCarousel } from '@/components/banners/BannerCarousel';
 import { PopupHost } from '@/components/site/PopupHost';
 import { BatchShowcase } from '@/components/batches/BatchShowcase';
 import { FeatureStrip } from '@/components/site/FeatureStrip';
+import { Reveal } from '@/components/motion/Reveal';
 
 function sectionTint(seed: string): string {
   let hash = 0;
@@ -185,22 +186,99 @@ function ChallengeCard({
   joined: boolean;
   onToggle: () => void;
 }) {
+  const tint = challenge.color || 'var(--ec-c3)';
   return (
-    <div className="ec-card p-4" style={{ borderTop: `4px solid ${challenge.color || 'var(--ec-brand)'}` }}>
+    <div
+      className="ec-tile relative overflow-hidden p-4"
+      style={{
+        ['--bento' as string]: tint,
+        background: `radial-gradient(320px 140px at 100% 0%, color-mix(in srgb, ${tint} 20%, transparent), transparent 70%), var(--ec-surface)`,
+        borderColor: `color-mix(in srgb, ${tint} 30%, var(--ec-border))`,
+      }}
+    >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-bold">{challenge.title}</p>
-        <span className="text-[10px] font-bold rounded-full bg-ink-100 px-2 py-0.5">{challenge.targetCount} {challenge.targetType}</span>
+        <div className="flex items-center gap-2">
+          <span
+            className="grid h-8 w-8 place-items-center rounded-[11px] text-white"
+            style={{ background: `linear-gradient(140deg, ${tint}, color-mix(in srgb, ${tint} 50%, #fff))` }}
+          >
+            <Flame size={15} />
+          </span>
+          <p className="text-[0.9rem] font-extrabold leading-tight">{challenge.title}</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-ink-100 px-2 py-0.5 text-[0.6rem] font-extrabold text-ink-600">
+          {challenge.targetCount} {challenge.targetType}
+        </span>
       </div>
-      <p className="text-[11px] text-ink-500 mt-1 line-clamp-2">{challenge.description || 'Stay consistent and finish the target.'}</p>
-      {challenge.reward && <p className="text-[11px] font-semibold text-amber-700 mt-1.5">🏅 {challenge.reward}</p>}
+      <p className="mt-2 line-clamp-2 text-[0.76rem] leading-relaxed text-ink-500">
+        {challenge.description || 'Stay consistent and finish the target before the window closes.'}
+      </p>
+      {challenge.reward && (
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-dashed border-amber-300 bg-amber-50 px-2.5 py-1 text-[0.7rem] font-extrabold text-amber-800">
+          🏅 {challenge.reward}
+        </p>
+      )}
       <button
         type="button"
         onClick={onToggle}
-        className={`mt-3 w-full px-3 py-2 text-xs font-bold rounded-[var(--ec-button-radius)] ${joined ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-ink-900 text-white'}`}
+        className={`ec-btn mt-3 flex w-full items-center justify-center gap-1.5 px-3 py-2 text-[0.74rem] font-extrabold ${
+          joined ? 'border border-emerald-200 bg-emerald-50 text-emerald-700' : 'text-white'
+        }`}
+        style={joined ? undefined : { background: `linear-gradient(120deg, ${tint}, color-mix(in srgb, ${tint} 55%, #7c3aed))` }}
       >
-        {joined ? 'Joined ✓ · tap to leave' : 'Join challenge'}
+        {joined ? 'Joined ✓ · tap to leave' : <>Join challenge <ArrowRight size={12} /></>}
       </button>
     </div>
+  );
+}
+
+function HowItWorks() {
+  const steps = [
+    {
+      n: '01',
+      title: 'Pick your batch',
+      body: 'Open Lectures, match the batch to your exam and class, then unlock it with a code if needed.',
+      tint: 'var(--ec-c1)',
+      icon: <Layers size={16} />,
+    },
+    {
+      n: '02',
+      title: 'Watch, read, practise',
+      body: 'Every subject lists ordered lectures and notes — then a timed test turns it into marks.',
+      tint: 'var(--ec-c6)',
+      icon: <PlayCircle size={16} />,
+    },
+    {
+      n: '03',
+      title: 'See progress, claim rewards',
+      body: 'Rank, streak and rewards update from real attempts. No vanity numbers.',
+      tint: 'var(--ec-c3)',
+      icon: <Trophy size={16} />,
+    },
+  ];
+  return (
+    <Reveal motion="fade-up">
+      <div className="grid gap-2.5 md:grid-cols-3">
+        {steps.map((step) => (
+          <div
+            key={step.n}
+            className="ec-bento-tile !min-h-[128px]"
+            style={{ ['--bento' as string]: step.tint }}
+          >
+            <div className="flex items-center justify-between">
+              <span className="ec-bento-icon">{step.icon}</span>
+              <span className="text-[1.5rem] font-black leading-none tracking-[-0.05em] text-transparent" style={{ WebkitTextStroke: `1.3px color-mix(in srgb, ${step.tint} 60%, transparent)` }}>
+                {step.n}
+              </span>
+            </div>
+            <div className="relative z-[1]">
+              <p className="text-[0.9rem] font-extrabold tracking-[-0.02em]">{step.title}</p>
+              <p className="mt-1 text-[0.74rem] leading-relaxed text-ink-500">{step.body}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Reveal>
   );
 }
 
@@ -414,18 +492,37 @@ export default function HomePage() {
                 const images = Array.isArray(meta.images) ? (meta.images as Array<{ url?: string }>) : [];
                 const image = images[0]?.url || customThumbOf(event);
                 return (
-                  <div key={event.id} className="ec-card overflow-hidden">
-                    {image && isSafeHttpUrl(image) && <img src={image} alt="" className="aspect-video w-full object-cover bg-ink-100" loading="lazy" />}
-                    <div className="p-4">
-                      <p className="text-sm font-bold">{event.title}</p>
-                      <p className="text-[11px] text-ink-500 mt-1 line-clamp-2">{event.description}</p>
-                      <p className="text-[11px] font-semibold text-brand-700 mt-2">
+                  <div key={event.id} className="ec-tile flex overflow-hidden" style={{ ['--bento' as string]: 'var(--ec-c7)' }}>
+                    <div
+                      className="flex w-[74px] shrink-0 flex-col items-center justify-center gap-0.5 text-white"
+                      style={{ background: 'linear-gradient(160deg, #047857, #14b8a6)' }}
+                    >
+                      <span className="text-[1.35rem] font-black leading-none tracking-[-0.04em]">
+                        {typeof meta.startsAt === 'string' ? new Date(meta.startsAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit' }) : '—'}
+                      </span>
+                      <span className="text-[0.6rem] font-extrabold uppercase tracking-[0.12em] opacity-90">
+                        {typeof meta.startsAt === 'string' ? new Date(meta.startsAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', month: 'short' }) : 'TBA'}
+                      </span>
+                      <span className="mt-1 rounded-full bg-white/20 px-1.5 py-0.5 text-[0.5rem] font-extrabold uppercase tracking-[0.08em]">
+                        IST
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1 p-3.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-[0.86rem] font-extrabold leading-snug">{event.title}</p>
+                        <ArrowRight size={13} className="mt-1 shrink-0 text-ink-300" />
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-[0.74rem] leading-relaxed text-ink-500">{event.description}</p>
+                      <p className="mt-1.5 text-[0.66rem] font-semibold text-brand-700">
                         {typeof meta.startsAt === 'string' ? formatISTDateTime(meta.startsAt) : 'Schedule soon'}
                         {typeof meta.endsAt === 'string' ? ` → ${formatISTDateTime(meta.endsAt)}` : ''}
                       </p>
+                      {image && isSafeHttpUrl(image) && (
+                        <img src={image} alt="" className="mt-2 h-20 w-full rounded-xl object-cover" loading="lazy" />
+                      )}
                       {typeof meta.deepLink === 'string' && isValidInternalDeepLink(meta.deepLink) && (
-                        <Link href={meta.deepLink} className="inline-flex mt-2 text-[11px] font-bold text-brand-700">
-                          {(meta.ctaLabel as string) || 'View event'} →
+                        <Link href={meta.deepLink} className="ec-sec-link mt-2">
+                          {(meta.ctaLabel as string) || 'View event'} <ArrowRight size={11} />
                         </Link>
                       )}
                     </div>
@@ -512,16 +609,29 @@ export default function HomePage() {
         if (!subjects.length) return null;
         return (
           <SectionShell key={section.id} section={section} index={sectionIndex}>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              {subjects.map((subject) => (
-                <Link
-                  key={subject}
-                  href={`/lectures?q=${encodeURIComponent(subject)}`}
-                  className="ec-card px-3 py-4 text-center text-xs font-bold hover:border-brand-300"
-                >
-                  {subject}
-                </Link>
-              ))}
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+              {subjects.map((subject, subjectIndex) => {
+                const tint = `var(--ec-c${(subjectIndex % 8) + 1})`;
+                return (
+                  <Link
+                    key={subject}
+                    href={`/lectures?q=${encodeURIComponent(subject)}`}
+                    className="ec-bento-tile !min-h-[86px] !px-3 !py-3"
+                    style={{ ['--bento' as string]: tint }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span
+                        className="grid h-9 w-9 place-items-center rounded-[12px] text-[0.82rem] font-black text-white"
+                        style={{ background: `linear-gradient(135deg, ${tint}, color-mix(in srgb, ${tint} 45%, #fff))` }}
+                      >
+                        {subject.slice(0, 2).toUpperCase()}
+                      </span>
+                      <ArrowRight size={13} className="text-ink-300" />
+                    </div>
+                    <p className="relative z-[1] text-[0.82rem] font-extrabold leading-tight">{subject}</p>
+                  </Link>
+                );
+              })}
             </div>
           </SectionShell>
         );
@@ -555,18 +665,29 @@ export default function HomePage() {
         if (!announcements.length) return null;
         return (
           <SectionShell key={section.id} section={section} index={sectionIndex}>
-            <div className="space-y-2">
-              {announcements.slice(0, limit).map((announcement: Announcement) => (
-                <div key={announcement.id} className="ec-card p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-bold">{announcement.title}</p>
-                    <span className="rounded-full bg-brand-50 text-brand-700 px-2 py-0.5 text-[10px] font-bold">{announcement.audience}</span>
+            <ol className="relative space-y-2 border-l-2 border-dashed pl-4" style={{ borderColor: 'color-mix(in srgb, var(--sec-tint) 35%, transparent)' }}>
+              {announcements.slice(0, limit).map((announcement: Announcement, noticeIndex) => (
+                <li key={announcement.id} className="relative">
+                  <span
+                    className="absolute -left-[22px] top-4 h-3 w-3 rounded-full border-2 border-[var(--ec-surface)]"
+                    style={{ background: `var(--ec-c${(noticeIndex % 8) + 1})` }}
+                    aria-hidden
+                  />
+                  <div className="ec-tile p-3.5">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <p className="text-[0.86rem] font-extrabold leading-snug">{announcement.title}</p>
+                      <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[0.6rem] font-extrabold uppercase tracking-[0.06em] text-brand-700">
+                        {announcement.audience}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[0.78rem] leading-relaxed text-ink-600">{announcement.body}</p>
+                    {announcement.scheduled_at && (
+                      <p className="mt-2 text-[0.64rem] font-semibold text-ink-400">{formatISTDateTime(announcement.scheduled_at)}</p>
+                    )}
                   </div>
-                  <p className="text-xs text-ink-600 mt-1">{announcement.body}</p>
-                  {announcement.scheduled_at && <p className="text-[10px] text-ink-400 mt-2">{formatISTDateTime(announcement.scheduled_at)}</p>}
-                </div>
+                </li>
               ))}
-            </div>
+            </ol>
           </SectionShell>
         );
       }
@@ -591,21 +712,57 @@ export default function HomePage() {
         if (!config.features.leaderboard || leaderError || !leaders.length) return null;
         return (
           <SectionShell key={section.id} section={section} index={sectionIndex}>
-            <div className="ec-card p-4">
-              <ol className="space-y-2">
-                {leaders.slice(0, limit).map((entry) => (
-                  <li key={entry.firebaseUid} className="flex items-center gap-2.5">
-                    <span className="h-6 w-6 rounded-full bg-ink-100 grid place-items-center text-[10px] font-bold">{entry.rank}</span>
-                    <span className="text-xs font-semibold flex-1 truncate">{entry.name}</span>
-                    <span className="text-[11px] tabular-nums">{entry.score}/{entry.maxScore}</span>
-                  </li>
-                ))}
-              </ol>
-              {primaryTestId && (
-                <Link href={`/leaderboard?testId=${primaryTestId}`} className="mt-3 inline-flex text-[11px] font-bold text-brand-700">
-                  Full leaderboard →
-                </Link>
-              )}
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+              <div className="grid grid-cols-3 items-end gap-2 rounded-[calc(var(--ec-radius)+2px)] border border-ink-100 bg-[var(--ec-surface)] p-3">
+                {[1, 0, 2].map((index) => {
+                  const entry = leaders[index];
+                  if (!entry) return <div key={`gap-${index}`} />;
+                  const medal = ['#fbbf24', '#cbd5e1', '#f59e0b'][index] || '#cbd5e1';
+                  const heights = ['h-24', 'h-32', 'h-20'];
+                  const order = leaders[index];
+                  return (
+                    <div key={entry.firebaseUid} className="flex flex-col items-center gap-1.5 text-center">
+                      <span
+                        className="grid h-10 w-10 place-items-center rounded-full text-[0.7rem] font-black text-white"
+                        style={{ background: `linear-gradient(140deg, ${medal}, color-mix(in srgb, ${medal} 55%, #7c3aed))` }}
+                      >
+                        {order.rank}
+                      </span>
+                      <p className="line-clamp-1 text-[0.68rem] font-bold">{entry.name}</p>
+                      <div
+                        className={`w-full ${heights[index] || 'h-20'} rounded-t-xl`}
+                        style={{
+                          background: `linear-gradient(180deg, color-mix(in srgb, ${medal} 55%, transparent), color-mix(in srgb, ${medal} 12%, transparent))`,
+                        }}
+                      >
+                        <p className="pt-1 text-[0.62rem] font-extrabold tabular-nums text-ink-700">{entry.score}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="ec-tile p-3.5">
+                <p className="text-[0.62rem] font-extrabold uppercase tracking-[0.14em] text-ink-400">Your field</p>
+                <ol className="mt-2 space-y-1.5">
+                  {leaders.slice(3, Math.max(3, limit)).map((entry) => (
+                    <li key={entry.firebaseUid} className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 hover:bg-ink-50">
+                      <span className="grid h-5 w-5 place-items-center rounded-full bg-ink-100 text-[0.58rem] font-extrabold">{entry.rank}</span>
+                      <span className="flex-1 truncate text-[0.76rem] font-semibold">{entry.name}</span>
+                      <span className="text-[0.7rem] font-bold tabular-nums text-ink-600">{entry.score}/{entry.maxScore}</span>
+                    </li>
+                  ))}
+                  {leaders.length <= 3 && (
+                    <li className="rounded-xl bg-ink-50 px-2 py-2 text-[0.72rem] text-ink-500">
+                      Submit a test to enter the ranking — only real attempts count.
+                    </li>
+                  )}
+                </ol>
+                {primaryTestId && (
+                  <Link href={`/leaderboard?testId=${primaryTestId}`} className="ec-sec-link mt-2.5">
+                    Full leaderboard <ArrowRight size={12} />
+                  </Link>
+                )}
+              </div>
             </div>
           </SectionShell>
         );
@@ -615,11 +772,18 @@ export default function HomePage() {
         if (!links.length) return null;
         return (
           <SectionShell key={section.id} section={section} index={sectionIndex}>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              {links.map((link) => (
-                <Link key={link.id} href={link.href} className="ec-card px-3 py-3 text-xs font-bold flex items-center gap-2">
-                  <span className="text-base">{link.icon || '→'}</span>
-                  <span className="truncate">{link.label}</span>
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+              {links.map((link, linkIndex) => (
+                <Link
+                  key={link.id}
+                  href={link.href}
+                  className="ec-bento-tile !min-h-[72px] !flex-row !items-center !gap-2.5 !px-3 !py-3"
+                  style={{ ['--bento' as string]: `var(--ec-c${(linkIndex % 8) + 1})` }}
+                >
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[var(--ec-surface)] text-[0.9rem] shadow-sm">
+                    {link.icon || '→'}
+                  </span>
+                  <span className="relative z-[1] truncate text-[0.76rem] font-extrabold">{link.label}</span>
                 </Link>
               ))}
             </div>
@@ -837,6 +1001,8 @@ export default function HomePage() {
       )}
 
       <FeatureStrip />
+
+      <HowItWorks />
 
       <BatchShowcase
         batches={batches}

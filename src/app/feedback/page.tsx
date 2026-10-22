@@ -21,6 +21,7 @@ import {
   ScreenPageHeader,
   ScreenSection,
 } from '@/components/student/ScreenScaffold';
+import { pageIdentity } from '@/lib/page-identity';
 import { visibleSectionIds } from '@/lib/screen-config';
 
 function displayTime(value?: string | null): string {
@@ -133,6 +134,7 @@ export default function FeedbackPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <ScreenPageHeader
+        identity={pageIdentity('feedback')}
         showHeader={screen.showHeader}
         eyebrow={screen.eyebrow}
         title={screen.pageTitle || 'Feedback & help'}

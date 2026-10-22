@@ -20,6 +20,7 @@ import {
   ScreenSection,
   screenGridClass,
 } from '@/components/student/ScreenScaffold';
+import { pageIdentity } from '@/lib/page-identity';
 
 function initials(name: string): string {
   return (
@@ -225,6 +226,7 @@ function LeaderboardContent() {
   return (
     <div className="mx-auto max-w-4xl space-y-4">
       <ScreenPageHeader
+        identity={pageIdentity('leaderboard')}
         showHeader={screen.showHeader}
         eyebrow={screen.eyebrow}
         title={screen.pageTitle}

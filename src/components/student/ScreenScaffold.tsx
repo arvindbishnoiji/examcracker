@@ -14,6 +14,8 @@ import type { ReactNode } from 'react';
 import { ArrowRight, Info, Megaphone, Sparkles } from 'lucide-react';
 import type { ScreenAnnouncement, ScreenAnnouncementTone, ScreenHelp } from '@/types';
 import { isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
+import type { PageIdentity } from '@/lib/page-identity';
+import { PageIdentityHero } from './PageHero';
 
 const TONE_CLASSES: Record<ScreenAnnouncementTone, { wrap: string; icon: string }> = {
   brand: { wrap: 'border-brand-200 bg-brand-50 text-brand-900', icon: 'text-brand-700' },
@@ -30,6 +32,7 @@ export function ScreenPageHeader({
   actions,
   showHeader = true,
   headingLevel = 'h1',
+  identity,
 }: {
   eyebrow?: string;
   title: string;
@@ -39,7 +42,27 @@ export function ScreenPageHeader({
   showHeader?: boolean;
   /** The admin preview renders at h2 so the page keeps a single h1. */
   headingLevel?: 'h1' | 'h2';
+  /**
+   * Optional per-page identity. When provided (and the header is visible) the
+   * page opens with its own colour + glyph + "you can do this here" band, so
+   * every screen is instantly recognisable and self-explanatory.
+   */
+  identity?: PageIdentity;
 }) {
+  if (identity && showHeader) {
+    return (
+      <PageIdentityHero
+        identity={identity}
+        title={title}
+        description={description}
+        eyebrow={eyebrow}
+        meta={meta}
+        actions={actions}
+        headingLevel={headingLevel}
+      />
+    );
+  }
+
   if (!showHeader && !actions) return null;
   const Heading = headingLevel;
   return (
