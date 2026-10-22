@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import {
+  ArrowUpRight,
   Bell,
   BookOpenCheck,
   CalendarDays,
@@ -21,6 +22,7 @@ interface FeatureTile {
   description: string;
   href: string;
   tint: string;
+  span: '1x1' | '2x1' | '2x2';
   icon: React.ReactNode;
 }
 
@@ -28,103 +30,120 @@ const TILES: FeatureTile[] = [
   {
     key: 'lectures',
     label: 'Lectures',
-    description: 'Chapter-wise playlists with notes',
+    description: 'Chapter-wise playlists with ordered notes and progress that follows you.',
     href: '/lectures',
-    tint: 'ec-tint-1',
-    icon: <Video size={16} />,
+    tint: 'var(--ec-c1)',
+    span: '2x2',
+    icon: <Video size={17} />,
   },
   {
     key: 'tests',
     label: 'Mock tests',
-    description: 'Timed tests with instant analysis',
+    description: 'Timed papers with instant analysis.',
     href: '/tests',
-    tint: 'ec-tint-6',
+    tint: 'var(--ec-c6)',
+    span: '1x1',
     icon: <BookOpenCheck size={16} />,
-  },
-  {
-    key: 'challenges',
-    label: 'Challenges',
-    description: 'Sprints with real rewards',
-    href: '/challenges',
-    tint: 'ec-tint-3',
-    icon: <Flame size={16} />,
   },
   {
     key: 'leaderboard',
     label: 'Leaderboard',
-    description: 'See where you rank today',
+    description: 'See where you rank today.',
     href: '/leaderboard',
-    tint: 'ec-tint-8',
+    tint: 'var(--ec-c8)',
+    span: '1x1',
     icon: <Trophy size={16} />,
+  },
+  {
+    key: 'challenges',
+    label: 'Challenges',
+    description: 'Sprints that pay you back with real rewards.',
+    href: '/challenges',
+    tint: 'var(--ec-c3)',
+    span: '2x1',
+    icon: <Flame size={16} />,
   },
   {
     key: 'events',
     label: 'Events',
-    description: 'Marathons and doubt sessions',
+    description: 'Marathons and doubt sessions.',
     href: '/events',
-    tint: 'ec-tint-5',
+    tint: 'var(--ec-c5)',
+    span: '1x1',
     icon: <CalendarDays size={16} />,
   },
   {
     key: 'chat',
     label: 'Mentor chat',
-    description: 'Ask doubts, get answers',
+    description: 'Ask, get answered.',
     href: '/chat',
-    tint: 'ec-tint-4',
+    tint: 'var(--ec-c2)',
+    span: '1x1',
     icon: <MessagesSquare size={16} />,
   },
   {
     key: 'notifications',
     label: 'Updates',
-    description: 'Notices curated for you',
+    description: 'Curated notices.',
     href: '/notifications',
-    tint: 'ec-tint-2',
+    tint: 'var(--ec-c4)',
+    span: '1x1',
     icon: <Bell size={16} />,
   },
   {
     key: 'resources',
     label: 'Resources',
-    description: 'PDFs, DPPs and revision sheets',
+    description: 'PDFs and revision sheets.',
     href: '/lectures?tab=resources',
-    tint: 'ec-tint-7',
+    tint: 'var(--ec-c7)',
+    span: '1x1',
     icon: <Layers size={16} />,
   },
 ];
 
 /**
- * A colour-coded map of what the app can do — so new students understand every
- * feature in one glance instead of discovering it by accident.
+ * Bento grid feature map — the 2026 default for "show many capabilities without
+ * a wall of cards". Tile size encodes importance, colour encodes identity.
  */
 export function FeatureStrip() {
   const { config } = useSiteConfig();
-  const colors = ['--ec-c1', '--ec-c2', '--ec-c3', '--ec-c4', '--ec-c5', '--ec-c6', '--ec-c7', '--ec-c8'];
   const tiles = TILES.filter((tile) => config.features[tile.key] !== false);
   if (!tiles.length) return null;
 
   return (
     <Reveal motion="fade-up">
-      <div className="mb-1">
-        <p className="text-[0.7rem] font-extrabold uppercase tracking-[0.16em] text-ink-400">
-          Everything inside Exam Cracker
-        </p>
+      <div className="mb-3 flex items-end justify-between gap-3">
+        <div>
+          <p className="text-[0.62rem] font-extrabold uppercase tracking-[0.18em] text-ink-400">Inside the app</p>
+          <h2 className="mt-1 text-[1.05rem] font-extrabold tracking-[-0.02em]">
+            Eight doors. One preparation system.
+          </h2>
+        </div>
+        <Link href="/lectures" className="ec-sec-link">
+          Open library <ArrowUpRight size={12} />
+        </Link>
       </div>
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-        {tiles.map((tile, index) => (
+      <div className="ec-bento">
+        {tiles.map((tile) => (
           <Link
             key={tile.key}
             href={tile.href}
-            className={`ec-card ec-card-hover ec-tinted ${tile.tint} group flex items-start gap-2.5 p-3`}
+            className="ec-bento-tile group"
+            data-span={tile.span}
+            style={{ ['--bento' as string]: tile.tint }}
           >
-            <span
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white shadow-sm transition group-hover:scale-105"
-              style={{ background: `linear-gradient(135deg, var(${colors[index % colors.length]}), var(${colors[(index + 2) % colors.length]}))` }}
-            >
-              {tile.icon}
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[0.82rem] font-extrabold leading-tight text-ink-900">{tile.label}</span>
-              <span className="mt-0.5 block text-[0.7rem] leading-snug text-ink-500">{tile.description}</span>
-            </span>
+            <div className="flex items-start justify-between gap-2">
+              <span className="ec-bento-icon">{tile.icon}</span>
+              <ArrowUpRight size={15} className="text-ink-300 transition group-hover:text-ink-700" />
+            </div>
+            <div className="relative z-[1]">
+              <p className={`font-extrabold tracking-[-0.02em] ${tile.span === '2x2' ? 'text-[1.35rem]' : 'text-[0.92rem]'}`}>
+                {tile.label}
+              </p>
+              <p className={`mt-1 leading-snug text-ink-500 ${tile.span === '2x2' ? 'text-[0.82rem]' : 'text-[0.72rem]'}`}>
+                {tile.description}
+              </p>
+            </div>
           </Link>
         ))}
       </div>

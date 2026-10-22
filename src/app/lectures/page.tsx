@@ -296,7 +296,7 @@ function LecturesHubPageInner() {
           const subjectLabel = String(item.subjectName || meta.subject || '').trim() || null;
 
           return (
-            <article key={item.id} className="ec-card ec-card-interactive flex flex-col overflow-hidden">
+            <article key={item.id} className="ec-tile flex flex-col overflow-hidden">
               <Link href={`/lectures/${item.id}`} className="block focus:outline-none">
                 <YoutubeThumbnail
                   src={customThumbOf(item)}
