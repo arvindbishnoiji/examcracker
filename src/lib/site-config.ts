@@ -104,14 +104,30 @@ export const HOME_SECTION_LABELS: Record<HomeSectionType, string> = {
   testimonials: 'Testimonials',
 };
 
+export const AUDIENCE_TARGET_VALUES = [
+  'all',
+  'JEE',
+  'NEET',
+  'Dropper',
+  'JEE-11',
+  'JEE-12',
+  'JEE-Dropper',
+  'NEET-11',
+  'NEET-12',
+  'NEET-Dropper',
+] as const satisfies readonly AudienceTarget[];
+
 export const AUDIENCE_TARGETS: Array<{ value: AudienceTarget; label: string }> = [
   { value: 'all', label: 'All students' },
-  { value: 'JEE', label: 'JEE (all classes)' },
-  { value: 'NEET', label: 'NEET (all classes)' },
+  { value: 'JEE', label: 'JEE (all classes & Dropper)' },
+  { value: 'NEET', label: 'NEET (all classes & Dropper)' },
+  { value: 'Dropper', label: 'Dropper (JEE & NEET)' },
   { value: 'JEE-11', label: 'JEE · Class 11' },
   { value: 'JEE-12', label: 'JEE · Class 12' },
+  { value: 'JEE-Dropper', label: 'JEE · Dropper' },
   { value: 'NEET-11', label: 'NEET · Class 11' },
   { value: 'NEET-12', label: 'NEET · Class 12' },
+  { value: 'NEET-Dropper', label: 'NEET · Dropper' },
 ];
 
 export function makeId(prefix = 'ec'): string {
@@ -125,14 +141,14 @@ export function makeId(prefix = 'ec'): string {
 export const DEFAULT_THEME: ThemeConfig = {
   preset: 'modern',
   brandName: 'Exam Cracker',
-  tagline: 'JEE • NEET • Class 11 & 12',
+  tagline: 'JEE • NEET • Class 11, 12 & Dropper',
   logoText: 'EC',
   logoUrl: '',
   faviconUrl: '',
-  primaryColor: '#6d28d9',
-  secondaryColor: '#4c1d95',
-  accentColor: '#f59e0b',
-  backgroundColor: '#f7f8fc',
+  primaryColor: '#1d4ed8',
+  secondaryColor: '#1e3a8a',
+  accentColor: '#0284c7',
+  backgroundColor: '#f8fafc',
   surfaceColor: '#ffffff',
   textColor: '#0f172a',
   mode: 'light',
@@ -754,7 +770,7 @@ function sanitizeHomeSection(value: unknown, index: number): HomeSectionConfig |
     visible: asBool(value.visible, true),
     audience: asEnum<AudienceTarget>(
       value.audience,
-      ['all', 'JEE', 'NEET', 'JEE-11', 'JEE-12', 'NEET-11', 'NEET-12'] as const,
+      AUDIENCE_TARGET_VALUES,
       'all'
     ),
     limit: Math.round(asNumber(value.limit, 6, 1, 24)),
@@ -899,7 +915,7 @@ function sanitizeBanner(value: unknown, index: number): Banner | null {
     placements: placements.length ? placements : ['home_hero'],
     audience: asEnum<AudienceTarget>(
       value.audience,
-      ['all', 'JEE', 'NEET', 'JEE-11', 'JEE-12', 'NEET-11', 'NEET-12'] as const,
+      AUDIENCE_TARGET_VALUES,
       'all'
     ),
     startAt: asString(value.startAt, '', 40),
@@ -949,7 +965,7 @@ function sanitizePopup(value: unknown, index: number): NoticePopup | null {
     placements: placements.length ? placements : ['home'],
     audience: asEnum<AudienceTarget>(
       value.audience,
-      ['all', 'JEE', 'NEET', 'JEE-11', 'JEE-12', 'NEET-11', 'NEET-12'] as const,
+      AUDIENCE_TARGET_VALUES,
       'all'
     ),
     startAt: asString(value.startAt, '', 40),
@@ -986,7 +1002,7 @@ function sanitizeTestimonials(value: unknown): TestimonialsConfig {
             id: asString(item.id, `testimonial-${index}`, 80) || `testimonial-${index}`,
             name,
             exam: asEnum(item.exam, ['JEE', 'NEET'] as const, 'JEE'),
-            classLevel: asEnum(item.classLevel, ['11', '12'] as const, '12'),
+            classLevel: asEnum(item.classLevel, ['11', '12', 'Dropper'] as const, '12'),
             quote,
             avatarUrl: isSafeHttpUrl(asString(item.avatarUrl, '', 1000)) ? asString(item.avatarUrl, '', 1000) : '',
             result: asString(item.result, '', 80),
@@ -1039,7 +1055,7 @@ function sanitizeChallenge(value: unknown, index: number): StudyChallenge | null
     endAt: asString(value.endAt, '', 40),
     audience: asEnum<AudienceTarget>(
       value.audience,
-      ['all', 'JEE', 'NEET', 'JEE-11', 'JEE-12', 'NEET-11', 'NEET-12'] as const,
+      AUDIENCE_TARGET_VALUES,
       'all'
     ),
     active: asBool(value.active, true),
@@ -1146,15 +1162,29 @@ export function sanitizeSiteConfig(config: SiteConfig): SiteConfig {
 export interface StudentAudience {
   exam?: string | null;
   classLevel?: string | null;
+  class_level?: string | null;
 }
 
 export function audienceMatches(target: AudienceTarget, student: StudentAudience | null): boolean {
   if (!target || target === 'all') return true;
+  const studentClassRaw = String(student?.classLevel || student?.class_level || '').trim();
+  const normalizedClass =
+    studentClassRaw === '11' || studentClassRaw === '12'
+      ? studentClassRaw
+      : /^dropper$/i.test(studentClassRaw)
+        ? 'Dropper'
+        : '';
+  if (target === 'Dropper') return normalizedClass === 'Dropper';
   if (!student?.exam) return false;
   const exam = String(student.exam).toUpperCase();
   if (target === 'JEE' || target === 'NEET') return target === exam;
-  const [targetExam, targetClass] = target.split('-');
-  return targetExam === exam && targetClass === String(student.classLevel || '');
+  const [targetExam, targetClassRaw] = target.split(/[-\s]+/);
+  const targetClass = /^dropper$/i.test(targetClassRaw || '') ? 'Dropper' : targetClassRaw || '';
+  if (targetExam !== exam) return false;
+  if (normalizedClass === 'Dropper') {
+    return targetClass === '11' || targetClass === '12' || targetClass === 'Dropper';
+  }
+  return targetClass === normalizedClass;
 }
 
 export function parseSchedule(value?: string | null): number | null {
@@ -1203,9 +1233,17 @@ export function selectBannersForPlacement(
   placement: Banner['placements'][number],
   now = Date.now()
 ): Banner[] {
-  return banners.items
+  const sorted = banners.items
     .filter((banner) => isBannerVisible(banner, student, placement, now))
     .sort((a, b) => b.priority - a.priority || b.updatedAt.localeCompare(a.updatedAt));
+  const seenIds = new Set<string>();
+  const deduped: Banner[] = [];
+  for (const item of sorted) {
+    if (seenIds.has(item.id)) continue;
+    seenIds.add(item.id);
+    deduped.push(item);
+  }
+  return deduped;
 }
 
 // ---------------------------------------------------------------------------

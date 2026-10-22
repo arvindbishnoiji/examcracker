@@ -4,6 +4,9 @@ import {
   deleteDriveFile,
   downloadDriveFile,
   getDriveAccessToken,
+  inspectDriveStatus,
+  normalizeDriveFolderId,
+  probeDriveFolder,
   uploadDriveFile,
 } from '../../workers/ec-api/src/drive.js';
 
@@ -275,5 +278,145 @@ describe('Google Drive private reads and cleanup', () => {
       throw new Error('offline');
     }) as unknown as typeof fetch;
     expect(await deleteDriveFile(envWith(), 'gone', failing)).toBe(false);
+  });
+});
+
+describe('Google Drive folder ID normalization, 404 diagnostics & status inspection', () => {
+  const TARGET_FOLDER = '1sSYE5cAY6jjAgzOYTgCQNOR1xxotc_I8';
+
+  it('extracts clean folder IDs from raw strings and pasted Google Drive URLs', () => {
+    expect(normalizeDriveFolderId(TARGET_FOLDER)).toBe(TARGET_FOLDER);
+    expect(
+      normalizeDriveFolderId(`https://drive.google.com/drive/folders/${TARGET_FOLDER}?usp=sharing`)
+    ).toBe(TARGET_FOLDER);
+    expect(
+      normalizeDriveFolderId(`https://drive.google.com/drive/u/0/folders/${TARGET_FOLDER}`)
+    ).toBe(TARGET_FOLDER);
+    expect(normalizeDriveFolderId(`"${TARGET_FOLDER}"`)).toBe(TARGET_FOLDER);
+    expect(normalizeDriveFolderId('not a valid folder id!')).toBe('');
+  });
+
+  it('pinpoints HTTP 404 folder unshared/missing errors with actionable service-account Editor instructions and never claims success', async () => {
+    const { impl } = stubFetch((call) => {
+      if (call.url.startsWith('https://oauth2.googleapis.com/token')) return tokenResponse();
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: 404,
+            message: `File not found: ${TARGET_FOLDER}.`,
+            errors: [{ reason: 'notFound' }],
+          },
+        }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      );
+    });
+
+    await expect(
+      uploadDriveFile(
+        envWith({ GOOGLE_DRIVE_FOLDER_ID: `https://drive.google.com/drive/folders/${TARGET_FOLDER}?usp=sharing` }),
+        {
+          bytes: new Uint8Array([37, 80, 68, 70]),
+          mimeType: 'application/pdf',
+          name: 'electrostatics.pdf',
+          purpose: 'pdf',
+          fetchImpl: impl,
+        }
+      )
+    ).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringMatching(/1sSYE5cAY6jjAgzOYTgCQNOR1xxotc_I8.*Editor.*not saved/),
+    });
+  });
+
+  it('rejects non-folder IDs, trashed folders, and read-only Viewer folders before uploading bytes', async () => {
+    // Non-folder MIME type
+    const nonFolderFetch = stubFetch((call) => {
+      if (call.url.startsWith('https://oauth2.googleapis.com/token')) return tokenResponse();
+      return new Response(
+        JSON.stringify({ id: TARGET_FOLDER, name: 'doc.pdf', mimeType: 'application/pdf', trashed: false }),
+        { status: 200 }
+      );
+    });
+    const probeNonFolder = await probeDriveFolder(envWith({ GOOGLE_DRIVE_FOLDER_ID: TARGET_FOLDER }), TARGET_FOLDER, '', nonFolderFetch.impl);
+    expect(probeNonFolder.ok).toBe(false);
+    expect(probeNonFolder.code).toBe('NOT_A_FOLDER');
+
+    // Read-only Viewer folder (POST /upload returns 403; probeDriveFolder inspects capabilities.canAddChildren: false)
+    const viewerFetch = stubFetch((call) => {
+      if (call.url.startsWith('https://oauth2.googleapis.com/token')) return tokenResponse();
+      if (call.url.includes('/upload/drive/v3/files')) {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: 403,
+              message: 'Insufficient permissions for the specified parent.',
+              errors: [{ reason: 'insufficientFilePermissions' }],
+            },
+          }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          id: TARGET_FOLDER,
+          name: 'Exam Cracker Uploads',
+          mimeType: 'application/vnd.google-apps.folder',
+          trashed: false,
+          capabilities: { canAddChildren: false },
+        }),
+        { status: 200 }
+      );
+    });
+    await expect(
+      uploadDriveFile(envWith({ GOOGLE_DRIVE_FOLDER_ID: TARGET_FOLDER }), {
+        bytes: new Uint8Array([37, 80, 68, 70]),
+        mimeType: 'application/pdf',
+        name: 'notes.pdf',
+        purpose: 'pdf',
+        fetchImpl: viewerFetch.impl,
+      })
+    ).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringMatching(/Viewer\/Commenter.*Editor.*not saved/),
+    });
+  });
+
+  it('succeeds when folder 1sSYE5cAY6jjAgzOYTgCQNOR1xxotc_I8 is shared as Editor and sanitizes inspectDriveStatus output', async () => {
+    const { impl } = stubFetch((call) => {
+      if (call.url.startsWith('https://oauth2.googleapis.com/token')) return tokenResponse();
+      if (call.url.includes(`/drive/v3/files/${TARGET_FOLDER}`)) {
+        return new Response(
+          JSON.stringify({
+            id: TARGET_FOLDER,
+            name: 'Exam Cracker Private Storage',
+            mimeType: 'application/vnd.google-apps.folder',
+            trashed: false,
+            capabilities: { canAddChildren: true },
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response(
+        JSON.stringify({ id: 'uploaded-pdf-id', name: 'physics-notes.pdf', mimeType: 'application/pdf', size: '4096' }),
+        { status: 200 }
+      );
+    });
+
+    const env = envWith({ GOOGLE_DRIVE_FOLDER_ID: `https://drive.google.com/drive/folders/${TARGET_FOLDER}` });
+    const status = await inspectDriveStatus(env, { probe: true, fetchImpl: impl });
+    expect(status.configured).toBe(true);
+    expect(status.folderId).toBe(TARGET_FOLDER);
+    expect(status.serviceAccountEmail).toBe('exam-cracker@test-project.iam.gserviceaccount.com');
+    expect((status.probe as any)?.ok).toBe(true);
+    expect(JSON.stringify(status)).not.toContain('BEGIN');
+
+    const uploaded = await uploadDriveFile(env, {
+      bytes: new Uint8Array([37, 80, 68, 70]),
+      mimeType: 'application/pdf',
+      name: 'physics-notes.pdf',
+      purpose: 'pdf',
+      fetchImpl: impl,
+    });
+    expect(uploaded.id).toBe('uploaded-pdf-id');
   });
 });

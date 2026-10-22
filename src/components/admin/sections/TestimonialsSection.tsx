@@ -175,6 +175,7 @@ export function TestimonialsSection() {
               <select className="ec-field" value={editing.classLevel} onChange={(event) => patch(editing.id, { classLevel: event.target.value as Testimonial['classLevel'] })}>
                 <option value="11">Class 11</option>
                 <option value="12">Class 12</option>
+                <option value="Dropper">Dropper</option>
               </select>
             </Field>
             <div className="sm:col-span-2">

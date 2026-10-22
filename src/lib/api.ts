@@ -38,6 +38,8 @@ import type {
   CourseTreeResponse,
   CatalogItemResponse,
   DriveFileItem,
+  DriveStatusResponse,
+  SubjectQueueItem,
 } from '@/types';
 
 export class ApiError extends Error {
@@ -247,10 +249,19 @@ export async function getCatalogContent(params: {
 
 export async function getCatalogItem(id: string): Promise<CatalogItemResponse> {
   const res = await requestApi<CatalogItemResponse>(`/content/${encodeURIComponent(id)}`);
+  const redactedQueue = Array.isArray(res.subjectQueue)
+    ? (res.subjectQueue.map((entry) => ({
+        ...redactCourseCatalogList([entry])[0],
+        progress: entry.progress,
+      })) as SubjectQueueItem[])
+    : [];
   return {
     item: redactCourseCatalogList([res.item])[0],
     parent: res.parent ? redactCourseCatalogList([res.parent])[0] : null,
     subject: res.subject || null,
+    progress: res.progress || null,
+    subjectQueue: redactedQueue,
+    queueMeta: res.queueMeta || null,
   };
 }
 
@@ -593,7 +604,7 @@ export async function getAdminAnalytics(): Promise<AdminAnalyticsResponse> {
 export async function searchAdminStudents(params?: {
   query?: string;
   exam?: 'JEE' | 'NEET' | '';
-  classLevel?: '11' | '12' | '';
+  classLevel?: '11' | '12' | 'Dropper' | '';
   page?: number;
   pageSize?: number;
 }): Promise<AdminStudentDirectoryResponse> {
@@ -673,7 +684,7 @@ export interface BulkEnrollInput {
   mode: 'selected' | 'all' | 'filter';
   studentUids?: string[];
   exam?: 'JEE' | 'NEET' | '';
-  classLevel?: '11' | '12' | '';
+  classLevel?: '11' | '12' | 'Dropper' | '';
   includeFuture?: boolean;
   respectEligibility?: boolean;
   confirmAll?: boolean;
@@ -1064,6 +1075,13 @@ export async function getAdminDriveFiles(params?: {
 
 export async function deleteAdminDriveFile(id: string): Promise<{ removed: boolean; driveDeleted: boolean }> {
   return requestApi(`/admin/drive/files/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function getAdminDriveStatus(probe = false): Promise<DriveStatusResponse> {
+  const res = await requestApi<{ status: DriveStatusResponse }>(
+    `/admin/drive/status${probe ? '?probe=1' : ''}`
+  );
+  return res.status;
 }
 
 export async function cleanupDriveFiles(): Promise<{ checked: number; deleted: number; failed: number }> {

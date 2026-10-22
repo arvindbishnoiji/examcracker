@@ -17,15 +17,16 @@ import type {
 } from '@/types';
 import { getStudentAnalysis, getStudentLibrary, getStudentTests, getTestLeaderboard, saveStudentLibraryItem } from '@/lib/api';
 import { formatISTDateTime, formatWatchDuration, isScheduleActiveNow } from '@/lib/date';
-import { isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
+import { formatClassLevel, formatClassList, isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
 import { activeEnrollmentKeys } from '@/lib/enrollment';
 import { activityStreak } from '@/lib/progress';
-import { ArrowRight, BellRing, BookOpenCheck, Flame, GraduationCap, PlayCircle, Search, Sparkles, Trophy } from 'lucide-react';
+import { ArrowRight, BookOpenCheck, Flame, GraduationCap, PlayCircle, Search, Sparkles, Trophy } from 'lucide-react';
 import {
   getHomeSectionsForStudent,
   selectBannersForPlacement,
   type StudentAudience,
 } from '@/lib/site-config';
+import YoutubeThumbnail from '@/components/YoutubeThumbnail';
 import { BannerCarousel } from '@/components/banners/BannerCarousel';
 import { PopupHost } from '@/components/site/PopupHost';
 
@@ -33,13 +34,13 @@ function SectionShell({ section, children }: { section: HomeSectionConfig; child
   return (
     <section>
       {(section.title || section.subtitle) && (
-        <div className="flex flex-wrap items-end justify-between gap-2 mb-3">
+        <div className="ec-section-header">
           <div>
-            {section.title && <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">{section.title}</h2>}
-            {section.subtitle && <p className="text-xs sm:text-sm text-ink-500 mt-0.5">{section.subtitle}</p>}
+            {section.title && <h2 className="text-base sm:text-lg font-bold tracking-tight text-ink-900">{section.title}</h2>}
+            {section.subtitle && <p className="text-xs text-ink-500 mt-0.5">{section.subtitle}</p>}
           </div>
           {section.ctaLabel && isValidInternalDeepLink(section.ctaHref) && (
-            <Link href={section.ctaHref} className="text-xs font-bold text-brand-700 hover:underline">
+            <Link href={section.ctaHref} className="text-xs font-semibold text-brand-700 hover:underline">
               {section.ctaLabel} →
             </Link>
           )}
@@ -50,43 +51,43 @@ function SectionShell({ section, children }: { section: HomeSectionConfig; child
   );
 }
 
-function EmptyLine({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-xl border border-dashed border-[rgb(var(--ec-ink-200))] bg-[var(--ec-surface)] p-4 text-xs text-[var(--ec-muted)]">{children}</div>;
-}
-
 function metaOf(item: CourseCatalogItem): Record<string, unknown> {
   return (item.metadata || {}) as Record<string, unknown>;
 }
 
-function thumbOf(item: CourseCatalogItem) {
+function customThumbOf(item: CourseCatalogItem) {
   const meta = metaOf(item);
-  const raw = (meta.thumbnailUrl as string) || (meta.thumbnail_url as string) || '';
-  if (isSafeHttpUrl(raw)) return raw;
-  if (meta.videoId) return `https://img.youtube.com/vi/${String(meta.videoId)}/hqdefault.jpg`;
-  return '';
+  const raw = ((meta.thumbnailUrl as string) || (meta.thumbnail_url as string) || '').trim();
+  return isSafeHttpUrl(raw) ? raw : '';
 }
 
 function ContentCard({ item, cta = 'Open' }: { item: CourseCatalogItem; cta?: string }) {
   const meta = metaOf(item);
-  const thumb = thumbOf(item);
+  const subjectLabel = String(item.subjectName || meta.subject || '').trim() || null;
   return (
-    <Link href={`/lectures/${item.id}`} className="group ec-card overflow-hidden flex flex-col hover:-translate-y-0.5 transition">
-      {thumb ? (
-        <img src={thumb} alt="" className="h-32 w-full object-cover bg-ink-100" loading="lazy" />
-      ) : (
-        <div className="h-32 w-full bg-gradient-to-br from-brand-50 to-ink-100 grid place-items-center text-[10px] font-semibold text-ink-400">
-          {item.kind.toUpperCase()}
-        </div>
-      )}
+    <Link href={`/lectures/${item.id}`} className="group ec-card ec-card-interactive overflow-hidden flex flex-col">
+      <YoutubeThumbnail
+        src={customThumbOf(item)}
+        videoId={String(meta.videoId || '')}
+        alt={item.title}
+        duration={meta.duration ? String(meta.duration) : null}
+        badge={meta.isPreview === true ? 'Free Preview' : subjectLabel || item.kind}
+        subjectName={subjectLabel || item.exam}
+        className="aspect-video w-full"
+      />
       <div className="p-3.5 flex-1 flex flex-col">
-        <p className="text-sm font-bold leading-snug line-clamp-2">{item.title}</p>
-        <p className="text-[11px] text-ink-500 line-clamp-2 mt-1">{item.description}</p>
-        <div className="flex flex-wrap gap-1 mt-2">
-          <span className="rounded-full bg-ink-100 px-2 py-0.5 text-[10px] font-semibold">{item.exam}</span>
-          <span className="rounded-full bg-ink-100 px-2 py-0.5 text-[10px] font-semibold">Class {item.classes.join('/')}</span>
-          {Boolean(meta.isPreview) && <span className="rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[10px] font-semibold">Preview</span>}
+        <p className="text-sm font-bold leading-snug text-ink-900 group-hover:text-brand-700 line-clamp-2">{item.title}</p>
+        {item.description && (
+          <p className="text-xs text-ink-500 line-clamp-2 mt-1">{item.description}</p>
+        )}
+        <div className="flex flex-wrap gap-1.5 mt-2.5">
+          <span className="rounded-full bg-brand-50 text-brand-700 px-2 py-0.5 text-[10px] font-semibold">{item.exam}</span>
+          <span className="rounded-full bg-ink-100 text-ink-700 px-2 py-0.5 text-[10px] font-semibold">{formatClassList(item.classes)}</span>
+          {subjectLabel && (
+            <span className="rounded-full bg-ink-100 text-ink-700 px-2 py-0.5 text-[10px] font-semibold">{subjectLabel}</span>
+          )}
         </div>
-        <span className="mt-auto pt-2 text-[11px] font-bold text-brand-700">{cta} →</span>
+        <span className="mt-auto pt-3 text-xs font-semibold text-brand-700">{cta} →</span>
       </div>
     </Link>
   );
@@ -193,17 +194,28 @@ export default function HomePage() {
   const load = useCallback(async () => {
     if (!profile) return;
     setDataLoading(true);
-    const [testsResult, analysisResult, libraryResult, leaderResult] = await Promise.allSettled([
+    setLeaderError(false);
+    const [testsResult, analysisResult, libraryResult] = await Promise.allSettled([
       getStudentTests(),
       getStudentAnalysis(),
       getStudentLibrary(),
-      getTestLeaderboard(''),
     ]);
-    if (testsResult.status === 'fulfilled') setTests(testsResult.value);
+    const fetchedTests = testsResult.status === 'fulfilled' ? testsResult.value : [];
+    setTests(fetchedTests);
     if (analysisResult.status === 'fulfilled') setAnalysis(analysisResult.value);
     if (libraryResult.status === 'fulfilled') setLibrary(libraryResult.value);
-    if (leaderResult.status === 'fulfilled') setLeaders(leaderResult.value.items);
-    else setLeaderError(true);
+
+    const primaryTest = fetchedTests.find((t) => t.isLive) || fetchedTests[0];
+    if (primaryTest?.id) {
+      try {
+        const leaderData = await getTestLeaderboard(primaryTest.id);
+        setLeaders(leaderData.items);
+      } catch {
+        setLeaderError(true);
+      }
+    } else {
+      setLeaders([]);
+    }
     setDataLoading(false);
   }, [profile]);
 
@@ -299,6 +311,9 @@ export default function HomePage() {
   const sections = getHomeSectionsForStudent(config.homepage, audience);
   const greeting = config.homepage.greetingTemplate.replace('{name}', profile.display_name.split(' ')[0] || 'there');
   const heroBanners = selectBannersForPlacement(config.banners, audience, 'home_hero');
+  const dashboardBanners = selectBannersForPlacement(config.banners, audience, 'dashboard').filter(
+    (b) => !heroBanners.some((hb) => hb.id === b.id)
+  );
   const heroSection = sections.find((section) => section.type === 'hero');
   const heroTitle = (heroSection?.title || '').replace('{name}', profile.display_name.split(' ')[0] || 'there');
   const heroSubtitle = (heroSection?.subtitle || '').replace('{name}', profile.display_name.split(' ')[0] || 'there');
@@ -364,10 +379,10 @@ export default function HomePage() {
               {liveEvents.slice(0, limit).map((event) => {
                 const meta = metaOf(event);
                 const images = Array.isArray(meta.images) ? (meta.images as Array<{ url?: string }>) : [];
-                const image = images[0]?.url || thumbOf(event);
+                const image = images[0]?.url || customThumbOf(event);
                 return (
                   <div key={event.id} className="ec-card overflow-hidden">
-                    {image && isSafeHttpUrl(image) && <img src={image} alt="" className="h-36 w-full object-cover bg-ink-100" loading="lazy" />}
+                    {image && isSafeHttpUrl(image) && <img src={image} alt="" className="aspect-video w-full object-cover bg-ink-100" loading="lazy" />}
                     <div className="p-4">
                       <p className="text-sm font-bold">{event.title}</p>
                       <p className="text-[11px] text-ink-500 mt-1 line-clamp-2">{event.description}</p>
@@ -407,19 +422,40 @@ export default function HomePage() {
         if (!config.features.continueLearning || !continueLearning.length) return null;
         return (
           <SectionShell key={section.id} section={section}>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {continueLearning.slice(0, limit).map((lecture) => {
                 const progress = progressByLecture.get(lecture.id);
+                const meta = metaOf(lecture);
+                const pct = progress
+                  ? progress.completed
+                    ? 100
+                    : Math.min(95, Math.max(6, Math.round((progress.watched_seconds / 1800) * 100)))
+                  : 0;
                 return (
-                  <Link key={lecture.id} href={`/lectures/${lecture.id}`} className="ec-card p-3.5 flex gap-3 hover:-translate-y-0.5 transition">
-                    <img src={thumbOf(lecture) || 'https://img.youtube.com/vi/default/hqdefault.jpg'} alt="" className="h-16 w-24 rounded-lg object-cover bg-ink-100 shrink-0" loading="lazy" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold line-clamp-2">{lecture.title}</p>
-                      <p className="text-[10px] text-ink-500 mt-1">
-                        {progress ? (progress.completed ? 'Completed' : `${Math.round(progress.watched_seconds / 60)} min watched`) : 'Not started'}
+                  <Link
+                    key={lecture.id}
+                    href={`/lectures/${lecture.id}`}
+                    className="ec-card ec-card-interactive p-3 flex items-center gap-3"
+                  >
+                    <YoutubeThumbnail
+                      src={customThumbOf(lecture)}
+                      videoId={String(meta.videoId || '')}
+                      alt={lecture.title}
+                      progressPercent={pct}
+                      completed={progress?.completed}
+                      className="aspect-video w-28 rounded-lg shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-ink-900 line-clamp-2 leading-snug">{lecture.title}</p>
+                      <p className="text-[11px] text-ink-500 mt-1">
+                        {progress
+                          ? progress.completed
+                            ? 'Completed · Rewatch'
+                            : `${Math.max(1, Math.round(progress.watched_seconds / 60))} min watched`
+                          : 'Start lecture'}
                       </p>
-                      <div className="h-1 rounded-full bg-ink-100 mt-2 overflow-hidden">
-                        <div className="h-full bg-[var(--ec-brand)]" style={{ width: `${progress ? (progress.completed ? 100 : Math.min(90, (progress.watched_seconds / 1800) * 100)) : 0}%` }} />
+                      <div className="h-1.5 rounded-full bg-ink-100 mt-2 overflow-hidden">
+                        <div className="h-full bg-[var(--ec-brand)]" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   </Link>
@@ -628,11 +664,11 @@ export default function HomePage() {
               </h1>
               <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-ink-500 sm:text-sm">
                 {heroSubtitle ||
-                  `A focused plan for ${profile.exam} · Class ${profile.class_level}. Pick up where you left off, then put your preparation to the test.`}
+                  `A focused study plan for ${profile.exam} · ${formatClassLevel(profile.class_level)}. Pick up where you left off, then put your preparation to the test.`}
               </p>
 
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <span className="ec-chip"><GraduationCap size={12} /> {profile.exam} · Class {profile.class_level}</span>
+                <span className="ec-chip"><GraduationCap size={12} /> {profile.exam} · {formatClassLevel(profile.class_level)}</span>
                 <span className="ec-chip"><BookOpenCheck size={12} /> {enrolledCount} course{enrolledCount === 1 ? '' : 's'} unlocked</span>
                 {analysis && <span className="ec-level-badge"><Trophy size={11} /> {analysis.level}</span>}
               </div>
@@ -750,6 +786,10 @@ export default function HomePage() {
             Search
           </button>
         </form>
+      )}
+
+      {dashboardBanners.length > 0 && (
+        <BannerCarousel banners={dashboardBanners} settings={config.banners} compact />
       )}
 
       {sections.length === 0 ? (

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { NoticePopup } from '@/types';
 import { useSettingWorkspace } from '@/hooks/useSettingWorkspace';
-import { getPopupState, makeId } from '@/lib/site-config';
+import { AUDIENCE_TARGETS, getPopupState, makeId } from '@/lib/site-config';
 import { formatISTDateTime, fromISTDateTimeLocalInput, toISTDateTimeLocalInput } from '@/lib/date';
 import { isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
 import {
@@ -231,13 +231,9 @@ export function PopupsSection() {
             </Field>
             <Field label="Audience">
               <select className="ec-field" value={editing.audience} onChange={(event) => patchPopup(editing.id, { audience: event.target.value as NoticePopup['audience'] })}>
-                <option value="all">All students</option>
-                <option value="JEE">JEE</option>
-                <option value="NEET">NEET</option>
-                <option value="JEE-11">JEE · Class 11</option>
-                <option value="JEE-12">JEE · Class 12</option>
-                <option value="NEET-11">NEET · Class 11</option>
-                <option value="NEET-12">NEET · Class 12</option>
+                {AUDIENCE_TARGETS.map((target) => (
+                  <option key={target.value} value={target.value}>{target.label}</option>
+                ))}
               </select>
             </Field>
             <Field label="Starts at (IST)">

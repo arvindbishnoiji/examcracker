@@ -108,8 +108,8 @@ function ScreenBody({
         </div>
         <div>
           <p className="text-[9px] font-semibold text-ink-700">{cfg.classQuestion}</p>
-          <div className="mt-1 grid grid-cols-2 gap-1.5">
-            {['Class 11', 'Class 12'].map((cls) => (
+          <div className="mt-1 grid grid-cols-3 gap-1.5">
+            {['Class 11', 'Class 12', 'Dropper'].map((cls) => (
               <div key={cls} className="rounded border border-ink-200 p-1.5 text-[9px] font-semibold text-ink-700">{cls}</div>
             ))}
           </div>

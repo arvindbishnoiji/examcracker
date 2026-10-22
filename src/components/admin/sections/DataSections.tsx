@@ -20,7 +20,7 @@ import {
   getAdminSiteSettings,
   getTestLeaderboard,
 } from '@/lib/api';
-import { isSafeHttpUrl } from '@/lib/validation';
+import { formatClassLevel, isSafeHttpUrl } from '@/lib/validation';
 import { formatISTDateTime } from '@/lib/date';
 import { useToast } from '@/hooks/useToast';
 import {
@@ -156,7 +156,7 @@ export function AnalyticsSection() {
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {student.exam && <StatusPill tone="brand">{student.exam}</StatusPill>}
-                      {student.class_level && <StatusPill tone="neutral">Class {student.class_level}</StatusPill>}
+                      {student.class_level && <StatusPill tone="neutral">{formatClassLevel(student.class_level)}</StatusPill>}
                     </div>
                   </div>
                 ))}

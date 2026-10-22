@@ -42,9 +42,30 @@ export function extractYoutubePlaylistId(input?: string | null): string {
   }
 }
 
-export function getYoutubeEmbedUrl(videoId: string): string {
+export function getYoutubeEmbedUrl(
+  videoId: string,
+  options?: { startSeconds?: number; enableJsApi?: boolean; autoplay?: boolean }
+): string {
   const cleanId = extractYoutubeVideoId(videoId) || videoId.trim();
-  return `https://www.youtube.com/embed/${encodeURIComponent(cleanId)}?rel=0&modestbranding=1&playsinline=1`;
+  const params = new URLSearchParams({
+    rel: '0',
+    modestbranding: '1',
+    playsinline: '1',
+  });
+  if (options?.enableJsApi) {
+    params.set('enablejsapi', '1');
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      params.set('origin', window.location.origin);
+    }
+  }
+  if (options?.autoplay) {
+    params.set('autoplay', '1');
+  }
+  const start = Math.floor(Number(options?.startSeconds) || 0);
+  if (start > 0) {
+    params.set('start', String(start));
+  }
+  return `https://www.youtube.com/embed/${encodeURIComponent(cleanId)}?${params.toString()}`;
 }
 
 export function getYoutubeWatchUrl(videoId: string): string {

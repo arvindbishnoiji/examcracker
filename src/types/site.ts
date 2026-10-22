@@ -145,10 +145,13 @@ export type AudienceTarget =
   | 'all'
   | 'JEE'
   | 'NEET'
+  | 'Dropper'
   | 'JEE-11'
   | 'JEE-12'
+  | 'JEE-Dropper'
   | 'NEET-11'
-  | 'NEET-12';
+  | 'NEET-12'
+  | 'NEET-Dropper';
 
 export type SectionLayout = 'grid' | 'carousel' | 'split' | 'banner' | 'list';
 
@@ -287,7 +290,7 @@ export interface Testimonial {
   id: string;
   name: string;
   exam: 'JEE' | 'NEET';
-  classLevel: '11' | '12';
+  classLevel: '11' | '12' | 'Dropper';
   quote: string;
   avatarUrl: string;
   result: string;

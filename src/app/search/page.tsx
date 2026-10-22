@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import type { CourseCatalogItem, TestCardItem } from '@/types';
 import { getStudentTests } from '@/lib/api';
+import { formatClassLevel, formatClassList } from '@/lib/validation';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { visibleSectionIds } from '@/lib/screen-config';
 import {
@@ -111,7 +112,7 @@ function SearchScreen() {
           title: item.title,
           description: item.description || '',
           kind: item.kind,
-          href: item.kind === 'event' ? '/events' : `/lectures?kind=${item.kind}&q=${encodeURIComponent(item.title)}`,
+          href: item.kind === 'event' ? '/events' : `/lectures/${item.id}`,
           exam: item.exam,
           classes: (item.classes || []).map(String),
           updatedAt: item.updated_at || '',
@@ -121,7 +122,7 @@ function SearchScreen() {
         items.push({
           id: item.id,
           title: item.title,
-          description: [item.description, metaOf(item).subtitle, metaOf(item).instructor]
+          description: [item.subjectName, item.description, metaOf(item).subtitle, metaOf(item).instructor]
             .filter((value): value is string => typeof value === 'string' && value.length > 0)
             .join(' · '),
           kind: 'lecture',
@@ -129,7 +130,7 @@ function SearchScreen() {
           exam: item.exam,
           classes: (item.classes || []).map(String),
           updatedAt: item.updated_at || '',
-          badge: Boolean(metaOf(item).isPreview) ? 'Preview' : undefined,
+          badge: Boolean(metaOf(item).isPreview) ? 'Preview' : item.subjectName || undefined,
         });
       }
     }
@@ -210,7 +211,7 @@ function SearchScreen() {
         eyebrow={screen.eyebrow}
         title={screen.pageTitle}
         description={screen.pageSubtitle}
-        meta={profile ? <span className="ec-chip">Filtered for {profile.exam} · Class {profile.class_level}</span> : null}
+        meta={profile ? <span className="ec-chip">Filtered for {profile.exam} · {formatClassLevel(profile.class_level)}</span> : null}
       />
 
       <ScreenAnnouncementBanner announcement={screen.announcement} />
@@ -324,9 +325,9 @@ function SearchScreen() {
                   <span className="block text-sm font-bold truncate">{item.title}</span>
                   {item.description && <span className="block text-[11px] text-ink-500 line-clamp-2 mt-0.5">{item.description}</span>}
                   <span className="flex flex-wrap gap-1 mt-1.5">
-                    <span className="rounded-full bg-ink-100 px-2 py-0.5 text-[10px] font-semibold">{item.exam}</span>
+                    <span className="rounded-full bg-brand-50 text-brand-700 px-2 py-0.5 text-[10px] font-semibold">{item.exam}</span>
                     {item.classes.length > 0 && (
-                      <span className="rounded-full bg-ink-100 px-2 py-0.5 text-[10px] font-semibold">Class {item.classes.join('/')}</span>
+                      <span className="rounded-full bg-ink-100 px-2 py-0.5 text-[10px] font-semibold">{formatClassList(item.classes)}</span>
                     )}
                     {item.badge && <span className="rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[10px] font-semibold">{item.badge}</span>}
                   </span>

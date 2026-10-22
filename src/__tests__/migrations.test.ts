@@ -221,3 +221,77 @@ describe('D1 migrations 0001 → 0002', () => {
     ).toThrow();
   });
 });
+
+describe('D1 migration 0004 (Dropper class & subject queue index)', () => {
+  it('upgrades an existing 0001-0003 database non-destructively without losing rows', () => {
+    const { db } = freshDatabase();
+    db.exec(migration('0001_initial_schema.sql'));
+    db.exec(migration('0002_subjects_and_drive_files.sql'));
+    db.exec(migration('0003_seed_starter_catalogue.sql'));
+
+    db.prepare(
+      `INSERT INTO student_profiles (firebase_uid,display_name,email,exam,class_level,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?)`
+    ).run('uid-existing-12', 'Rohan', 'rohan@example.com', 'JEE', '12', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+
+    const catalogBefore = Number((db.prepare('SELECT COUNT(*) AS n FROM course_catalog').get() as Row)?.n || 0);
+    expect(catalogBefore).toBeGreaterThan(0);
+
+    db.exec(migration('0004_dropper_class_and_queue_indexes.sql'));
+
+    // Existing data preserved intact
+    const preserved = db.prepare('SELECT display_name, exam, class_level FROM student_profiles WHERE firebase_uid=?').get('uid-existing-12');
+    expect(preserved).toEqual({ display_name: 'Rohan', exam: 'JEE', class_level: '12' });
+    const catalogAfter = Number((db.prepare('SELECT COUNT(*) AS n FROM course_catalog').get() as Row)?.n || 0);
+    expect(catalogAfter).toBe(catalogBefore);
+
+    // Dropper class is now accepted in student_profiles, exam_attempts, and enrollment_rules
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO student_profiles (firebase_uid,display_name,email,exam,class_level,created_at,updated_at)
+           VALUES (?,?,?,?,?,?,?)`
+        )
+        .run('uid-dropper-1', 'Ananya', 'ananya@example.com', 'NEET', 'Dropper', 'now', 'now')
+    ).not.toThrow();
+
+    db.prepare(
+      `INSERT INTO course_catalog (id,kind,title,description,exam,classes,active,metadata,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`
+    ).run('test-drop-1', 'test', 'NEET Full Mock', '', 'NEET', '["Dropper"]', 1, '{}', 'now', 'now');
+
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO exam_attempts (id,firebase_uid,test_id,exam,class_level,score,max_score,correct_count,incorrect_count,unanswered_count,answers,submitted_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+        )
+        .run('att-drop-1', 'uid-dropper-1', 'test-drop-1', 'NEET', 'Dropper', 680, 720, 170, 5, 5, '{}', 'now')
+    ).not.toThrow();
+
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO enrollment_rules (id,name,item_type,item_id,filter_exam,filter_class,respect_eligibility,active,created_by,created_at,updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+        )
+        .run('rule-drop-1', 'NEET Dropper Rule', 'batch', 'batch-any', 'NEET', 'Dropper', 1, 1, 'admin', 'now', 'now')
+    ).not.toThrow();
+
+    // Invalid class levels are still rejected by SQLite CHECK constraints
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO student_profiles (firebase_uid,display_name,email,exam,class_level,created_at,updated_at)
+           VALUES (?,?,?,?,?,?,?)`
+        )
+        .run('uid-invalid', 'Invalid', 'inv@example.com', 'JEE', '10', 'now', 'now')
+    ).toThrow();
+
+    // Subject queue index exists
+    const idx = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='course_catalog_subject_queue_idx'")
+      .get();
+    expect(idx?.name).toBe('course_catalog_subject_queue_idx');
+  });
+});

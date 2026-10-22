@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import type { LeaderboardEntry, TestCardItem } from '@/types';
 import { formatISTDateTime } from '@/lib/date';
+import { formatClassLevel } from '@/lib/validation';
 import { visibleSectionIds } from '@/lib/screen-config';
 import {
   ScreenAnnouncementBanner,
@@ -180,7 +181,12 @@ function LeaderboardContent() {
                 </span>
               ) : null}
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{entry.name || 'Student'}</p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <p className="truncate text-sm font-semibold text-ink-900">{entry.name || 'Student'}</p>
+                  {entry.classLevel ? (
+                    <Badge variant="default">{formatClassLevel(entry.classLevel)}</Badge>
+                  ) : null}
+                </div>
                 {screen.showSubmittedTime ? (
                   <p className="text-[10.5px] text-ink-500">{formatISTDateTime(entry.submittedAt)}</p>
                 ) : null}

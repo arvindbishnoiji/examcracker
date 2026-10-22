@@ -10,6 +10,7 @@ import { Card, Badge, Skeleton } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/hooks/useToast';
 import { formatWatchDuration } from '@/lib/date';
+import { formatClassLevel } from '@/lib/validation';
 import type { AnalysisResponse, ClassLevel, ExamTrack, StudentProfile, TestCardItem } from '@/types';
 import { visibleSectionIds } from '@/lib/screen-config';
 import { ScreenAnnouncementBanner, ScreenHelpNote, ScreenPageHeader } from '@/components/student/ScreenScaffold';
@@ -130,7 +131,10 @@ export default function ProfileAnalysisPage() {
               <p className="mt-0.5 text-sm text-ink-500">{profile?.email || user?.email || 'Signed-in student'}</p>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <Badge variant="info"><GraduationCap size={10} className="mr-0.5" /> {profile?.exam}</Badge>
-                <Badge>Class {profile?.class_level}</Badge>
+                <Badge>{formatClassLevel(profile?.class_level)}</Badge>
+                {profile?.class_level === 'Dropper' && (
+                  <Badge variant="info">11th + 12th + Dropper Access</Badge>
+                )}
                 {analysis && screen.showLevel ? (
                   <Badge variant="success"><Trophy size={10} className="mr-0.5" /> {analysis.level}</Badge>
                 ) : null}
@@ -253,16 +257,20 @@ export default function ProfileAnalysisPage() {
           <h2 className="text-sm font-bold">{screen.lessonProgressTitle}</h2>
           {!analysis ? null : analysis.lessonProgress.length ? (
             <div className="mt-3 space-y-2">
-              {analysis.lessonProgress.slice(0, 5).map((row) => (
-                <div key={row.id || row.lecture_id} className="flex items-center justify-between gap-3 rounded-xl border border-ink-100 bg-ink-50/60 p-3">
+              {analysis.lessonProgress.slice(0, 6).map((row) => (
+                <Link
+                  key={row.id || row.lecture_id}
+                  href={`/lectures/${row.lecture_id}`}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-ink-100 bg-ink-50/60 p-3 transition hover:border-brand-200 hover:bg-brand-50/30"
+                >
                   <div className="min-w-0">
-                    <p className="truncate text-xs font-semibold">
+                    <p className="truncate text-xs font-semibold text-ink-900">
                       {lectureTitles.get(row.lecture_id) || `Lesson ${row.lecture_id.slice(0, 8)}`}
                     </p>
-                    <p className="text-[10px] text-ink-500">{row.completed ? 'Completed' : 'In progress'}</p>
+                    <p className="text-[10px] text-ink-500">{row.completed ? 'Completed · Rewatch' : 'In progress · Resume'}</p>
                   </div>
-                  <p className="shrink-0 text-xs font-semibold">{formatWatchDuration(row.watched_seconds)}</p>
-                </div>
+                  <p className="shrink-0 text-xs font-semibold tabular-nums text-brand-700">{formatWatchDuration(row.watched_seconds)}</p>
+                </Link>
               ))}
             </div>
           ) : (
@@ -410,11 +418,13 @@ export default function ProfileAnalysisPage() {
                 >
                   <option value="11">Class 11</option>
                   <option value="12">Class 12</option>
+                  <option value="Dropper">Dropper (Class 11 + 12 + Dropper syllabus)</option>
                 </select>
               </label>
               <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
-                Changing your exam or class may hide batches you are enrolled in that no longer match. Course access
-                stays verified by the server.
+                {form.classLevel === 'Dropper'
+                  ? `Dropper students can access eligible Class 11, Class 12, and Dropper content for ${form.exam}. Course enrollment rules stay verified on the server.`
+                  : 'Changing your exam or class hides content outside your selected cohort. Course access stays verified by the server.'}
               </p>
             </form>
             <div className="flex justify-end gap-2 border-t border-ink-100 px-5 py-3">
