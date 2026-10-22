@@ -31,6 +31,20 @@ const GLYPHS: Record<PageKey, ReactNode> = {
   feedback: <Sparkles size={26} />,
 };
 
+const SMALL_GLYPHS: Record<PageKey, ReactNode> = {
+  home: <LayoutDashboard size={10} />,
+  lectures: <Video size={10} />,
+  tests: <PlayCircle size={10} />,
+  leaderboard: <Trophy size={10} />,
+  challenges: <Flame size={10} />,
+  events: <CalendarDays size={10} />,
+  chat: <MessageSquare size={10} />,
+  notifications: <Bell size={10} />,
+  search: <Search size={10} />,
+  profile: <UserRound size={10} />,
+  feedback: <Sparkles size={10} />,
+};
+
 /**
  * The coloured identity band at the top of each student page.
  *
@@ -85,7 +99,7 @@ export function PageIdentityHero({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/12 px-2.5 py-1 text-[0.62rem] font-extrabold uppercase tracking-[0.14em] backdrop-blur">
-              <span className="grid h-4 w-4 place-items-center rounded-full bg-white/25">{GLYPHS[identity.key]}</span>
+              <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-white/25">{SMALL_GLYPHS[identity.key]}</span>
               {eyebrow || identity.kicker}
             </span>
             <span className="rounded-full border border-white/20 px-2.5 py-1 text-[0.6rem] font-bold uppercase tracking-[0.12em] text-white/70">
