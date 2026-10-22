@@ -25,28 +25,6 @@ const PUBLIC_ENV: Record<string, string | undefined> = {
   NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED,
 };
 
-/**
- * Local preview defaults mirror the public Firebase web configuration already
- * used by the repository's production build workflow. These are public browser
- * config values, not Admin credentials or API tokens. They are only enabled by
- * `npm run dev`; production still requires an explicit deployment config.
- *
- * Explicit, non-placeholder environment variables always take precedence.
- */
-const IS_LOCAL_DEV = process.env.NODE_ENV === 'development';
-const DEVELOPMENT_PUBLIC_DEFAULTS: Record<string, string> = IS_LOCAL_DEV
-  ? {
-      NEXT_PUBLIC_FIREBASE_API_KEY: 'AIzaSyA1fiEviIdG5_yi7AcyxC3m9sec-AdkOfU',
-      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: 'darvo1.firebaseapp.com',
-      NEXT_PUBLIC_FIREBASE_PROJECT_ID: 'darvo1',
-      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: 'darvo1.firebasestorage.app',
-      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: '283467136948',
-      NEXT_PUBLIC_FIREBASE_APP_ID: '1:283467136948:web:c66fd594827909eb3f7ce1',
-      NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: 'G-FMV79YMHBC',
-      NEXT_PUBLIC_CLOUDFLARE_MEDIA_PROXY_URL: 'https://ec-content-api.arvinddara0290.workers.dev',
-    }
-  : {};
-
 function isExamplePlaceholder(value: string): boolean {
   const normalized = value.trim().toLowerCase();
   return (
@@ -59,21 +37,19 @@ function isExamplePlaceholder(value: string): boolean {
 
 function env(name: string, fallback: string): string {
   const configured = PUBLIC_ENV[name]?.trim();
-  // .env.example is intentionally safe to copy, but its placeholder values
-  // must not be passed to Firebase during a local preview.
+  // Never pass template placeholders from .env.example to Firebase.
+  // npm run dev prepares a real local config before Next.js starts.
   if (configured && !isExamplePlaceholder(configured)) return configured;
-
-  const developmentFallback = IS_LOCAL_DEV ? DEVELOPMENT_PUBLIC_DEFAULTS[name] : undefined;
-  return (fallback || developmentFallback || '').trim();
+  return fallback.trim();
 }
 
 function envRequired(name: string, fallback: string): string {
   const v = env(name, fallback);
   if (!v) {
-    // In browser we warn, but keep a blank value so a production deployment
-    // cannot silently point to another Firebase project.
+    // Keep production strict: a missing deployment config must remain visible
+    // rather than silently pointing the live site to another Firebase project.
     if (typeof window !== 'undefined') {
-      console.warn(`[ExamCracker] Missing required environment variable ${name}. Check .env.local or deployment settings.`);
+      console.warn('[ExamCracker] Missing required environment variable ' + name + '. Check .env.local or deployment settings.');
     }
   }
   return v;
