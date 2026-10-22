@@ -432,7 +432,7 @@ function SpotlightCard({ batch }: { batch: PreparedBatch }) {
 
           <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
             <RewardChip look={look} />
-            <Link href={`/lectures/${item.id}`} className="ec-batch-cta ml-auto px-4 py-2.5 text-[0.82rem]">
+            <Link href={batchHref(item, look)} className="ec-batch-cta ml-auto px-4 py-2.5 text-[0.82rem]">
               {look.ctaLabel || 'Explore this batch'} <ArrowRight size={15} />
             </Link>
           </div>
