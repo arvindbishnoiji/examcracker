@@ -696,6 +696,17 @@ export function validateAnimations(config: AnimationStudioConfig): ValidationRes
   const errors: string[] = [];
   if (!Array.isArray(config.layers)) return result(['Animation layers must be a list.']);
   if (config.layers.length > 12) errors.push('A maximum of 12 animation layers can be stored.');
+  // The API accepts a 512 KiB JSON body. Authored strings can expand when JSON
+  // escapes quotes, backslashes or multi-byte characters, so enforce an
+  // aggregate encoded-size budget before the admin hits Publish.
+  try {
+    const payloadBytes = new TextEncoder().encode(JSON.stringify(config)).byteLength;
+    if (payloadBytes > 450 * 1024) {
+      errors.push('Combined animation settings are too large to publish (450 KiB JSON limit). Shorten the code or split it across fewer layers.');
+    }
+  } catch {
+    errors.push('Animation settings could not be serialized. Remove unsupported values and retry.');
+  }
   config.layers.forEach((layer, index) => {
     const label = `Animation ${index + 1}${layer.name ? ` (${layer.name})` : ''}`;
     if (!layer.pages?.length) errors.push(`${label}: choose at least one page.`);
