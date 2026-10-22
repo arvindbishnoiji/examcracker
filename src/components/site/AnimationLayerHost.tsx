@@ -24,6 +24,13 @@ function pageForPath(pathname: string | null): BatchPage | null {
   return match ? match.page : null;
 }
 
+function localDayKey(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function storageKey(layer: AnimationLayer, userId?: string | null): string {
   // once_user means one display per Firebase user, not one display across all
   // accounts that might sign in on the same browser.
@@ -50,7 +57,7 @@ function alreadySeen(layer: AnimationLayer, userId?: string | null): boolean {
     const raw = storage.getItem(storageKey(layer, userId));
     if (!raw) return false;
     if (layer.frequency === 'once_user' || layer.frequency === 'once_session') return true;
-    return raw === new Date().toISOString().slice(0, 10);
+    return raw === localDayKey();
   } catch {
     return false;
   }
@@ -62,7 +69,7 @@ function rememberSeen(layer: AnimationLayer, userId?: string | null): void {
   const storage = browserStorage(layer);
   if (!storage) return;
   try {
-    const value = layer.frequency === 'once_day' ? new Date().toISOString().slice(0, 10) : 'seen';
+    const value = layer.frequency === 'once_day' ? localDayKey() : 'seen';
     storage.setItem(storageKey(layer, userId), value);
   } catch {
     /* storage can be blocked; the layer still works for this view. */
@@ -172,6 +179,13 @@ export function AnimationLayerHost() {
     const timer = window.setInterval(() => setNow(Date.now()), 60000);
     return () => window.clearInterval(timer);
   }, []);
+
+  // A dismissal is only a guard against immediate re-showing in the current
+  // route visit. Reset it when navigating so "Every visit" layers can appear
+  // on another eligible screen and again when the user returns later.
+  useEffect(() => {
+    setDismissed({});
+  }, [pathname]);
 
   const student = profile ? { exam: profile.exam, classLevel: profile.class_level } : null;
 
