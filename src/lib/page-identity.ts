@@ -168,6 +168,19 @@ export function pageIdentity(key: PageKey): PageIdentity {
   return PAGE_IDENTITIES[key];
 }
 
+/**
+ * Map a route to its identity, so navigation chrome can light up in the same
+ * colour as the page it points at. Returns null for admin/auth/unknown routes.
+ */
+export function pageKeyFromPath(pathname: string | null | undefined): PageKey | null {
+  if (!pathname) return null;
+  const clean = pathname.split('?')[0].replace(/\/$/, '') || '/';
+  if (clean === '/' || clean === '/login' || clean === '/onboarding') return null;
+  if (clean.startsWith('/admin')) return null;
+  const key = clean.replace(/^\//, '').split('/')[0] as PageKey;
+  return key in PAGE_IDENTITIES ? key : null;
+}
+
 export function identityGradient(identity: PageIdentity): string {
   return `linear-gradient(125deg, ${identity.from}, ${identity.to})`;
 }

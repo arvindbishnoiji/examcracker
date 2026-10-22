@@ -9,6 +9,7 @@ import { formatClassLevel, isSafeHttpUrl } from '@/lib/validation';
 import { NavIcon } from '@/components/ui/AppIcon';
 import { Bell, LayoutDashboard, LogOut, Search } from 'lucide-react';
 import { ProfileImage } from '@/components/student/ProfileImage';
+import { pageIdentity, pageKeyFromPath } from '@/lib/page-identity';
 
 /**
  * Floating navigation island (2026 pattern): the brand + links + actions live in
@@ -80,6 +81,21 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
                   className="ec-nav-link inline-flex items-center gap-1.5"
                   data-active={isActivePath(pathname, link.href)}
                 >
+                  <span
+                    aria-hidden
+                    className="h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{
+                      background: (() => {
+                        const key = pageKeyFromPath(link.href);
+                        return key ? pageIdentity(key).to : 'currentColor';
+                      })(),
+                      boxShadow: '0 0 8px currentColor',
+                      color: (() => {
+                        const key = pageKeyFromPath(link.href);
+                        return key ? pageIdentity(key).to : 'transparent';
+                      })(),
+                    }}
+                  />
                   <NavIcon href={link.href} fallback={link.icon} size={14} className="opacity-80" />
                   {link.label}
                 </Link>

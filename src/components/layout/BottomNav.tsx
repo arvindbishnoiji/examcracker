@@ -7,6 +7,7 @@ import { useSiteConfig } from '@/context/SiteConfigContext';
 import { isActivePath, isRouteEnabled } from '@/lib/navigation';
 import { NavIcon } from '@/components/ui/AppIcon';
 import { Settings2 } from 'lucide-react';
+import { identityGradient, pageIdentity, pageKeyFromPath } from '@/lib/page-identity';
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -35,15 +36,16 @@ export function BottomNav() {
       <div className="flex items-center justify-around px-1.5 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
         {items.map((item) => {
           const active = isActivePath(pathname, item.href);
+          const targetKey = pageKeyFromPath(item.href);
+          const identity = targetKey ? pageIdentity(targetKey) : null;
           return (
             <Link
               key={item.id}
               href={item.href}
-              className={`flex min-w-[56px] flex-col items-center gap-0.5 rounded-2xl px-2.5 py-1.5 transition ${
-                active
-                  ? 'bg-brand-50 text-brand-700 shadow-[inset_0_0_0_1px_rgb(var(--ec-brand-200))]'
-                  : 'text-ink-500 hover:text-ink-700'
+              className={`relative flex min-w-[56px] flex-col items-center gap-0.5 rounded-2xl px-2.5 py-1.5 transition ${
+                active ? 'text-white shadow-[0_10px_22px_-12px_rgba(15,10,40,0.9)]' : 'text-ink-500 hover:text-ink-700'
               }`}
+              style={active && identity ? { background: identityGradient(identity) } : undefined}
             >
               <NavIcon href={item.href} fallback={item.icon} size={19} strokeWidth={active ? 2.4 : 1.9} />
               <span className={`max-w-[68px] truncate text-[0.68rem] ${active ? 'font-extrabold' : 'font-medium'}`}>{item.label}</span>
