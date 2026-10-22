@@ -22,7 +22,6 @@ import type {
 } from '@/types';
 import {
   accentPalette,
-  audienceMatchesTarget,
   readBatchLook,
   type BatchLook,
 } from '@/lib/studio-config';
