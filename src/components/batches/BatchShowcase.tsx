@@ -27,7 +27,7 @@ import {
   type BatchLook,
 } from '@/lib/studio-config';
 import { formatISTDateTime } from '@/lib/date';
-import { isValidInternalDeepLink } from '@/lib/validation';
+import { isSafeHttpUrl, isValidInternalDeepLink } from '@/lib/validation';
 import { Reveal } from '@/components/motion/Reveal';
 
 export interface ShowcaseStudent {
@@ -68,6 +68,10 @@ export function prepareBatches(
   student: ShowcaseStudent | null,
   page: BatchPage = config.pages[0] || 'home'
 ): PreparedBatch[] {
+  // The global page placement is an independent kill switch; a per-batch
+  // placement must not bypass the admin's overall Batch Studio page setting.
+  if (!config.enabled || !config.pages.includes(page)) return [];
+
   const prepared = batches
     .map((item, index) => {
       const look = readBatchLook(item.metadata as Record<string, unknown>, index);
@@ -76,7 +80,7 @@ export function prepareBatches(
     .filter(({ item, look }) => item.active !== false && isLive(item, look))
     .filter(({ item }) => batchMatchesStudent(item, student))
     .filter(({ look }) => look.pages.length === 0 || look.pages.includes(page))
-    .sort((a, b) => b.look.priority - a.look.priority || b.index - a.index)
+    .sort((a, b) => b.look.priority - a.look.priority || a.index - b.index)
     .slice(0, config.maxItems);
 
   return prepared.map(({ item, look }, index) => {
@@ -107,6 +111,7 @@ function useCountdown(targetIso: string): { label: string; urgent: boolean } | n
 }
 
 function BatchArtwork({ look, title, className }: { look: BatchLook; title: string; className?: string }) {
+  const imageUrl = look.heroImageUrl || look.imageUrl;
   const initials = title
     .split(/\s+/)
     .filter(Boolean)
@@ -114,8 +119,8 @@ function BatchArtwork({ look, title, className }: { look: BatchLook; title: stri
     .map((word) => word[0])
     .join('')
     .toUpperCase();
-  if (look.imageUrl) {
-    return <img src={look.imageUrl} alt={title} loading="lazy" className={className} />;
+  if (imageUrl) {
+    return <img src={imageUrl} alt={title} loading="lazy" className={className} />;
   }
   return (
     <div className={`${className || ''} grid place-items-center`} aria-hidden>
@@ -149,6 +154,13 @@ function FeatureChips({ look }: { look: BatchLook }) {
   );
 }
 
+function batchHref(item: CourseCatalogItem, look: BatchLook): string {
+  const customHref = look.ctaHref.trim();
+  if (customHref && isValidInternalDeepLink(customHref)) return customHref;
+  if (customHref && isSafeHttpUrl(customHref)) return customHref;
+  return `/lectures/${encodeURIComponent(item.id)}`;
+}
+
 export function BatchStudioCard({
   batch,
   config,
@@ -161,7 +173,7 @@ export function BatchStudioCard({
   const flags = config || null;
   const { item, look, accent } = batch;
   const countdown = useCountdown(look.startsAt);
-  const href = `/lectures/${item.id}`;
+  const href = batchHref(item, look);
 
   return (
     <Reveal motion={animation} className="h-full">
@@ -263,7 +275,7 @@ function WideCard({ batch }: { batch: PreparedBatch }) {
           <div className="mt-2"><FeatureChips look={look} /></div>
           <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
             <RewardChip look={look} />
-            <Link href={`/lectures/${item.id}`} className="ec-batch-cta ml-auto">
+            <Link href={batchHref(item, look)} className="ec-batch-cta ml-auto">
               {look.ctaLabel || 'Open batch'} <ArrowRight size={14} />
             </Link>
           </div>
