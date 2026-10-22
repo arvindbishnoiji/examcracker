@@ -226,6 +226,24 @@ describe('Batch Studio + Animation Studio model', () => {
     expect(visible[0].accent.id).toBe('violet');
   });
 
+  it('renders the configured global HTTPS CTA link', () => {
+    const html = renderToString(
+      React.createElement(BatchShowcase, {
+        batches: [batch()],
+        config: {
+          ...DEFAULT_BATCH_STUDIO,
+          enabled: true,
+          ctaLabel: 'Official details',
+          ctaHref: 'https://example.com/batches',
+        },
+        student: { exam: 'JEE', classLevel: '12' },
+        page: 'home',
+      })
+    );
+    expect(html).toContain('href="https://example.com/batches"');
+    expect(html).toContain('Official details');
+  });
+
   it('honours the global Batch Studio page placement', () => {
     const config: BatchShowcaseConfig = {
       ...DEFAULT_BATCH_STUDIO,
