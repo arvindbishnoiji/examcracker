@@ -474,6 +474,46 @@ export interface BroadcastNotice {
   createdAt: string;
 }
 
+export type BadgeCategory = 'achievement' | 'consistency' | 'test_performance' | 'course_completion' | 'community' | 'verified' | 'custom';
+export type BadgeRarity = 'standard' | 'rare' | 'epic' | 'legendary';
+
+export interface BadgeDefinition {
+  id: string;
+  title: string;
+  description: string;
+  criteria: string;
+  category: BadgeCategory;
+  rarity: BadgeRarity;
+  image_url: string;
+  active: number | boolean;
+  sort_order: number;
+  active_awards?: number;
+}
+
+export interface StudentBadge {
+  id: string;
+  title: string;
+  description: string;
+  criteria: string;
+  category: BadgeCategory;
+  rarity: BadgeRarity;
+  image_url: string;
+  awarded_at: string;
+  reason: string;
+}
+
+export interface BadgeAwardRecord {
+  id: string;
+  badge_id: string;
+  firebase_uid: string;
+  reason: string;
+  awarded_at: string;
+  badge_title: string;
+  category: BadgeCategory;
+  display_name: string | null;
+  email: string | null;
+}
+
 export interface CloudflareVideoMetadata {
   videoId: string;
   title: string;

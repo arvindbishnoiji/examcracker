@@ -14,6 +14,7 @@ import {
   SchedulingSection,
 } from '@/components/admin/sections/DataSections';
 import { FeedbackSection } from '@/components/admin/sections/FeedbackSection';
+import { BadgesSection } from '@/components/admin/sections/BadgesSection';
 import { EnrollmentConsole } from '@/components/admin/sections/EnrollmentConsole';
 import { SubjectsSection } from '@/components/admin/sections/SubjectsSection';
 import { HomepageBuilderSection } from '@/components/admin/sections/HomepageBuilderSection';
@@ -117,6 +118,8 @@ export default function AdminSectionPage() {
       return <FeaturesSection />;
     case 'students':
       return <EnrollmentConsole />;
+    case 'badges':
+      return <BadgesSection />;
     case 'subjects':
       return <SubjectsSection />;
     case 'analytics':

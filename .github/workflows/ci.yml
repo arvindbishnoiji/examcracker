@@ -29,9 +29,9 @@ jobs:
           node --check workers/ec-api/src/index.js
           node --check workers/ec-api/src/drive.js
           npx wrangler d1 migrations apply exam-cracker-db --local
-          schema_output="$(npx wrangler d1 execute exam-cracker-db --local --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('student_profiles','course_catalog','subjects','course_subjects','drive_files','site_settings','feedback_threads','feedback_messages','notifications') ORDER BY name")"
+          schema_output="$(npx wrangler d1 execute exam-cracker-db --local --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('student_profiles','course_catalog','subjects','course_subjects','drive_files','site_settings','feedback_threads','feedback_messages','notifications','badge_definitions','student_badges','badge_award_history') ORDER BY name")"
           echo "$schema_output"
-          for table in student_profiles course_catalog subjects course_subjects drive_files site_settings feedback_threads feedback_messages notifications; do
+          for table in student_profiles course_catalog subjects course_subjects drive_files site_settings feedback_threads feedback_messages notifications badge_definitions student_badges badge_award_history; do
             grep -q "$table" <<<"$schema_output"
           done
           column_output="$(npx wrangler d1 execute exam-cracker-db --local --command="SELECT name FROM pragma_table_info('course_catalog')")"

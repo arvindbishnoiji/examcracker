@@ -222,6 +222,23 @@ describe('D1 migrations 0001 → 0002', () => {
   });
 });
 
+describe('D1 migration 0005 (badges and award history)', () => {
+  it('adds normalized badge tables and prevents duplicate active awards while retaining revocation history', () => {
+    const { db } = freshDatabase();
+    db.exec(migration('0001_initial_schema.sql'));
+    db.exec(migration('0002_subjects_and_drive_files.sql'));
+    db.exec(migration('0005_badges.sql'));
+    expect(tables(db)).toEqual(expect.arrayContaining(['badge_definitions', 'student_badges', 'badge_award_history']));
+    db.prepare(`INSERT INTO student_profiles (firebase_uid,display_name,email,exam,class_level) VALUES (?,?,?,?,?)`).run('student-x', 'Student X', 'x@example.com', 'JEE', '11');
+    db.prepare(`INSERT INTO badge_definitions (id,title,category,created_by) VALUES (?,?,?,?)`).run('badge-x', 'Physics Master', 'achievement', 'admin');
+    db.prepare(`INSERT INTO student_badges (id,badge_id,firebase_uid,awarded_by) VALUES (?,?,?,?)`).run('award-x', 'badge-x', 'student-x', 'admin');
+    expect(() => db.prepare(`INSERT INTO student_badges (id,badge_id,firebase_uid,awarded_by) VALUES (?,?,?,?)`).run('award-duplicate', 'badge-x', 'student-x', 'admin')).toThrow();
+    db.prepare(`UPDATE student_badges SET revoked_at=?,revoked_by=?,revoke_reason=? WHERE id=?`).run('2026-01-02T00:00:00Z', 'admin', 'Correction', 'award-x');
+    expect(() => db.prepare(`INSERT INTO student_badges (id,badge_id,firebase_uid,awarded_by) VALUES (?,?,?,?)`).run('award-reissue', 'badge-x', 'student-x', 'admin')).not.toThrow();
+    expect(Number((db.prepare('SELECT COUNT(*) AS n FROM student_badges').get() as Row)?.n)).toBe(2);
+  });
+});
+
 describe('D1 migration 0004 (Dropper class & subject queue index)', () => {
   it('upgrades an existing 0001-0003 database non-destructively without losing rows', () => {
     const { db } = freshDatabase();

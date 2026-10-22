@@ -126,6 +126,7 @@ async function body(response: Response): Promise<Record<string, unknown>> {
 function seed() {
   db.exec(migration('0001_initial_schema.sql'));
   db.exec(migration('0002_subjects_and_drive_files.sql'));
+  db.exec(migration('0005_badges.sql'));
 
   db.prepare(
     `INSERT INTO student_profiles (firebase_uid,display_name,email,exam,class_level,created_at,updated_at)
@@ -426,6 +427,61 @@ describe('Firebase token verification', () => {
     expect(payload.items).toEqual([
       expect.objectContaining({ id: 'subject-1', name: 'Physics', assignmentCount: 1, lectureCount: 2 }),
     ]);
+  });
+
+  it('restricts badge administration to the verified admin and keeps awards idempotent with revocation history', async () => {
+    const adminToken = await tokenFor({ sub: 'admin-1', email: 'arvinddarabishnoi@gmail.com' });
+    const studentToken = await tokenFor({ sub: 'student-1', email: 'asha@example.com' });
+    const denied = await handleApiRequest(request('/admin/badges', { token: studentToken }), env);
+    expect(denied.status).toBe(403);
+
+    const invalidImage = await handleApiRequest(request('/admin/badges', {
+      method: 'POST', token: adminToken, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Invalid image', category: 'achievement', rarity: 'standard', imageUrl: 'http://example.com/badge.png' }),
+    }), env);
+    expect(invalidImage.status).toBe(400);
+
+    const created = await handleApiRequest(request('/admin/badges', {
+      method: 'POST', token: adminToken, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Verified learner', description: 'Identity reviewed', category: 'verified', rarity: 'rare', imageUrl: '' }),
+    }), env);
+    expect(created.status).toBe(201);
+    const definition = await body(created);
+    const badgeId = String((definition.item as Record<string, unknown>).id);
+
+    const award = await handleApiRequest(request(`/admin/badges/${badgeId}/awards`, {
+      method: 'POST', token: adminToken, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ studentUid: 'student-1', reason: 'Reviewed by staff' }),
+    }), env);
+    expect(award.status).toBe(201);
+    const awardData = await body(award);
+    const awardId = String((awardData.item as Record<string, unknown>).id);
+
+    const duplicate = await handleApiRequest(request(`/admin/badges/${badgeId}/awards`, {
+      method: 'POST', token: adminToken, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ studentUid: 'student-1' }),
+    }), env);
+    expect(await body(duplicate)).toMatchObject({ alreadyAwarded: true });
+
+    const studentBadges = await handleApiRequest(request('/my/badges', { token: studentToken }), env);
+    expect(await body(studentBadges)).toMatchObject({ verified: true, items: [expect.objectContaining({ title: 'Verified learner' })] });
+
+    const selfGrant = await handleApiRequest(request('/admin/badges', {
+      method: 'POST', token: studentToken, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Fake', category: 'verified' }),
+    }), env);
+    expect(selfGrant.status).toBe(403);
+
+    const revoked = await handleApiRequest(request(`/admin/badge-awards/${awardId}/revoke`, {
+      method: 'POST', token: adminToken, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reason: 'Verification evidence expired' }),
+    }), env);
+    expect(revoked.status).toBe(200);
+    const afterRevoke = await handleApiRequest(request('/my/badges', { token: studentToken }), env);
+    expect(await body(afterRevoke)).toMatchObject({ verified: false, items: [] });
+    const history = await handleApiRequest(request('/admin/badges', { token: adminToken }), env);
+    expect((await body(history)).history).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: 'awarded' }), expect.objectContaining({ action: 'revoked', reason: 'Verification evidence expired' }),
+    ]));
   });
 });
 

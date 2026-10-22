@@ -147,6 +147,14 @@ export const ADMIN_SECTIONS: AdminSectionMeta[] = [
     keywords: ['student', 'enrollment', 'batch', 'access code', 'users'],
   },
   {
+    slug: 'badges',
+    label: 'Badges & achievements',
+    group: 'Students & Access',
+    icon: '🏅',
+    description: 'Create achievement badges, grant verified awards and review preserved award history.',
+    keywords: ['badge', 'achievement', 'verified', 'award', 'revoke', 'recognition'],
+  },
+  {
     slug: 'announcements',
     label: 'Announcements',
     group: 'Communication',

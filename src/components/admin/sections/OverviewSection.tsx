@@ -15,6 +15,7 @@ const QUICK_ACTIONS = [
   { label: 'Add a test', href: '/admin/tests', icon: '✎', tone: 'from-emerald-500 to-emerald-700' },
   { label: 'Post an announcement', href: '/admin/announcements', icon: '◔', tone: 'from-amber-500 to-amber-600' },
   { label: "Set today's goal", href: '/admin/goals', icon: '◎', tone: 'from-sky-500 to-sky-700' },
+  { label: 'Create or award a badge', href: '/admin/badges', icon: '🏅', tone: 'from-blue-500 to-blue-700' },
 ];
 
 function greeting() {

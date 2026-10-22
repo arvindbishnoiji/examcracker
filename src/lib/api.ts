@@ -40,6 +40,11 @@ import type {
   DriveFileItem,
   DriveStatusResponse,
   SubjectQueueItem,
+  BadgeDefinition,
+  StudentBadge,
+  BadgeAwardRecord,
+  BadgeCategory,
+  BadgeRarity,
 } from '@/types';
 
 export class ApiError extends Error {
@@ -408,6 +413,51 @@ export async function getStudentAnalysis(): Promise<AnalysisResponse> {
 // ---------------------------------------------------------------------------
 // Admin API endpoints (server-verified against arvinddarabishnoi@gmail.com)
 // ---------------------------------------------------------------------------
+
+export async function getMyBadges(): Promise<{ items: StudentBadge[]; verified: boolean }> {
+  return requestApi('/my/badges');
+}
+
+export interface AdminBadgesResponse {
+  items: BadgeDefinition[];
+  activeAwards: BadgeAwardRecord[];
+  history: Array<Record<string, unknown>>;
+  counts: { definitions: number; activeAwards: number; verifiedStudents: number };
+}
+
+export async function getAdminBadges(): Promise<AdminBadgesResponse> {
+  return requestApi('/admin/badges');
+}
+
+export async function saveAdminBadge(input: {
+  id?: string;
+  title: string;
+  description: string;
+  criteria: string;
+  category: BadgeCategory;
+  rarity: BadgeRarity;
+  imageUrl: string;
+  active: boolean;
+  sortOrder: number;
+}): Promise<BadgeDefinition> {
+  const { id, ...body } = input;
+  const response = id
+    ? await requestApi<{ item: BadgeDefinition }>(`/admin/badges/${encodeURIComponent(id)}`, { method: 'PATCH', body })
+    : await requestApi<{ item: BadgeDefinition }>('/admin/badges', { method: 'POST', body });
+  return response.item;
+}
+
+export async function awardAdminBadge(badgeId: string, studentUid: string, reason: string): Promise<{ alreadyAwarded: boolean }> {
+  return requestApi(`/admin/badges/${encodeURIComponent(badgeId)}/awards`, {
+    method: 'POST', body: { studentUid, reason },
+  });
+}
+
+export async function revokeAdminBadge(awardId: string, reason: string): Promise<void> {
+  await requestApi(`/admin/badge-awards/${encodeURIComponent(awardId)}/revoke`, {
+    method: 'POST', body: { reason },
+  });
+}
 
 export async function getAdminOverview(): Promise<AdminOverviewResponse> {
   return requestApi<AdminOverviewResponse>('/admin/overview');
