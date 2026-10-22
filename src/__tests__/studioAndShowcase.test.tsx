@@ -169,6 +169,23 @@ describe('Batch Studio + Animation Studio model', () => {
     expect(layersForPage({ ...config, enabled: false }, 'home', { exam: 'JEE', classLevel: '12' }, now)).toEqual([]);
   });
 
+  it('rejects animation configurations whose escaped JSON exceeds the API payload budget', () => {
+    const oversized = sanitizeAnimations({
+      enabled: true,
+      layers: Array.from({ length: 12 }, (_, index) => ({
+        id: `layer-${index}`,
+        name: `Layer ${index}`,
+        pages: ['home'],
+        html: '"'.repeat(12000),
+        css: '\\\\'.repeat(6000),
+        js: '"'.repeat(12000),
+      })),
+    });
+    const validation = validateSettingValue('animations', oversized);
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.join(' ')).toContain('Combined animation settings are too large');
+  });
+
   it('builds a sandbox-ready document with the authored code', () => {
     const doc = buildAnimationDocument({ html: '<div id="x">Hi</div>', css: '#x{color:red}', js: 'console.log(1)' });
     expect(doc).toContain('<div id="x">Hi</div>');
