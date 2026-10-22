@@ -143,8 +143,31 @@ describe('Google Drive authentication', () => {
     const decodedClaims = JSON.parse(Buffer.from(claims, 'base64url').toString('utf8'));
     expect(decodedHeader.alg).toBe('RS256');
     expect(decodedClaims.iss).toBe('exam-cracker@test-project.iam.gserviceaccount.com');
+    expect(decodedClaims).not.toHaveProperty('sub');
     expect(decodedClaims.scope).toBe('https://www.googleapis.com/auth/drive');
     expect(decodedClaims.exp - decodedClaims.iat).toBe(3600);
+  });
+
+
+  it('adds the Workspace user subject only when domain-wide delegation is configured', async () => {
+    const { impl, calls } = stubFetch(() => tokenResponse());
+    await getDriveAccessToken(
+      envWith({ GOOGLE_DRIVE_IMPERSONATE_EMAIL: 'uploads@example.com' }),
+      impl
+    );
+    const body = String(calls[0].init.body);
+    const assertion = new URLSearchParams(body).get('assertion') || '';
+    const [, claims] = assertion.split('.');
+    const decodedClaims = JSON.parse(Buffer.from(claims, 'base64url').toString('utf8'));
+    expect(decodedClaims.sub).toBe('uploads@example.com');
+  });
+
+  it('rejects an invalid Workspace impersonation email before contacting Google', async () => {
+    const { impl, calls } = stubFetch(() => tokenResponse());
+    await expect(
+      getDriveAccessToken(envWith({ GOOGLE_DRIVE_IMPERSONATE_EMAIL: 'not-an-email' }), impl)
+    ).rejects.toMatchObject({ status: 503, message: expect.stringContaining('delegation email is invalid') });
+    expect(calls).toHaveLength(0);
   });
 
   it('reuses the cached token across calls instead of re-authenticating', async () => {

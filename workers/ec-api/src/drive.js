@@ -83,7 +83,18 @@ function serviceAccount(env) {
       503
     );
   }
-  return { clientEmail, privateKey: privateKey.replace(/\\n/g, "\n") };
+  const impersonateEmail = String((env && env.GOOGLE_DRIVE_IMPERSONATE_EMAIL) || "").trim();
+  if (impersonateEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(impersonateEmail)) {
+    throw httpError(
+      "Google Drive delegation email is invalid. Set GOOGLE_DRIVE_IMPERSONATE_EMAIL to a valid Google Workspace user email or leave it unset.",
+      503
+    );
+  }
+  return {
+    clientEmail,
+    privateKey: privateKey.replace(/\\n/g, "\n"),
+    impersonateEmail,
+  };
 }
 
 function folderFor(env, purpose) {
@@ -170,12 +181,13 @@ function pemToPkcs8(pem) {
 }
 
 async function signedAssertion(env) {
-  const { clientEmail, privateKey } = serviceAccount(env);
+  const { clientEmail, privateKey, impersonateEmail } = serviceAccount(env);
   const nowSeconds = Math.floor(Date.now() / 1000);
   const header = base64urlText(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claims = base64urlText(
     JSON.stringify({
       iss: clientEmail,
+      ...(impersonateEmail ? { sub: impersonateEmail } : {}),
       scope: scopeFor(env),
       aud: TOKEN_ENDPOINT,
       iat: nowSeconds,
@@ -209,9 +221,9 @@ export function clearDriveTokenCache() {
 
 /** Returns a cached OAuth access token or exchanges a signed JWT for one. */
 export async function getDriveAccessToken(env, fetchImpl = fetch) {
-  const { clientEmail } = serviceAccount(env);
+  const { clientEmail, impersonateEmail } = serviceAccount(env);
   const scope = scopeFor(env);
-  const cacheKey = `${clientEmail}|${scope}`;
+  const cacheKey = `${clientEmail}|${impersonateEmail || "service-account"}|${scope}`;
   const cached = tokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() + TOKEN_SAFETY_WINDOW_MS) {
     return cached.token;
@@ -421,6 +433,10 @@ export async function inspectDriveStatus(env, { probe = false, fetchImpl = fetch
     configured,
     serviceAccountConfigured: Boolean(accountInfo),
     serviceAccountEmail: accountInfo ? accountInfo.clientEmail : null,
+    workspaceDelegationConfigured: Boolean(
+      String((env && env.GOOGLE_DRIVE_IMPERSONATE_EMAIL) || "").trim()
+    ),
+    impersonatedUserEmail: String((env && env.GOOGLE_DRIVE_IMPERSONATE_EMAIL) || "").trim() || null,
     folderIdConfigured: Boolean(defaultFolderId || pdfFolderId || profileFolderId),
     folderId: defaultFolderId || null,
     pdfFolderId: effectivePdfFolder || null,

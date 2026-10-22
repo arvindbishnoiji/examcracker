@@ -10,7 +10,7 @@ ID token and course enrollment rights.
 | --- | --- |
 | File bytes (profile photos, course PDFs) | Google Drive folder (`1sSYE5cAY6jjAgzOYTgCQNOR1xxotc_I8` or purpose override) |
 | File metadata (Drive id, MIME type, size, owner, course, status) | D1 `drive_files` |
-| Credentials | Worker secrets only (`GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_DRIVE_FOLDER_ID`) |
+| Credentials | Worker secrets only (`GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_DRIVE_FOLDER_ID`; optional `GOOGLE_DRIVE_IMPERSONATE_EMAIL` for Workspace domain-wide delegation) |
 | Pages front-door delegation | `cloudflare-pages/pages-api-entry.mjs` forwards `/drive/*`, `/admin/drive/*`, `/files/:id` to `EXAM_CRACKER_WEB` when Pages lacks `GOOGLE_SERVICE_ACCOUNT_JSON` |
 | Admin live diagnostics | `GET /api/ec/admin/drive/status?probe=1` (**Admin → Media & Files → Verify Drive Folder**) |
 | Browser access | `GET /api/ec/files/:id` with a Firebase `Authorization: Bearer` header |
@@ -45,6 +45,18 @@ returns **HTTP 404 (`notFound`)** in four situations:
    hold `GOOGLE_SERVICE_ACCOUNT_JSON` locally.
 
 ---
+
+
+## Why uploads can fail with HTTP 403 `storageQuotaExceeded`
+
+This is a Google account/storage ownership limitation, not a retryable upload bug. A Google service account does not get a normal personal Drive storage quota. Sharing a folder in an individual's **My Drive** with the service account does not transfer storage ownership, so uploads can fail even when the folder is shared correctly.
+
+Choose one of these supported setups:
+
+1. **Recommended — Shared Drive:** create a folder inside a Google Workspace Shared Drive, add the service account email as **Content manager** (or a role allowed to add files), and set `GOOGLE_DRIVE_FOLDER_ID` to that folder ID. The Shared Drive must belong to a Workspace organization that supports Shared Drives; a regular personal Gmail Drive cannot create one.
+2. **Workspace domain-wide delegation:** only if you control a Google Workspace organization. Enable domain-wide delegation for the service account in Google Cloud, authorize the Drive scope `https://www.googleapis.com/auth/drive` in the Workspace Admin console, then set the Worker variable/secret `GOOGLE_DRIVE_IMPERSONATE_EMAIL` to the Workspace user whose Drive storage should own the files. That user's storage quota and policies apply. Do not set this option for a personal Gmail account or unless the Workspace administrator has explicitly authorized it.
+
+After changing the setup, use **Admin → Media & Files → Verify Drive Folder**, then upload a small test file. Keep all Google credentials as Worker secrets/variables; never put them in client code or commit them to GitHub. A code deployment alone cannot create a Shared Drive, add the service account to it, or grant Workspace domain-wide delegation.
 
 ## 1. Enable the Drive API & create a Service Account
 
