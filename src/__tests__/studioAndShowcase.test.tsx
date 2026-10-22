@@ -271,6 +271,34 @@ describe('Batch Studio + Animation Studio model', () => {
     expect(minimalHtml).toContain('href="/tests"');
   });
 
+  it('honours Batch Studio visibility toggles across every layout', () => {
+    const disabledFlags: BatchShowcaseConfig = {
+      ...DEFAULT_BATCH_STUDIO,
+      layout: 'spotlight',
+      showCountdown: false,
+      showReward: false,
+      showFeatures: false,
+      showInstructor: false,
+      showSeats: false,
+    };
+    for (const layout of ['spotlight', 'wide', 'tile', 'minimal'] as const) {
+      const html = renderToString(
+        React.createElement(BatchShowcase, {
+          batches: [batch()],
+          config: { ...disabledFlags, layout },
+          student: { exam: 'JEE', classLevel: '12' },
+          page: 'home',
+        })
+      );
+      expect(html).not.toContain('Golden badge');
+      expect(html).not.toContain('Daily planner');
+      expect(html).not.toContain('Doubt sessions');
+      expect(html).not.toContain('A. Sharma');
+      expect(html).not.toContain('40 seats');
+      expect(html).not.toContain('Starts in');
+    }
+  });
+
   it('renders the colour-coded showcase card markup', () => {
     const html = renderToString(
       React.createElement(BatchShowcase, {
