@@ -24,16 +24,30 @@ function pageForPath(pathname: string | null): BatchPage | null {
   return match ? match.page : null;
 }
 
-function storageKey(layer: AnimationLayer): string {
-  return `ec-anim-seen:${layer.id}`;
+function storageKey(layer: AnimationLayer, userId?: string | null): string {
+  // once_user means one display per Firebase user, not one display across all
+  // accounts that might sign in on the same browser.
+  const userSuffix = layer.frequency === 'once_user' ? `:${userId || 'anonymous'}` : '';
+  return `ec-anim-seen:${layer.id}${userSuffix}`;
 }
 
-function alreadySeen(layer: AnimationLayer): boolean {
-  if (typeof window === 'undefined') return false;
-  const storage = layer.frequency === 'once_session' ? window.sessionStorage : window.localStorage;
+function browserStorage(layer: AnimationLayer): Storage | null {
+  if (typeof window === 'undefined') return null;
   try {
-    if (layer.frequency === 'always') return false;
-    const raw = storage.getItem(storageKey(layer));
+    return layer.frequency === 'once_session' ? window.sessionStorage : window.localStorage;
+  } catch {
+    // Accessing the storage getter itself can throw in sandboxed/private modes.
+    return null;
+  }
+}
+
+function alreadySeen(layer: AnimationLayer, userId?: string | null): boolean {
+  if (typeof window === 'undefined' || layer.frequency === 'always') return false;
+  if (layer.frequency === 'once_user' && !userId) return false;
+  const storage = browserStorage(layer);
+  if (!storage) return false;
+  try {
+    const raw = storage.getItem(storageKey(layer, userId));
     if (!raw) return false;
     if (layer.frequency === 'once_user' || layer.frequency === 'once_session') return true;
     return raw === new Date().toISOString().slice(0, 10);
@@ -42,12 +56,14 @@ function alreadySeen(layer: AnimationLayer): boolean {
   }
 }
 
-function rememberSeen(layer: AnimationLayer): void {
-  if (typeof window === 'undefined') return;
-  const storage = layer.frequency === 'once_session' ? window.sessionStorage : window.localStorage;
+function rememberSeen(layer: AnimationLayer, userId?: string | null): void {
+  if (typeof window === 'undefined' || layer.frequency === 'always') return;
+  if (layer.frequency === 'once_user' && !userId) return;
+  const storage = browserStorage(layer);
+  if (!storage) return;
   try {
     const value = layer.frequency === 'once_day' ? new Date().toISOString().slice(0, 10) : 'seen';
-    storage.setItem(storageKey(layer), value);
+    storage.setItem(storageKey(layer, userId), value);
   } catch {
     /* storage can be blocked; the layer still works for this view. */
   }
@@ -118,7 +134,7 @@ function useTriggerFire(layer: AnimationLayer | null, enabled: boolean): boolean
  */
 export function AnimationLayerHost() {
   const { config } = useSiteConfig();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const pathname = usePathname();
   const page = pageForPath(pathname);
   const [dismissed, setDismissed] = useState<Record<string, boolean>>({});
@@ -151,21 +167,21 @@ export function AnimationLayerHost() {
     const studio = config.animations;
     if (studio.respectReducedMotion && reducedMotion) return null;
     const candidates = layersForPage(studio, page, student, now).filter(
-      (candidate) => !dismissed[candidate.id] && !alreadySeen(candidate)
+      (candidate) => !dismissed[candidate.id] && !alreadySeen(candidate, user?.uid)
     );
     return candidates[0] || null;
     // seenVersion forces a re-evaluation after a layer is marked as seen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.animations, page, student?.exam, student?.classLevel, dismissed, now, seenVersion, reducedMotion]);
+  }, [config.animations, page, student?.exam, student?.classLevel, user?.uid, dismissed, now, seenVersion, reducedMotion]);
 
   const fire = useTriggerFire(layer, Boolean(layer));
 
   const close = useCallback(() => {
     if (!layer) return;
-    rememberSeen(layer);
+    rememberSeen(layer, user?.uid);
     setDismissed((previous) => ({ ...previous, [layer.id]: true }));
     setSeenVersion((version) => version + 1);
-  }, [layer]);
+  }, [layer, user?.uid]);
 
   useEffect(() => {
     if (!layer || !fire || !layer.durationMs) return;
@@ -175,8 +191,8 @@ export function AnimationLayerHost() {
 
   useEffect(() => {
     if (!layer || !fire) return;
-    rememberSeen(layer);
-  }, [layer, fire]);
+    rememberSeen(layer, user?.uid);
+  }, [layer, fire, user?.uid]);
 
   if (!layer || !fire) return null;
 
