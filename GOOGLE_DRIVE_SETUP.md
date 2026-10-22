@@ -186,7 +186,7 @@ Add both secrets to the **Cloudflare Pages project `examcrack` → Settings → 
 | `GOOGLE_APPS_SCRIPT_URL` | The deployed Apps Script Web App URL ending in `/exec` |
 | `GOOGLE_APPS_SCRIPT_SHARED_SECRET` | The exact same random secret as Script Property `EXAM_CRACKER_SHARED_SECRET` |
 
-Keep `GOOGLE_DRIVE_FOLDER_ID` set to your folder ID. Do **not** paste the service-account JSON, shared secret, or Apps Script URL into site HTML, a public environment variable, or GitHub. Save the Cloudflare secrets and redeploy the Pages project.
+Keep `GOOGLE_DRIVE_FOLDER_ID` set to your folder ID. If `GOOGLE_DRIVE_PROFILE_FOLDER_ID` or `GOOGLE_DRIVE_PDF_FOLDER_ID` overrides are set, either unset them or set them to the same folder ID configured in `EXAM_CRACKER_FOLDER_ID`; the bridge intentionally allowlists one folder. Do **not** paste the service-account JSON, shared secret, or Apps Script URL into site HTML, a public environment variable, or GitHub. Save the Cloudflare secrets and redeploy the Pages project.
 
 If the folder is shared with the existing service account, retain `GOOGLE_SERVICE_ACCOUNT_JSON` on the runtime that handles authenticated file downloads and cleanup. The upload bridge only changes how new file bytes are created; it does not bypass Exam Cracker's Firebase auth, D1 ownership/access checks, or private download routes. Do not remove the service-account credentials until a separate read/delete migration has been implemented.
 
