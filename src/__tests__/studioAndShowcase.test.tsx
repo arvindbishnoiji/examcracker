@@ -242,6 +242,16 @@ describe('Batch Studio + Animation Studio model', () => {
     expect(html).toContain('src="https://example.com/hero.jpg"');
     expect(html).toContain('href="/tests"');
     expect(html).toContain('View tests');
+
+    const minimalHtml = renderToString(
+      React.createElement(BatchShowcase, {
+        batches: [source],
+        config: { ...DEFAULT_BATCH_STUDIO, layout: 'minimal' },
+        student: { exam: 'JEE', classLevel: '12' },
+        page: 'home',
+      })
+    );
+    expect(minimalHtml).toContain('href="/tests"');
   });
 
   it('renders the colour-coded showcase card markup', () => {
