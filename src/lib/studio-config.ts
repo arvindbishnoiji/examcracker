@@ -145,12 +145,12 @@ export const BATCH_LAYOUT_IDS: BatchCardLayout[] = BATCH_LAYOUTS.map((layout) =>
 
 export const REWARD_TYPES: Array<{ id: BatchRewardType; label: string; icon: string; hint: string }> = [
   { id: 'none', label: 'No reward', icon: '—', hint: 'Do not show a reward block.' },
-  { id: 'badge', label: 'Badge', icon: '🏅', hint: 'A collectible profile badge.' },
-  { id: 'xp', label: 'XP points', icon: '⚡', hint: 'Progress points added on completion.' },
-  { id: 'certificate', label: 'Certificate', icon: '📜', hint: 'A downloadable completion certificate.' },
-  { id: 'discount', label: 'Discount', icon: '🎟️', hint: 'A coupon or fee waiver.' },
-  { id: 'cash', label: 'Cash / scholarship', icon: '💰', hint: 'A scholarship or cash prize.' },
-  { id: 'access', label: 'Bonus access', icon: '🔑', hint: 'Unlocks another batch or test series.' },
+  { id: 'badge', label: 'Badge', icon: '🏅', hint: 'Show a badge-reward label; awarding is handled separately.' },
+  { id: 'xp', label: 'XP points', icon: '⚡', hint: 'Display an XP amount; this setting does not grant points.' },
+  { id: 'certificate', label: 'Certificate', icon: '📜', hint: 'Show a certificate offer; delivery is not automated here.' },
+  { id: 'discount', label: 'Discount', icon: '🎟️', hint: 'Display a coupon or fee-waiver offer.' },
+  { id: 'cash', label: 'Cash / scholarship', icon: '💰', hint: 'Display a scholarship or cash-award offer.' },
+  { id: 'access', label: 'Bonus access', icon: '🔑', hint: 'Display a bonus-access offer; access must be granted separately.' },
 ];
 
 export const BATCH_REWARD_TYPES: BatchRewardType[] = REWARD_TYPES.map((reward) => reward.id);
@@ -179,7 +179,7 @@ export const DEFAULT_BATCH_STUDIO: BatchShowcaseConfig = {
   eyebrow: 'Programmes built for your rank',
   title: 'Pick your batch. Own the syllabus.',
   subtitle:
-    'Every batch ships with a day-wise plan, chapter lectures, rank-boosting tests and a reward you can actually claim.',
+    'Browse batches with a day-wise plan, chapter lectures, rank-boosting tests and clear completion-reward details.',
   layout: 'spotlight',
   showCountdown: true,
   showReward: true,
