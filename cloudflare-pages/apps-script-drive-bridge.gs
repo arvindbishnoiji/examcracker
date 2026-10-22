@@ -67,16 +67,17 @@ function doPost(e) {
     }
 
     // Check file signatures instead of trusting the browser-supplied MIME type.
-    var first = bytes.slice(0, 8).map(function (b) { return (b + 256) % 256; });
+    var normalizedBytes = bytes.map(function (b) { return (b + 256) % 256; });
+    var first = normalizedBytes.slice(0, 8);
     var validImage = (
       (fileType === "image/jpeg" && first.length >= 3 && first[0] === 255 && first[1] === 216 && first[2] === 255) ||
       (fileType === "image/png" && first.length >= 8 && first[0] === 137 && first[1] === 80 && first[2] === 78 && first[3] === 71 && first[4] === 13 && first[5] === 10 && first[6] === 26 && first[7] === 10) ||
       (fileType === "image/gif" && String.fromCharCode.apply(null, first.slice(0, 3)) === "GIF") ||
-      (fileType === "image/webp" && String.fromCharCode.apply(null, first.slice(0, 4)) === "RIFF" && String.fromCharCode.apply(null, first.slice(8, 12)) === "WEBP")
+      (fileType === "image/webp" && normalizedBytes.length >= 12 && String.fromCharCode.apply(null, normalizedBytes.slice(0, 4)) === "RIFF" && String.fromCharCode.apply(null, normalizedBytes.slice(8, 12)) === "WEBP")
     );
     var validPdf = fileType === "application/pdf" &&
       bytes.length >= 5 &&
-      String.fromCharCode.apply(null, bytes.slice(0, 5).map(function (b) { return (b + 256) % 256; })) === "%PDF-";
+      String.fromCharCode.apply(null, normalizedBytes.slice(0, 5)) === "%PDF-";
     if (!(validImage || validPdf)) {
       return jsonOutput({ status: "error", message: "The file contents do not match an allowed image or PDF type." });
     }
