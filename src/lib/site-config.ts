@@ -1266,7 +1266,13 @@ export function getHomeSectionsForStudent(
   homepage: HomepageConfig,
   student: StudentAudience | null
 ): HomeSectionConfig[] {
-  return homepage.sections.filter(
+  const configured = homepage.sections.filter(
+    (section) => section.visible && audienceMatches(section.audience, student)
+  );
+  // A blank/unconfigured homepage should still be useful to students. Keep the
+  // product's curated defaults as a fallback instead of rendering an empty page.
+  if (configured.length > 0) return configured;
+  return DEFAULT_HOME_SECTIONS.filter(
     (section) => section.visible && audienceMatches(section.audience, student)
   );
 }
