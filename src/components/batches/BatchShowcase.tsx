@@ -347,7 +347,7 @@ export function BatchShowcase({
             </h2>
             {config.subtitle && <p className="ec-lead mt-2 max-w-2xl">{config.subtitle}</p>}
           </div>
-          {config.ctaLabel && isValidInternalDeepLink(config.ctaHref) && (
+          {config.ctaLabel && (isValidInternalDeepLink(config.ctaHref) || (isSafeHttpUrl(config.ctaHref) && /^https:\/\//i.test(config.ctaHref.trim()))) && (
             <Link href={config.ctaHref} className="ec-btn ec-btn-secondary px-4 py-2.5 text-xs font-bold">
               {config.ctaLabel} <ArrowRight size={13} className="ml-1.5" />
             </Link>
