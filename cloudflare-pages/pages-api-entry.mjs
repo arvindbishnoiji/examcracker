@@ -36,10 +36,15 @@ function isDriveBinaryOrStatusRoute(request) {
 }
 
 function hasLocalDriveCredentials(env) {
-  return Boolean(
+  const hasServiceAccount =
     typeof env?.GOOGLE_SERVICE_ACCOUNT_JSON === "string" &&
-      env.GOOGLE_SERVICE_ACCOUNT_JSON.trim()
-  );
+    env.GOOGLE_SERVICE_ACCOUNT_JSON.trim();
+  const hasAppsScript =
+    typeof env?.GOOGLE_APPS_SCRIPT_URL === "string" &&
+    env.GOOGLE_APPS_SCRIPT_URL.trim() &&
+    typeof env?.GOOGLE_APPS_SCRIPT_SHARED_SECRET === "string" &&
+    env.GOOGLE_APPS_SCRIPT_SHARED_SECRET.trim();
+  return Boolean(hasServiceAccount || hasAppsScript);
 }
 
 export async function onRequest({ request, env }) {
