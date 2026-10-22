@@ -57,6 +57,12 @@ Versioned, additive migrations in `migrations/`:
 - `0002_subjects_and_drive_files.sql` — `subjects`, `course_subjects`, hierarchy
   columns (`parent_id`, `subject_id`, `sort_order`) with a JSON backfill,
   `drive_files`, `student_profiles.avatar_file_id`, `feedback_threads.resolved_at`.
+- `0003_seed_starter_catalogue.sql` — starter course records (insert-if-absent).
+- `0004_dropper_class_and_queue_indexes.sql` — supports Dropper class and adds
+  course queue indexes.
+- `0005_badges.sql` — badge definitions, active student awards, idempotency index,
+  and immutable grant/revocation history. Apply all migrations in sequence; this
+  migration is additive and does not rewrite existing student or course data.
 
 Validate locally before touching the remote database:
 
@@ -102,9 +108,27 @@ notifications, search, library, feedback.
 **Admin** — overview, Screen Studio, homepage builder, goals, batches, series,
 **subjects and assignments**, lectures (with parent → subject cascade and Drive PDF
 upload), tests, analytics, leaderboards, students/enrollments, announcements,
-events, notifications, feedback inbox, appearance/navigation/footer/banners/
-popups/testimonials/media/SEO/toggles, scheduling, reports, health, import/export,
-preferences and the preserved classic console with the YouTube playlist importer.
+events, notifications, feedback inbox, **badge definitions/manual awards/revocation
+history**, appearance/navigation/footer/banners/popups/testimonials/media/SEO/toggles,
+scheduling, reports, health, import/export, preferences and the preserved classic
+console with the YouTube playlist importer.
+
+## Achievement badges (initial release)
+
+The searchable admin console has a **Badges & achievements** section. It supports
+creating/editing definitions, rarity/category, HTTPS image references, display
+order, manual student search and award, duplicate-award protection, reasoned
+revocation, award history and a server-derived blue verified mark. Students see
+their awarded gallery at `/profile`. The Worker independently authorizes all admin
+writes and records changes in `admin_activity` plus badge award history.
+
+Image binaries are not uploaded for badges in this release: existing Drive files
+are private student/course assets, so reusing them for public profile display
+would be unsafe. Automatic/scheduled rules are also not exposed because the repo
+has no supported background scheduler/verified award-rule engine. No AI provider
+is configured. These capabilities should be added only with an explicitly designed
+public badge-asset path, trusted rule signals and server-side provider setup.
+
 
 ## Experience Studio (batches + animations)
 

@@ -104,6 +104,7 @@ const ADMIN_ICONS: Record<string, LucideIcon> = {
   campaigns: RefreshCw,
   students: Users,
   analytics: BarChart3,
+  badges: Trophy,
   leaderboards: Trophy,
   notifications: BellRing,
   chat: MessagesSquare,

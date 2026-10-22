@@ -276,6 +276,16 @@ function isSafeHttpUrl(value) {
   return typeof value === "string" && /^https?:\/\/[^\s]+$/i.test(value.trim());
 }
 
+function isSafePublicImageUrl(value) {
+  if (typeof value !== "string" || value.length > 1000) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && Boolean(parsed.hostname) && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Domain mappers
 // ---------------------------------------------------------------------------
@@ -1640,6 +1650,21 @@ export async function handleApiRequest(request, env) {
     const user = await verifyFirebaseToken(request);
     const admin = isAdmin(user);
 
+    // Student achievement view. Award state is read from D1 and never accepted
+    // from profile-edit payloads or other student-controlled fields.
+    if (path === "/my/badges" && method === "GET") {
+      const items = await all(
+        db,
+        `SELECT b.id, b.title, b.description, b.criteria, b.category, b.rarity,
+                b.image_url, sb.awarded_at, sb.reason
+           FROM student_badges sb JOIN badge_definitions b ON b.id=sb.badge_id
+          WHERE sb.firebase_uid=? AND sb.revoked_at IS NULL AND b.active=1
+          ORDER BY b.sort_order ASC, sb.awarded_at DESC LIMIT 100`,
+        user.uid
+      );
+      return json({ items, verified: items.some((item) => item.category === "verified") });
+    }
+
     // Student profile ------------------------------------------------------
     if (path === "/profile" && method === "GET") {
       return json({ profile: await getProfile(db, user.uid) });
@@ -2756,6 +2781,119 @@ export async function handleApiRequest(request, env) {
     // ---------------------------------------------------------------------
     if (segments[0] === "admin") {
       requireAdmin(user);
+
+      // Badge definitions and awards --------------------------------------
+      if (path === "/admin/badges" && method === "GET") {
+        const items = await all(
+          db,
+          `SELECT b.*, (SELECT COUNT(*) FROM student_badges sb
+                         WHERE sb.badge_id=b.id AND sb.revoked_at IS NULL) AS active_awards
+             FROM badge_definitions b ORDER BY b.sort_order ASC, b.created_at DESC LIMIT 250`
+        );
+        const history = await all(
+          db,
+          `SELECT h.*, b.title AS badge_title, p.display_name, p.email
+             FROM badge_award_history h
+             JOIN badge_definitions b ON b.id=h.badge_id
+             LEFT JOIN student_profiles p ON p.firebase_uid=h.firebase_uid
+            ORDER BY h.created_at DESC LIMIT 100`
+        );
+        const activeAwards = await all(db, `SELECT sb.id, sb.badge_id, sb.firebase_uid, sb.reason, sb.awarded_at,
+            b.title AS badge_title, b.category, p.display_name, p.email
+          FROM student_badges sb JOIN badge_definitions b ON b.id=sb.badge_id
+          LEFT JOIN student_profiles p ON p.firebase_uid=sb.firebase_uid
+          WHERE sb.revoked_at IS NULL ORDER BY sb.awarded_at DESC LIMIT 100`);
+        const counts = {
+          definitions: Number((await first(db, "SELECT COUNT(*) AS n FROM badge_definitions"))?.n || 0),
+          activeAwards: Number((await first(db, "SELECT COUNT(*) AS n FROM student_badges WHERE revoked_at IS NULL"))?.n || 0),
+          verifiedStudents: Number((await first(db, `SELECT COUNT(DISTINCT sb.firebase_uid) AS n
+            FROM student_badges sb JOIN badge_definitions b ON b.id=sb.badge_id
+            WHERE sb.revoked_at IS NULL AND b.category='verified' AND b.active=1`))?.n || 0),
+        };
+        return json({ items, history, activeAwards, counts });
+      }
+
+      if (path === "/admin/badges" && method === "POST") {
+        const body = await readBody(request);
+        const title = asText(body.title, 80).trim();
+        const description = asText(body.description, 280).trim();
+        const criteria = asText(body.criteria, 1000).trim();
+        const category = asText(body.category, 32).trim();
+        const rarity = asText(body.rarity, 16).trim();
+        const imageUrl = asText(body.imageUrl, 1000).trim();
+        const allowedCategories = ["achievement", "consistency", "test_performance", "course_completion", "community", "verified", "custom"];
+        if (title.length < 2 || !allowedCategories.includes(category) || !["standard", "rare", "epic", "legendary"].includes(rarity)) {
+          return fail("Enter a badge title and choose a supported category and rarity.", 400);
+        }
+        if (imageUrl && !isSafePublicImageUrl(imageUrl)) return fail("Badge image URL must be a valid HTTPS URL without embedded credentials.", 400);
+        const id = uuid();
+        const active = body.active === false ? 0 : 1;
+        const sortOrder = Number.isFinite(Number(body.sortOrder)) ? Math.max(0, Math.min(10000, Number(body.sortOrder))) : 0;
+        await run(db, `INSERT INTO badge_definitions
+          (id,title,description,criteria,category,rarity,image_url,active,sort_order,created_by,created_at,updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, id, title, description, criteria, category, rarity, imageUrl, active, sortOrder, user.uid, now(), now());
+        await activity(db, user, "badge.create", "badge", id, `Created badge: ${title}`, { category, rarity });
+        return json({ item: await first(db, "SELECT * FROM badge_definitions WHERE id=?", id) }, 201);
+      }
+
+      if (segments[1] === "badges" && segments.length === 3 && method === "PATCH") {
+        const id = segments[2];
+        const existing = await first(db, "SELECT * FROM badge_definitions WHERE id=?", id);
+        if (!existing) return fail("Badge not found.", 404);
+        const body = await readBody(request);
+        const title = asText(body.title, 80).trim();
+        const description = asText(body.description, 280).trim();
+        const criteria = asText(body.criteria, 1000).trim();
+        const category = asText(body.category, 32).trim();
+        const rarity = asText(body.rarity, 16).trim();
+        const imageUrl = asText(body.imageUrl, 1000).trim();
+        const allowedCategories = ["achievement", "consistency", "test_performance", "course_completion", "community", "verified", "custom"];
+        if (title.length < 2 || !allowedCategories.includes(category) || !["standard", "rare", "epic", "legendary"].includes(rarity)) return fail("Badge fields are invalid.", 400);
+        if (imageUrl && !isSafePublicImageUrl(imageUrl)) return fail("Badge image URL must be a valid HTTPS URL without embedded credentials.", 400);
+        const active = body.active === false ? 0 : 1;
+        const sortOrder = Number.isFinite(Number(body.sortOrder)) ? Math.max(0, Math.min(10000, Number(body.sortOrder))) : 0;
+        await run(db, `UPDATE badge_definitions SET title=?,description=?,criteria=?,category=?,rarity=?,image_url=?,active=?,sort_order=?,updated_at=? WHERE id=?`, title, description, criteria, category, rarity, imageUrl, active, sortOrder, now(), id);
+        await activity(db, user, "badge.update", "badge", id, `Updated badge: ${title}`, { active: Boolean(active), category, rarity });
+        return json({ item: await first(db, "SELECT * FROM badge_definitions WHERE id=?", id) });
+      }
+
+      if (segments[1] === "badges" && segments.length === 4 && segments[3] === "awards" && method === "POST") {
+        const badgeId = segments[2];
+        const body = await readBody(request);
+        const studentUid = asText(body.studentUid, 128).trim();
+        const reason = asText(body.reason, 500).trim();
+        const badge = await first(db, "SELECT id,title,active,category FROM badge_definitions WHERE id=?", badgeId);
+        if (!badge || !badge.active) return fail("This badge does not exist or is inactive.", 404);
+        if (!studentUid || !await first(db, "SELECT firebase_uid FROM student_profiles WHERE firebase_uid=?", studentUid)) return fail("Select an existing student profile.", 400);
+        const existing = await first(db, "SELECT * FROM student_badges WHERE badge_id=? AND firebase_uid=? AND revoked_at IS NULL", badgeId, studentUid);
+        if (existing) return json({ item: existing, alreadyAwarded: true });
+        const awardId = uuid();
+        const timestamp = now();
+        await batch(db, [
+          db.prepare(`INSERT INTO student_badges (id,badge_id,firebase_uid,awarded_by,reason,awarded_at)
+            VALUES (?,?,?,?,?,?)`).bind(awardId, badgeId, studentUid, user.uid, reason, timestamp),
+          db.prepare(`INSERT INTO badge_award_history (id,award_id,badge_id,firebase_uid,actor_uid,action,reason,created_at)
+            VALUES (?,?,?,?,?,'awarded',?,?)`).bind(uuid(), awardId, badgeId, studentUid, user.uid, reason, timestamp),
+        ]);
+        await activity(db, user, "badge.award", "student_badge", awardId, `Awarded ${badge.title}`, { badgeId, reason, verified: badge.category === "verified" });
+        return json({ item: await first(db, "SELECT * FROM student_badges WHERE id=?", awardId), alreadyAwarded: false }, 201);
+      }
+
+      if (segments[1] === "badge-awards" && segments.length === 4 && segments[3] === "revoke" && method === "POST") {
+        const awardId = segments[2];
+        const body = await readBody(request);
+        const reason = asText(body.reason, 500).trim();
+        if (reason.length < 3) return fail("Enter a reason (at least 3 characters) for the audit history.", 400);
+        const award = await first(db, `SELECT sb.*, b.title FROM student_badges sb
+          JOIN badge_definitions b ON b.id=sb.badge_id WHERE sb.id=? AND sb.revoked_at IS NULL`, awardId);
+        if (!award) return fail("Active badge award not found.", 404);
+        const timestamp = now();
+        await run(db, `UPDATE student_badges SET revoked_at=?,revoked_by=?,revoke_reason=? WHERE id=? AND revoked_at IS NULL`, timestamp, user.uid, reason, awardId);
+        await run(db, `INSERT INTO badge_award_history (id,award_id,badge_id,firebase_uid,actor_uid,action,reason,created_at)
+          VALUES (?,?,?,?,?,'revoked',?,?)`, uuid(), awardId, award.badge_id, award.firebase_uid, user.uid, reason, timestamp);
+        await activity(db, user, "badge.revoke", "student_badge", awardId, `Revoked ${award.title}`, { badgeId: award.badge_id, studentUid: award.firebase_uid, reason });
+        return json({ revoked: true, id: awardId });
+      }
 
       if (path === "/admin/overview" && method === "GET") {
         const counts = {};

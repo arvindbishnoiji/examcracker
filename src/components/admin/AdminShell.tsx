@@ -26,6 +26,7 @@ const QUICK_ACTIONS: Array<{ label: string; href: string; hint: string; icon: st
   { label: 'Create a test', href: '/admin/tests', hint: 'Tests & performance', icon: '✎' },
   { label: 'Post an announcement', href: '/admin/announcements', hint: 'Communication', icon: '◔' },
   { label: 'Inspect student analytics', href: '/admin/analytics', hint: 'Tests & performance', icon: '▧' },
+  { label: 'Create or award a badge', href: '/admin/badges', hint: 'Students & community', icon: '🏅' },
 ];
 
 function isActive(pathname: string | null, slug: string): boolean {
