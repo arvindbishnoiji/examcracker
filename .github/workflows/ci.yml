@@ -47,6 +47,7 @@ jobs:
         run: |
           node --check .github/scripts/browser-smoke.mjs
           node --check .github/scripts/verify-public-env-bundle.mjs
+          node --check scripts/prepare-dev-env.mjs
 
       - name: Validate Cloudflare Pages proxy
         run: |
