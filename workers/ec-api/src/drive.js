@@ -432,16 +432,30 @@ export async function inspectDriveStatus(env, { probe = false, fetchImpl = fetch
   }
 
   const appsScriptConfigured = isAppsScriptDriveConfigured(env);
+  const hasAppsScriptConfig = Boolean(
+    String((env && env.GOOGLE_APPS_SCRIPT_URL) || "").trim() ||
+      String((env && env.GOOGLE_APPS_SCRIPT_SHARED_SECRET) || "").trim()
+  );
+  const appsScriptConfigurationIncomplete = hasAppsScriptConfig && !appsScriptConfigured;
+  // Uploads can use Apps Script, but private file downloads and cleanup still
+  // use the service account. "configured" must represent the whole file system,
+  // not just the uploader, and the service-account Drive scope still matters.
   const configured = Boolean(
-    (appsScriptConfigured || accountInfo) &&
+    accountInfo &&
       (defaultFolderId || (pdfFolderId && profileFolderId)) &&
-      (appsScriptConfigured || !scopeWarning)
+      !scopeWarning &&
+      !appsScriptConfigurationIncomplete
   );
   const result = {
     configured,
     serviceAccountConfigured: Boolean(accountInfo),
-    uploadMode: appsScriptConfigured ? "personal-gmail-apps-script" : "service-account",
+    uploadMode: hasAppsScriptConfig
+      ? appsScriptConfigured
+        ? "personal-gmail-apps-script"
+        : "personal-gmail-apps-script-incomplete"
+      : "service-account",
     appsScriptConfigured,
+    appsScriptConfigurationIncomplete,
     serviceAccountEmail: accountInfo ? accountInfo.clientEmail : null,
     workspaceDelegationConfigured: Boolean(
       String((env && env.GOOGLE_DRIVE_IMPERSONATE_EMAIL) || "").trim()
