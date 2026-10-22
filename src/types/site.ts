@@ -141,7 +141,11 @@ export type HomeSectionType =
   | 'quick_links'
   | 'promo'
   | 'custom'
-  | 'testimonials';
+  | 'testimonials'
+  | 'dashboard_banners'
+  | 'feature_grid'
+  | 'how_it_works'
+  | 'batch_showcase';
 
 export type AudienceTarget =
   | 'all'
@@ -156,6 +160,21 @@ export type AudienceTarget =
   | 'NEET-Dropper';
 
 export type SectionLayout = 'grid' | 'carousel' | 'split' | 'banner' | 'list';
+
+/**
+ * Admin-authored list entry used by content-only sections such as
+ * "feature_grid" (app feature cards) and "how_it_works" (numbered steps).
+ */
+export interface HomeSectionItem {
+  id: string;
+  /** Short emoji / glyph shown in the item badge. */
+  icon: string;
+  title: string;
+  body: string;
+  /** Optional internal link (e.g. /lectures). */
+  href: string;
+  visible: boolean;
+}
 
 export interface HomeSectionConfig {
   id: string;
@@ -173,13 +192,42 @@ export interface HomeSectionConfig {
   accent: string;
   /** Optional explicit ordering for featured batch/series/lecture sections. */
   itemIds?: string[];
+  /** Admin-authored entries for feature_grid / how_it_works sections. */
+  items?: HomeSectionItem[];
+}
+
+export type HomeHeroStyle = 'classic' | 'plain' | 'image';
+
+/**
+ * The welcome panel at the top of the student home screen. Every string
+ * supports the tokens {name}, {exam} and {class}. Empty CTA fields fall back to
+ * the automatic "continue learning" / "next test" behaviour.
+ */
+export interface HomeHeroConfig {
+  style: HomeHeroStyle;
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  primaryCtaLabel: string;
+  primaryCtaHref: string;
+  secondaryCtaLabel: string;
+  secondaryCtaHref: string;
+  showSecondaryCta: boolean;
+  /** Hex colour for the panel. Empty = theme brand colour. */
+  backgroundColor: string;
+  /** Optional https image (right side in "classic", full background in "image"). */
+  imageUrl: string;
+  showProfileChips: boolean;
 }
 
 export interface HomepageConfig {
+  /** Schema version. 2 = hero panel + every home block lives in `sections`. */
+  version: number;
   showGreeting: boolean;
   greetingTemplate: string;
   showSearch: boolean;
   showQuickStats: boolean;
+  hero: HomeHeroConfig;
   sections: HomeSectionConfig[];
 }
 

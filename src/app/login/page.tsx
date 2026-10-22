@@ -116,7 +116,27 @@ export default function LoginPage() {
   }
 
   const form = (
-    <div className="space-y-2">
+    <div className="space-y-4">
+      {showSignup && (
+        <div className="ecc-auth-tabs" role="tablist" aria-label="Sign in or create account">
+          {(['signin', 'signup'] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              role="tab"
+              aria-selected={mode === item}
+              onClick={() => {
+                setMode(item);
+                setError(null);
+              }}
+              className="ecc-auth-tab"
+            >
+              {item === 'signin' ? 'Sign in' : 'Create account'}
+            </button>
+          ))}
+        </div>
+      )}
+
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800" role="alert">
           {error}
@@ -148,32 +168,15 @@ export default function LoginPage() {
             </svg>
             Continue with Google
           </Button>
-          <div className="relative flex items-center gap-3 py-1">
-            <div className="h-px flex-1 bg-ink-100" />
-            <span className="text-[10px] uppercase tracking-[0.12em] text-ink-400">or with email</span>
-            <div className="h-px flex-1 bg-ink-100" />
+          <div className="relative flex items-center gap-3">
+            <div className="h-px flex-1 bg-gray-200" />
+            <span className="text-[11px] font-medium text-gray-500">or continue with email</span>
+            <div className="h-px flex-1 bg-gray-200" />
           </div>
         </>
       )}
 
-      {showSignup && (
-        <div className="flex rounded-xl border border-ink-200 bg-ink-50/60 p-1">
-          {(['signin', 'signup'] as const).map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setMode(item)}
-              className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                mode === item ? 'bg-[var(--ec-surface)] text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-700'
-              }`}
-            >
-              {item === 'signin' ? 'Sign in' : 'Create account'}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <form onSubmit={handleEmailAuth} className="space-y-3">
+      <form onSubmit={handleEmailAuth} className="space-y-4">
         {effectiveMode === 'signup' && (
           <Input
             label="Full name"
@@ -193,7 +196,7 @@ export default function LoginPage() {
             autoComplete="email"
             required
           />
-          {login.emailHelp && <p className="mt-1 text-[10px] text-ink-500">{login.emailHelp}</p>}
+          {login.emailHelp && <p className="mt-1 text-[11px] text-ink-500">{login.emailHelp}</p>}
         </div>
         <div>
           <Input
@@ -205,7 +208,7 @@ export default function LoginPage() {
             autoComplete={effectiveMode === 'signin' ? 'current-password' : 'new-password'}
             required
           />
-          {login.passwordHelp && <p className="mt-1 text-[10px] text-ink-500">{login.passwordHelp}</p>}
+          {login.passwordHelp && <p className="mt-1 text-[11px] text-ink-500">{login.passwordHelp}</p>}
         </div>
         <Button type="submit" loading={loading} className="w-full">
           {effectiveMode === 'signin' ? 'Sign in' : 'Create account'}
@@ -233,7 +236,7 @@ export default function LoginPage() {
         </div>
       )}
 
-      {login.showOnboardingNote && (
+      {login.showOnboardingNote && !(login.bannerEnabled && (login.bannerTitle || login.bannerBody)) && (
         <p className="text-[10px] text-ink-400 leading-relaxed">
           First time? You will choose your name, JEE or NEET, and Class 11 or 12 once. Your dashboard then filters
           content automatically.

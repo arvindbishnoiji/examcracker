@@ -164,9 +164,33 @@ export function validateHomepage(homepage: HomepageConfig): ValidationResult {
     if ((section.type === 'custom' || section.type === 'promo') && !section.body.trim() && !section.imageUrl) {
       errors.push(`Section "${section.title || section.id}" needs body text or an image.`);
     }
+    for (const item of section.items || []) {
+      if (text(item.title, 'Item title', { max: 80, required: true })) {
+        errors.push(`Every card in "${section.title || section.id}" needs a title (80 characters max).`);
+        break;
+      }
+      if (!isEmptyOrInternalLink(item.href)) {
+        errors.push(`Card "${item.title}" in "${section.title || section.id}" has an invalid link.`);
+        break;
+      }
+    }
   }
   if (text(homepage.greetingTemplate, 'Greeting template', { max: 120, required: true })) {
     errors.push('Greeting template is required (120 characters max).');
+  }
+  const hero = homepage.hero;
+  if (hero) {
+    if (text(hero.title, 'Hero heading', { max: 160, required: true })) {
+      errors.push('Hero heading is required (160 characters max).');
+    }
+    if (text(hero.subtitle, 'Hero description', { max: 320 })) errors.push('Hero description must be 320 characters or fewer.');
+    if (!isEmptyOrInternalLink(hero.primaryCtaHref)) errors.push('Hero primary button link must be an internal path such as /lectures.');
+    if (!isEmptyOrInternalLink(hero.secondaryCtaHref)) errors.push('Hero secondary button link must be an internal path such as /tests.');
+    if (!isEmptyOrHttpUrl(hero.imageUrl)) errors.push('Hero image must be an https:// URL.');
+    if (hero.style === 'image' && !hero.imageUrl) errors.push('The "Full background image" hero style needs an image URL.');
+    if (hero.backgroundColor && !/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(hero.backgroundColor)) {
+      errors.push('Hero background colour must be a hex value such as #1e3a8a.');
+    }
   }
   return result(errors);
 }
