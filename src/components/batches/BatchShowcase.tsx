@@ -132,7 +132,7 @@ function BatchArtwork({ look, title, className }: { look: BatchLook; title: stri
 function RewardChip({ look }: { look: BatchLook }) {
   if (!look.reward.enabled || look.reward.type === 'none') return null;
   return (
-    <span className="ec-batch-reward" title="Reward for completing this batch">
+    <span className="ec-batch-reward" title="Reward details configured by the academy">
       <span aria-hidden>{look.reward.icon || '🏅'}</span>
       {look.reward.label || 'Completion reward'}
       {look.reward.value ? <strong className="font-black">· {look.reward.value}</strong> : null}
@@ -290,7 +290,7 @@ function MinimalCard({ batch }: { batch: PreparedBatch }) {
   return (
     <Reveal motion="slide-left">
       <Link
-        href={`/lectures/${item.id}`}
+        href={batchHref(item, look)}
         className="ec-batch-card ec-card-hover ec-tinted-rail block p-4 pl-5"
         style={{ ['--tint' as string]: accent.from, ['--accent-from' as string]: accent.from, ['--accent-to' as string]: accent.to }}
       >
