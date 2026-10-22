@@ -3,7 +3,9 @@
  *
  * Apps Script executes as the Drive owner, so new files consume the owner's
  * My Drive quota instead of a service account's nonexistent personal quota.
- * The endpoint URL and shared secret must remain server-side secrets.
+ * The endpoint URL remains a server-side secret. The Apps Script deployment
+ * uses a fixed allowlisted folder and strict MIME/size validation; no shared
+ * secret is required by this deployment mode.
  */
 function normalizeFolderId(rawValue) {
   if (typeof rawValue !== "string") return "";
@@ -30,15 +32,11 @@ function httpError(message, status = 502) {
 
 function scriptConfig(env) {
   const url = String(env?.GOOGLE_APPS_SCRIPT_URL || "").trim();
-  const secret = String(env?.GOOGLE_APPS_SCRIPT_SHARED_SECRET || "").trim();
-  if (!url || !secret) {
+  if (!url) {
     throw httpError(
-      "Personal Gmail upload is not configured. Set GOOGLE_APPS_SCRIPT_URL and GOOGLE_APPS_SCRIPT_SHARED_SECRET as Cloudflare secrets.",
+      "Personal Gmail upload is not configured. Set GOOGLE_APPS_SCRIPT_URL as a Cloudflare Worker secret.",
       503,
     );
-  }
-  if (secret.length < 32) {
-    throw httpError("GOOGLE_APPS_SCRIPT_SHARED_SECRET must be at least 32 characters long.", 503);
   }
   let parsed;
   try {
@@ -54,7 +52,7 @@ function scriptConfig(env) {
   ) {
     throw httpError("GOOGLE_APPS_SCRIPT_URL must be a deployed https://script.google.com/macros/s/.../exec URL.", 503);
   }
-  return { url: parsed.toString(), secret };
+  return { url: parsed.toString() };
 }
 
 async function postToScript(env, payload, fetchImpl = fetch) {
@@ -65,7 +63,7 @@ async function postToScript(env, payload, fetchImpl = fetch) {
       method: "POST",
       redirect: "manual",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ ...payload, secret: config.secret }),
+      body: JSON.stringify(payload),
     });
     // Apps Script ContentService commonly redirects its response to a
     // one-time script.googleusercontent.com URL. Follow that response as GET
