@@ -54,8 +54,18 @@ export function getFirebaseAuth(): Auth {
 }
 
 
-// Lazy getters for backward compat
-export const auth = typeof window !== 'undefined' ? getFirebaseAuth() : (null as unknown as Auth);
+// Guarded getter so importing this module in jsdom or environments without
+// public Firebase env vars never throws at module evaluation time.
+function tryGetFirebaseAuth(): Auth | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return getFirebaseAuth();
+  } catch {
+    return null;
+  }
+}
+
+export const auth = tryGetFirebaseAuth() as unknown as Auth;
 export function getAuthSafe(): Auth {
   return getFirebaseAuth();
 }

@@ -7,6 +7,7 @@ import { usePrefersDark } from '@/hooks/usePrefersDark';
 import { applyThemePreset, buildPreviewStyle, THEME_PRESETS } from '@/lib/theme';
 import { DEFAULT_THEME } from '@/lib/site-config';
 import { AdminPageHeader, ColorField, Field, Panel, Segmented, Spinner, StatusPill, Toggle } from '../ui';
+import { ImageField } from '../ImageField';
 import { PreviewFrame, type PreviewDevice } from '../PreviewFrame';
 import { SettingsPublishBar } from '../SettingsPublishBar';
 
@@ -202,12 +203,6 @@ export function AppearanceSection() {
               <Field label="Logo initials" help="Shown when no logo image is configured.">
                 <input className="ec-field" value={draft.logoText} maxLength={6} onChange={(event) => update({ logoText: event.target.value })} />
               </Field>
-              <Field label="Logo image URL" help="Optional. Use a square transparent PNG or SVG.">
-                <input className="ec-field" value={draft.logoUrl} placeholder="https://…" onChange={(event) => update({ logoUrl: event.target.value })} />
-              </Field>
-              <Field label="Favicon URL" help="Defaults to /favicon.ico when empty.">
-                <input className="ec-field" value={draft.faviconUrl} placeholder="https://…" onChange={(event) => update({ faviconUrl: event.target.value })} />
-              </Field>
               <Field label="Theme mode">
                 <Segmented
                   value={draft.mode}
@@ -219,6 +214,24 @@ export function AppearanceSection() {
                   ]}
                 />
               </Field>
+              <div className="sm:col-span-2 grid sm:grid-cols-2 gap-4">
+                <ImageField
+                  label="Logo image (URL or Google Drive)"
+                  help="Optional. Paste a link OR upload a square PNG/JPG/WebP logo to Google Drive."
+                  context="logo"
+                  preferSquareCrop
+                  value={draft.logoUrl}
+                  onChange={(logoUrl) => update({ logoUrl })}
+                />
+                <ImageField
+                  label="Favicon image (URL or Google Drive)"
+                  help="Defaults to /favicon.ico when empty."
+                  context="favicon"
+                  preferSquareCrop
+                  value={draft.faviconUrl}
+                  onChange={(faviconUrl) => update({ faviconUrl })}
+                />
+              </div>
             </div>
           </Panel>
 

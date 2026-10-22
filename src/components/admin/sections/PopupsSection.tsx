@@ -18,6 +18,7 @@ import {
 } from '../ui';
 import { MultiPills } from '../ListEditors';
 import { SettingsPublishBar } from '../SettingsPublishBar';
+import { ImageField } from '../ImageField';
 
 const FREQUENCIES: Array<{ value: NoticePopup['frequency']; label: string; description: string }> = [
   { value: 'once_session', label: 'Once per session', description: 'Shown once until the browser tab is closed.' },
@@ -205,9 +206,12 @@ export function PopupsSection() {
             <Field label="Title" required>
               <input className="ec-field" value={editing.title} onChange={(event) => patchPopup(editing.id, { title: event.target.value })} />
             </Field>
-            <Field label="Image URL">
-              <input className="ec-field" value={editing.imageUrl} placeholder="https://…" onChange={(event) => patchPopup(editing.id, { imageUrl: event.target.value })} />
-            </Field>
+            <ImageField
+              label="Popup Image (URL or Google Drive)"
+              context="popup"
+              value={editing.imageUrl}
+              onChange={(imageUrl) => patchPopup(editing.id, { imageUrl })}
+            />
             <div className="sm:col-span-2">
               <Field label="Body" required>
                 <textarea className="ec-field" rows={4} value={editing.body} onChange={(event) => patchPopup(editing.id, { body: event.target.value })} />

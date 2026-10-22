@@ -51,7 +51,8 @@ import {
   studioId,
 } from '@/lib/studio-config';
 import { fromISTDateTimeLocalInput, toISTDateTimeLocalInput } from '@/lib/date';
-import { isSafeHttpUrl } from '@/lib/validation';
+import { isDriveMediaUrl, isSafeHttpUrl } from '@/lib/validation';
+import { ImageField } from '../ImageField';
 import { BatchStudioCard, type PreparedBatch } from '@/components/batches/BatchShowcase';
 
 type Tab = 'programmes' | 'section';
@@ -275,12 +276,20 @@ export function BatchStudioSection() {
       push('Batch name is required.', 'error');
       return;
     }
-    if (draft.imageUrl && (!isSafeHttpUrl(draft.imageUrl) || !/^https:\/\//i.test(draft.imageUrl.trim()))) {
-      push('Cover image must be an https:// image link.', 'error');
+    if (
+      draft.imageUrl &&
+      (!isSafeHttpUrl(draft.imageUrl) ||
+        (!/^https:\/\//i.test(draft.imageUrl.trim()) && !isDriveMediaUrl(draft.imageUrl.trim())))
+    ) {
+      push('Cover image must be a Google Drive upload or https:// image link.', 'error');
       return;
     }
-    if (draft.heroImageUrl && (!isSafeHttpUrl(draft.heroImageUrl) || !/^https:\/\//i.test(draft.heroImageUrl.trim()))) {
-      push('Hero image must be an https:// image link.', 'error');
+    if (
+      draft.heroImageUrl &&
+      (!isSafeHttpUrl(draft.heroImageUrl) ||
+        (!/^https:\/\//i.test(draft.heroImageUrl.trim()) && !isDriveMediaUrl(draft.heroImageUrl.trim())))
+    ) {
+      push('Hero image must be a Google Drive upload or https:// image link.', 'error');
       return;
     }
     const startIso = draft.startsAt ? fromISTDateTimeLocalInput(draft.startsAt) : null;
@@ -629,22 +638,20 @@ export function BatchStudioSection() {
                     </Field>
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label="Cover image link" help="Any https:// image. Leave empty for a gradient cover.">
-                        <input
-                          className="ec-field"
-                          value={draft.imageUrl}
-                          placeholder="https://…/batch-cover.jpg"
-                          onChange={(event) => setDraft({ ...draft, imageUrl: event.target.value })}
-                        />
-                      </Field>
-                      <Field label="Hero image link" help="Optional wide artwork for the spotlight card.">
-                        <input
-                          className="ec-field"
-                          value={draft.heroImageUrl}
-                          placeholder="https://…/batch-hero.jpg"
-                          onChange={(event) => setDraft({ ...draft, heroImageUrl: event.target.value })}
-                        />
-                      </Field>
+                      <ImageField
+                        label="Cover image (URL or Google Drive)"
+                        help="Paste an https:// link OR upload directly to Google Drive."
+                        context="batch_cover"
+                        value={draft.imageUrl}
+                        onChange={(imageUrl) => setDraft({ ...draft, imageUrl })}
+                      />
+                      <ImageField
+                        label="Hero image (URL or Google Drive)"
+                        help="Optional wide artwork for the spotlight card."
+                        context="batch_hero"
+                        value={draft.heroImageUrl}
+                        onChange={(heroImageUrl) => setDraft({ ...draft, heroImageUrl })}
+                      />
                     </div>
                     {(draft.imageUrl || draft.heroImageUrl) && (
                       <div className="flex items-center gap-2 rounded-xl border border-ink-100 bg-ink-50/60 p-2">

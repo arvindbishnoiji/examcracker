@@ -21,6 +21,7 @@ import {
 } from '../ui';
 import { MultiPills } from '../ListEditors';
 import { SettingsPublishBar } from '../SettingsPublishBar';
+import { ImageField } from '../ImageField';
 
 const PLACEMENTS: Array<{ value: BannerPlacement; label: string }> = [
   { value: 'home_hero', label: 'Homepage hero' },
@@ -351,12 +352,20 @@ export function BannersSection({ autoCreate = false }: { autoCreate?: boolean })
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="Desktop image URL" help="Recommended 1600×600.">
-                  <input className="ec-field" value={editing.desktopImageUrl} placeholder="https://…" onChange={(event) => patchBanner(editing.id, { desktopImageUrl: event.target.value })} />
-                </Field>
-                <Field label="Mobile image URL" help="Recommended 900×900. Falls back to desktop.">
-                  <input className="ec-field" value={editing.mobileImageUrl} placeholder="https://…" onChange={(event) => patchBanner(editing.id, { mobileImageUrl: event.target.value })} />
-                </Field>
+                <ImageField
+                  label="Desktop image (URL or Google Drive)"
+                  help="Recommended 1600×600."
+                  context="banner_desktop"
+                  value={editing.desktopImageUrl}
+                  onChange={(desktopImageUrl) => patchBanner(editing.id, { desktopImageUrl })}
+                />
+                <ImageField
+                  label="Mobile image (URL or Google Drive)"
+                  help="Recommended 900×900. Falls back to desktop."
+                  context="banner_mobile"
+                  value={editing.mobileImageUrl}
+                  onChange={(mobileImageUrl) => patchBanner(editing.id, { mobileImageUrl })}
+                />
                 <ColorField label="Fallback background" value={editing.backgroundColor} onChange={(backgroundColor) => patchBanner(editing.id, { backgroundColor })} />
                 <Field label={`Dark overlay · ${editing.overlay}%`}>
                   <input type="range" min={0} max={90} value={editing.overlay} onChange={(event) => patchBanner(editing.id, { overlay: Number(event.target.value) })} className="w-full accent-[var(--ec-brand)]" />

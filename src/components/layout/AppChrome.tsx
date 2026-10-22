@@ -7,15 +7,17 @@ import { Footer } from './Footer';
 import { StudentGate } from '@/components/auth/StudentGate';
 import { PageFX } from '@/components/motion/PageFX';
 import { AnimationLayerHost } from '@/components/site/AnimationLayerHost';
+import { StudentTour } from '@/components/student/StudentTour';
 
 /**
- * Keeps admin on its own full-screen canvas while public/student pages keep the
- * familiar header, footer and mobile bottom navigation.
+ * Keeps admin and standalone public/auth surfaces on their own full-bleed canvas
+ * while authenticated student screens get the shared header, guided tour, footer
+ * and mobile bottom navigation.
  */
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAdmin = Boolean(pathname?.startsWith('/admin'));
-  const isFocusedAuth = pathname === '/login' || pathname === '/onboarding';
+  const isStandalone = pathname === '/' || pathname === '/login' || pathname === '/onboarding';
 
   if (isAdmin) return <>{children}</>;
 
@@ -23,12 +25,13 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     <>
       <PageFX />
       <AnimationLayerHost />
-      {!isFocusedAuth && <Header />}
-      <main className={isFocusedAuth ? 'w-full' : 'ec-main'}>
+      {!isStandalone && <Header />}
+      <main className={isStandalone ? 'w-full' : 'ec-main'}>
         <StudentGate>{children}</StudentGate>
       </main>
-      {!isFocusedAuth && <Footer />}
-      {!isFocusedAuth && <BottomNav />}
+      {!isStandalone && <StudentTour />}
+      {!isStandalone && <Footer />}
+      {!isStandalone && <BottomNav />}
     </>
   );
 }

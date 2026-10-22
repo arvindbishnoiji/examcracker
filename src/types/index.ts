@@ -267,6 +267,18 @@ export interface DriveStatusResponse {
   probe: DriveProbeResult | null;
 }
 
+export interface DriveMediaAsset {
+  id: string;
+  url: string;
+  context: string;
+  mimeType: string;
+  displayName: string;
+  sizeBytes: number;
+  status: 'active' | 'superseded' | 'deleted' | 'orphan';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DriveFileItem {
   id: string;
   purpose: 'profile_photo' | 'pdf';
@@ -476,6 +488,20 @@ export interface BroadcastNotice {
 
 export type BadgeCategory = 'achievement' | 'consistency' | 'test_performance' | 'course_completion' | 'community' | 'verified' | 'custom';
 export type BadgeRarity = 'standard' | 'rare' | 'epic' | 'legendary';
+export type BadgeAnimationPreset = 'none' | 'shimmer' | 'halo' | 'orbit' | 'float' | 'flame' | 'prism' | 'custom';
+export type BadgeAutoRuleType =
+  | 'manual'
+  | 'lectures_completed'
+  | 'tests_taken'
+  | 'best_score_pct'
+  | 'avg_score_pct'
+  | 'watch_minutes'
+  | 'profile_complete';
+
+export interface BadgeAutoRule {
+  type: BadgeAutoRuleType;
+  target: number;
+}
 
 export interface BadgeDefinition {
   id: string;
@@ -485,6 +511,9 @@ export interface BadgeDefinition {
   category: BadgeCategory;
   rarity: BadgeRarity;
   image_url: string;
+  animation_preset?: BadgeAnimationPreset;
+  animation_code?: string;
+  auto_rule?: BadgeAutoRule | string;
   active: number | boolean;
   sort_order: number;
   active_awards?: number;
@@ -498,8 +527,29 @@ export interface StudentBadge {
   category: BadgeCategory;
   rarity: BadgeRarity;
   image_url: string;
+  animation_preset?: BadgeAnimationPreset;
+  animation_code?: string;
+  auto_rule?: BadgeAutoRule | string;
   awarded_at: string;
   reason: string;
+}
+
+export interface BadgeCatalogueEntry extends BadgeDefinition {
+  earned: boolean;
+  awarded_at: string | null;
+  reason: string;
+  currentValue: number;
+  targetValue: number;
+  progressPercent: number;
+}
+
+export interface StudentBadgeMetrics {
+  hasProfile: boolean;
+  completedLessons: number;
+  watchMinutes: number;
+  testsTaken: number;
+  bestScorePct: number;
+  avgScorePct: number;
 }
 
 export interface BadgeAwardRecord {
@@ -510,6 +560,10 @@ export interface BadgeAwardRecord {
   awarded_at: string;
   badge_title: string;
   category: BadgeCategory;
+  image_url?: string;
+  rarity?: BadgeRarity;
+  animation_preset?: BadgeAnimationPreset;
+  animation_code?: string;
   display_name: string | null;
   email: string | null;
 }

@@ -2,20 +2,52 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import type { AdminActivityEntry, AdminAnalyticsResponse, AdminOverviewResponse } from '@/types';
-import { getAdminActivity, getAdminAnalytics, getAdminOverview } from '@/lib/api';
-import { formatISTDateTime } from '@/lib/date';
+import { ArrowRight, Award, BookOpen, CheckCircle2, FileCheck2, Layers, Sparkles, Users } from 'lucide-react';
+import type { AdminAnalyticsResponse, AdminOverviewResponse } from '@/types';
+import { getAdminAnalytics, getAdminOverview } from '@/lib/api';
 import { ADMIN_GROUPS, ADMIN_SECTIONS, adminSectionHref } from '@/lib/admin-sections';
-import { AdminPageHeader, Banner, BarChart, Panel, ProgressBar, Spinner, StatCard, StatusPill } from '../ui';
+import { AdminPageHeader, Banner, BarChart, Panel, ProgressBar, Spinner, StatCard } from '../ui';
 
 const QUICK_ACTIONS = [
-  { label: 'Edit a student screen', href: '/admin/screens', icon: '▭', tone: 'from-brand-500 to-brand-700' },
-  { label: 'Create a banner', href: '/admin/banners', icon: '▰', tone: 'from-rose-500 to-rose-700' },
-  { label: 'Schedule an event', href: '/admin/events', icon: '▦', tone: 'from-violet-500 to-violet-700' },
-  { label: 'Add a test', href: '/admin/tests', icon: '✎', tone: 'from-emerald-500 to-emerald-700' },
-  { label: 'Post an announcement', href: '/admin/announcements', icon: '◔', tone: 'from-amber-500 to-amber-600' },
-  { label: "Set today's goal", href: '/admin/goals', icon: '◎', tone: 'from-sky-500 to-sky-700' },
-  { label: 'Create or award a badge', href: '/admin/badges', icon: '🏅', tone: 'from-blue-500 to-blue-700' },
+  { label: 'Create Animated Badge', sub: 'Upload image + Kaise Milega', href: '/admin/badges', tone: 'from-violet-600 to-indigo-700', icon: '🏅' },
+  { label: 'Manage Batches', sub: 'Courses, codes & card design', href: '/admin/batches', tone: 'from-brand-600 to-violet-700', icon: '▣' },
+  { label: 'Add Lectures & PDFs', sub: 'Videos, notes & playlists', href: '/admin/lectures', tone: 'from-sky-600 to-blue-700', icon: '▶' },
+  { label: 'Create Mock Test', sub: 'Timed exam & question bank', href: '/admin/tests', tone: 'from-emerald-600 to-teal-700', icon: '✎' },
+  { label: 'Hero Banners', sub: 'Home promotional slides', href: '/admin/banners', tone: 'from-amber-500 to-orange-600', icon: '▰' },
+  { label: 'Send Announcement', sub: 'Notify JEE / NEET cohorts', href: '/admin/announcements', tone: 'from-rose-600 to-pink-700', icon: '◔' },
+];
+
+const WORKFLOW_STEPS = [
+  {
+    step: '1',
+    title: 'Create Subjects',
+    body: 'Add Physics, Chemistry, Maths or Biology once.',
+    href: '/admin/subjects',
+  },
+  {
+    step: '2',
+    title: 'Create Batch / Series',
+    body: 'Set JEE/NEET & Class target and assign subjects.',
+    href: '/admin/batches',
+  },
+  {
+    step: '3',
+    title: 'Upload Lectures & Notes',
+    body: 'Add videos, YouTube playlists, and PDF notes.',
+    href: '/admin/lectures',
+  },
+  {
+    step: '4',
+    title: 'Publish Mock Tests',
+    body: 'Add timed tests with +4/-1 marking & solutions.',
+    href: '/admin/tests',
+  },
+  {
+    step: '5',
+    title: 'Launch Badges & Rewards',
+    body: 'Upload badge art, Kaise Milega rules & animations.',
+    href: '/admin/badges',
+  },
 ];
 
 function greeting() {
@@ -28,28 +60,22 @@ function greeting() {
 export function OverviewSection() {
   const [overview, setOverview] = useState<AdminOverviewResponse | null>(null);
   const [analytics, setAnalytics] = useState<AdminAnalyticsResponse | null>(null);
-  const [activity, setActivity] = useState<AdminActivityEntry[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
-  const [activityError, setActivityError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setAnalyticsError(null);
-    setActivityError(null);
-    const [overviewResult, analyticsResult, activityResult] = await Promise.allSettled([
+    const [overviewResult, analyticsResult] = await Promise.allSettled([
       getAdminOverview(),
       getAdminAnalytics(),
-      getAdminActivity(12),
     ]);
     if (overviewResult.status === 'fulfilled') setOverview(overviewResult.value);
     else setError(overviewResult.reason instanceof Error ? overviewResult.reason.message : 'Unable to load overview.');
     if (analyticsResult.status === 'fulfilled') setAnalytics(analyticsResult.value);
     else setAnalyticsError(analyticsResult.reason instanceof Error ? analyticsResult.reason.message : 'Analytics unavailable.');
-    if (activityResult.status === 'fulfilled') setActivity(activityResult.value);
-    else setActivityError(activityResult.reason instanceof Error ? activityResult.reason.message : 'Activity log unavailable.');
     setLoading(false);
   }, []);
 
@@ -65,98 +91,141 @@ export function OverviewSection() {
     })) || [];
 
   return (
-    <div>
+    <div className="space-y-5">
       <AdminPageHeader
-        eyebrow="Overview"
+        eyebrow="Academy Command Centre"
         title={`${greeting()}, Admin`}
-        description="Everything that is live, everything that needs attention, and the fastest route to each tool — all driven by real platform data."
+        description="Manage courses, lectures, mock tests, students, animated badges, and website design — organised cleanly with zero duplicate tools."
         actions={
           <>
-            <button type="button" onClick={() => void load()} className="ec-btn px-3 py-2 text-xs font-semibold border border-ink-200 bg-white hover:bg-ink-50">
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="ec-btn border border-ink-200 bg-[var(--ec-surface)] px-3 py-2 text-xs font-semibold hover:bg-ink-50"
+            >
               ⟳ Refresh
             </button>
-            <Link href="/admin/banners" className="ec-btn px-3.5 py-2 text-xs font-semibold bg-brand-600 text-white">
-              + New banner
+            <Link
+              href="/admin/badges"
+              className="ec-btn inline-flex items-center gap-1.5 bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white"
+            >
+              <Sparkles size={13} /> Create Badge
             </Link>
           </>
         }
       />
 
-      {error && (
-        <div className="mb-4">
-          <Banner tone="danger" title="Overview could not load">
-            {error} — verify the Cloudflare Worker is deployed and the admin session is valid.
-          </Banner>
-        </div>
-      )}
+      {error ? (
+        <Banner tone="danger" title="Overview could not load">
+          {error} — verify your admin session and API connection.
+        </Banner>
+      ) : null}
 
       {loading && !analytics && !overview ? (
-        <Spinner label="Loading platform state…" />
+        <Spinner label="Loading academy overview…" />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {/* KPI CARDS */}
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             <StatCard
-              label="Students"
+              label="Total Students"
               value={analytics?.students.total ?? counts?.student_profiles ?? '—'}
-              hint={analytics ? `${analytics.students.byExam.JEE || 0} JEE · ${analytics.students.byExam.NEET || 0} NEET` : 'Profiles on record'}
+              hint={
+                analytics
+                  ? `${analytics.students.byExam.JEE || 0} JEE · ${analytics.students.byExam.NEET || 0} NEET`
+                  : 'Registered learners'
+              }
               tone="brand"
-              icon="◍"
+              icon={<Users size={15} />}
             />
             <StatCard
-              label="Published content"
+              label="Published Content"
               value={analytics ? analytics.content.active : counts?.course_catalog ?? '—'}
-              hint={analytics ? `${analytics.content.total} total items` : 'Catalog items'}
+              hint={analytics ? `${analytics.content.total} total items` : 'Batches, lectures & tests'}
               tone="success"
-              icon="▣"
+              icon={<Layers size={15} />}
             />
             <StatCard
-              label="Test attempts"
+              label="Mock Attempts"
               value={analytics?.attempts.total ?? counts?.exam_attempts ?? '—'}
-              hint={analytics ? `${analytics.attempts.averagePercentage.toFixed(1)}% average score` : 'Submitted attempts'}
+              hint={analytics ? `${analytics.attempts.averagePercentage.toFixed(1)}% avg score` : 'Submitted exams'}
               tone="warning"
-              icon="✎"
+              icon={<FileCheck2 size={15} />}
             />
             <StatCard
-              label="Enrollments"
+              label="Active Enrollments"
               value={analytics?.enrollments.total ?? counts?.enrollments ?? '—'}
-              hint={analytics ? `${analytics.enrollments.byItem.length} active item groups` : 'Batch & series access'}
+              hint={analytics ? `${analytics.enrollments.byItem.length} active batches/series` : 'Course access'}
               tone="info"
-              icon="▤"
+              icon={<BookOpen size={15} />}
             />
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] mt-4">
-            <Panel title="Attempts · last 14 days" description="Every point is a submitted test attempt recorded by the API.">
-              {analyticsError ? (
-                <p className="text-xs text-ink-500">
-                  Analytics endpoint unavailable: {analyticsError}. This view activates after the updated Edge Function is deployed.
-                </p>
-              ) : attemptsSeries.length > 0 ? (
-                <BarChart data={attemptsSeries} height={170} formatValue={(value) => `${value}`} />
-              ) : (
-                <div className="h-[170px] grid place-items-center text-xs text-ink-500">No attempts recorded yet.</div>
-              )}
-            </Panel>
+          {/* 5-STEP ACADEMY SETUP GUIDE */}
+          <Panel
+            title="How to Manage Your Academy (Step-by-Step Flow)"
+            description="New to the admin console? Follow these 5 steps in order so students get a clean, structured experience."
+            icon={<CheckCircle2 size={16} />}
+          >
+            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+              {WORKFLOW_STEPS.map((item) => (
+                <Link
+                  key={item.step}
+                  href={item.href}
+                  className="group flex flex-col justify-between rounded-2xl border border-ink-200/80 bg-ink-50/40 p-3.5 transition hover:border-brand-300 hover:bg-brand-50/40"
+                >
+                  <div>
+                    <span className="inline-grid h-6 w-6 place-items-center rounded-full bg-brand-600 text-[11px] font-extrabold text-white">
+                      {item.step}
+                    </span>
+                    <p className="mt-2 text-xs font-extrabold text-ink-900">{item.title}</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-ink-500">{item.body}</p>
+                  </div>
+                  <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-brand-700 group-hover:translate-x-0.5 transition">
+                    Open <ArrowRight size={12} />
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </Panel>
 
-            <Panel title="Quick actions" description="Jump straight into the most frequent admin tasks.">
-              <div className="grid grid-cols-2 gap-2">
+          {/* QUICK ACTIONS + CHART */}
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+            <Panel title="Quick Launch" description="Open the tools you use daily in one tap.">
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                 {QUICK_ACTIONS.map((action) => (
                   <Link
                     key={action.href}
                     href={action.href}
-                    className={`group relative overflow-hidden rounded-xl p-3 text-white bg-gradient-to-br ${action.tone} transition hover:brightness-105`}
+                    className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br p-3.5 text-white shadow-sm transition hover:-translate-y-0.5 hover:brightness-105 ${action.tone}`}
                   >
-                    <span className="text-lg leading-none opacity-90">{action.icon}</span>
-                    <p className="text-[11px] font-semibold mt-2 leading-tight">{action.label}</p>
-                    <span className="absolute right-2 top-2 text-white/60 text-xs group-hover:translate-x-0.5 transition">→</span>
+                    <span className="text-xl leading-none">{action.icon}</span>
+                    <p className="mt-2.5 text-xs font-extrabold leading-snug">{action.label}</p>
+                    <p className="mt-0.5 text-[10.5px] text-white/80 leading-tight">{action.sub}</p>
+                    <span className="absolute right-3 top-3 text-xs text-white/60 transition group-hover:translate-x-0.5">
+                      →
+                    </span>
                   </Link>
                 ))}
               </div>
             </Panel>
+
+            <Panel title="Mock Test Activity · Last 14 Days" description="Daily submitted mock test count.">
+              {analyticsError ? (
+                <p className="text-xs text-ink-500">Analytics summary will populate once student attempts are submitted.</p>
+              ) : attemptsSeries.length > 0 ? (
+                <BarChart data={attemptsSeries} height={156} formatValue={(value) => `${value}`} />
+              ) : (
+                <div className="grid h-[156px] place-items-center text-xs text-ink-500">
+                  No submitted test attempts in the last 14 days.
+                </div>
+              )}
+            </Panel>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-3 mt-4">
-            <Panel title="Subject performance" description="Averages across all submitted attempts.">
+          {/* SUBJECT PERFORMANCE + CONTENT HEALTH */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel title="Subject Accuracy Overview" description="Average student scores across subjects.">
               {analytics?.subjectPerformance.length ? (
                 <div className="space-y-3">
                   {analytics.subjectPerformance.slice(0, 6).map((subject) => (
@@ -168,110 +237,63 @@ export function OverviewSection() {
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-ink-500">{analyticsError ? 'Requires the analytics endpoint.' : 'No subject data yet.'}</p>
-              )}
-            </Panel>
-
-            <Panel title="Content health" description="Real gaps detected from stored content.">
-              {analytics ? (
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { label: 'Missing thumbnails', value: analytics.contentHealth.missingThumbnails },
-                    { label: 'Tests without questions', value: analytics.contentHealth.testsWithoutQuestions },
-                    { label: 'Events missing schedule', value: analytics.contentHealth.eventsMissingSchedule },
-                    { label: 'Inactive content', value: analytics.contentHealth.inactiveContent },
-                  ].map((item) => (
-                    <div key={item.label} className="rounded-xl border border-ink-200 p-3">
-                      <p className="text-xl font-extrabold tabular-nums">{item.value}</p>
-                      <p className="text-[10px] text-ink-500 mt-0.5 leading-tight">{item.label}</p>
-                    </div>
-                  ))}
-                  <Link href="/admin/health" className="col-span-2 text-center text-[11px] font-semibold text-brand-700 py-2 rounded-lg bg-brand-50 hover:bg-brand-100">
-                    Open content health →
-                  </Link>
-                </div>
-              ) : (
-                <p className="text-xs text-ink-500">{analyticsError ? 'Requires the analytics endpoint.' : 'Run a check from Content Health.'}</p>
+                <p className="text-xs text-ink-500">Subject accuracy bars appear once students submit graded tests.</p>
               )}
             </Panel>
 
             <Panel
-              title="Recent admin activity"
-              description="Server-recorded writes."
+              title="Content Readiness Check"
+              description="Quick quality scan so students never hit incomplete tests or missing artwork."
               action={
-                <Link href="/admin/reports" className="text-[11px] font-semibold text-brand-700">
-                  All reports →
+                <Link href="/admin/health" className="text-xs font-bold text-brand-700 hover:underline">
+                  Full scan →
                 </Link>
               }
             >
-              {activity?.length ? (
-                <ol className="space-y-2.5">
-                  {activity.slice(0, 6).map((entry) => (
-                    <li key={entry.id} className="flex gap-2.5">
-                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-brand-500 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-semibold text-ink-800 truncate">{entry.summary || entry.action}</p>
-                        <p className="text-[10px] text-ink-400">
-                          {entry.actor_email} · {formatISTDateTime(entry.created_at)}
-                        </p>
-                      </div>
-                    </li>
+              {analytics ? (
+                <div className="grid grid-cols-2 gap-2.5">
+                  {[
+                    { label: 'Tests missing questions', value: analytics.contentHealth.testsWithoutQuestions },
+                    { label: 'Cards missing thumbnail', value: analytics.contentHealth.missingThumbnails },
+                    { label: 'Unscheduled events', value: analytics.contentHealth.eventsMissingSchedule },
+                    { label: 'Draft / hidden items', value: analytics.contentHealth.inactiveContent },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-xl border border-ink-200/80 bg-ink-50/40 p-3">
+                      <p className="text-xl font-extrabold tabular-nums text-ink-900">{item.value}</p>
+                      <p className="mt-0.5 text-[11px] text-ink-500">{item.label}</p>
+                    </div>
                   ))}
-                </ol>
+                </div>
               ) : (
-                <p className="text-xs text-ink-500">
-                  {activityError
-                    ? 'Activity log activates after the updated Edge Function is deployed.'
-                    : 'No admin writes recorded yet.'}
-                </p>
+                <p className="text-xs text-ink-500">Open Content Quality Check to inspect catalogue items.</p>
               )}
             </Panel>
           </div>
 
-          <Panel className="mt-4" title="Every workspace" description={`${ADMIN_SECTIONS.length} dedicated tools, grouped by intent.`}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {/* CLEAN DIRECTORY OF ALL SECTIONS */}
+          <Panel
+            title="All Admin Tools by Category"
+            description="Every module has one clear home — duplicate panels and audit clutter have been removed."
+            icon={<Award size={16} />}
+          >
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
               {ADMIN_GROUPS.map((group) => (
-                <div key={group}>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-400 mb-2">{group}</p>
-                  <div className="space-y-1.5">
+                <div key={group} className="rounded-2xl border border-ink-100 bg-ink-50/30 p-3">
+                  <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-brand-700">{group}</p>
+                  <div className="space-y-1">
                     {ADMIN_SECTIONS.filter((section) => section.group === group).map((section) => (
                       <Link
                         key={section.slug}
                         href={adminSectionHref(section.slug)}
-                        className="flex items-center gap-2 rounded-lg border border-transparent px-2 py-1.5 hover:border-ink-200 hover:bg-ink-50 transition"
+                        className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-xs font-medium text-ink-700 transition hover:bg-[var(--ec-surface)] hover:text-brand-700 hover:shadow-xs"
                       >
-                        <span className="text-xs text-ink-400 w-4">{section.icon}</span>
-                        <span className="text-[11px] font-medium text-ink-700 flex-1 truncate">{section.label}</span>
-                        <span className="text-[10px] text-ink-300">→</span>
+                        <span className="w-4 text-center text-xs text-ink-400">{section.icon}</span>
+                        <span className="flex-1 truncate">{section.label}</span>
                       </Link>
                     ))}
                   </div>
                 </div>
               ))}
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-400 mb-2">Status</p>
-                <div className="rounded-xl border border-ink-200 p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-ink-600">Theme publishing</span>
-                    <StatusPill tone="success">Live</StatusPill>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-ink-600">Screen Studio</span>
-                    <StatusPill tone="success">Live</StatusPill>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-ink-600">Homepage builder</span>
-                    <StatusPill tone="success">Live</StatusPill>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-ink-600">Banner scheduler</span>
-                    <StatusPill tone="success">Live</StatusPill>
-                  </div>
-                </div>
-                <Link href="/admin/classic" className="mt-2 flex items-center justify-between rounded-xl border border-ink-200 px-3 py-2 text-[11px] font-semibold text-ink-700 hover:bg-ink-50">
-                  Classic content tools <span>→</span>
-                </Link>
-              </div>
             </div>
           </Panel>
         </>
