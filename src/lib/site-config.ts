@@ -7,7 +7,10 @@ import type {
   FeatureFlags,
   FooterConfig,
   FooterLinkColumn,
+  HomeHeroConfig,
+  HomeHeroStyle,
   HomeSectionConfig,
+  HomeSectionItem,
   HomeSectionType,
   HomepageConfig,
   LibraryItem,
@@ -89,6 +92,10 @@ export const HOME_SECTION_TYPES: HomeSectionType[] = [
   'promo',
   'custom',
   'testimonials',
+  'dashboard_banners',
+  'feature_grid',
+  'how_it_works',
+  'batch_showcase',
 ];
 
 export const HOME_SECTION_LABELS: Record<HomeSectionType, string> = {
@@ -110,7 +117,20 @@ export const HOME_SECTION_LABELS: Record<HomeSectionType, string> = {
   promo: 'Promotional card',
   custom: 'Custom text / image',
   testimonials: 'Testimonials',
+  dashboard_banners: 'Dashboard banners',
+  feature_grid: 'Feature cards',
+  how_it_works: 'How it works (steps)',
+  batch_showcase: 'Batch showcase',
 };
+
+/** Section types whose content is the admin-authored `items` list. */
+export const HOME_ITEM_SECTION_TYPES: HomeSectionType[] = ['feature_grid', 'how_it_works'];
+
+export const HOME_HERO_STYLES: Array<{ value: HomeHeroStyle; label: string }> = [
+  { value: 'classic', label: 'Classic colour panel' },
+  { value: 'plain', label: 'Plain white card' },
+  { value: 'image', label: 'Full background image' },
+];
 
 export const AUDIENCE_TARGET_VALUES = [
   'all',
@@ -221,19 +241,121 @@ export const DEFAULT_LOGIN: LoginConfig = {
   showOnboardingNote: true,
 };
 
-const DEFAULT_HOME_SECTIONS: HomeSectionConfig[] = [
+export const DEFAULT_FEATURE_ITEMS: HomeSectionItem[] = [
+  { id: 'feature-lectures', icon: '📚', title: 'Lectures', body: 'Chapter-wise playlists with ordered notes and saved progress.', href: '/lectures', visible: true },
+  { id: 'feature-tests', icon: '📝', title: 'Mock tests', body: 'Timed papers with instant, server-scored analysis.', href: '/tests', visible: true },
+  { id: 'feature-leaderboard', icon: '🏆', title: 'Leaderboard', body: 'See where you rank after every test.', href: '/leaderboard', visible: true },
+  { id: 'feature-challenges', icon: '🔥', title: 'Challenges', body: 'Short sprints that keep you consistent.', href: '/challenges', visible: true },
+  { id: 'feature-events', icon: '📅', title: 'Events', body: 'Marathons, doubt sessions and announcements.', href: '/events', visible: true },
+  { id: 'feature-feedback', icon: '💬', title: 'Ask a mentor', body: 'Private feedback and doubt channel.', href: '/feedback', visible: true },
+];
+
+export const DEFAULT_STEP_ITEMS: HomeSectionItem[] = [
+  { id: 'step-batch', icon: '1', title: 'Pick your batch', body: 'Open Lectures, choose the batch for your exam and class, and unlock it with a code if needed.', href: '/lectures', visible: true },
+  { id: 'step-study', icon: '2', title: 'Watch, read, practise', body: 'Every subject lists ordered lectures and notes — then a timed test turns it into marks.', href: '/tests', visible: true },
+  { id: 'step-track', icon: '3', title: 'Track your progress', body: 'Review real scores, streaks and leaderboard positions as your preparation improves.', href: '/leaderboard', visible: true },
+];
+
+export const DEFAULT_HOME_HERO: HomeHeroConfig = {
+  style: 'classic',
+  eyebrow: '{exam} · {class}',
+  title: 'Build your rank, one focused day at a time.',
+  subtitle:
+    'Open your batch, study by subject, continue a lesson and track your progress toward JEE / NEET.',
+  primaryCtaLabel: '',
+  primaryCtaHref: '',
+  secondaryCtaLabel: '',
+  secondaryCtaHref: '',
+  showSecondaryCta: true,
+  backgroundColor: '',
+  imageUrl: '',
+  showProfileChips: true,
+};
+
+/** Blocks that were hard-coded above the sections before schema v2. */
+function legacyBlockSections(): HomeSectionConfig[] {
+  return [
+    {
+      id: 'home-dashboard-banners',
+      type: 'dashboard_banners',
+      title: '',
+      subtitle: '',
+      visible: true,
+      audience: 'all',
+      limit: 5,
+      layout: 'carousel',
+      ctaLabel: '',
+      ctaHref: '',
+      imageUrl: '',
+      body: '',
+      accent: '',
+    },
+    {
+      id: 'home-features',
+      type: 'feature_grid',
+      title: 'Everything you need in one place',
+      subtitle: 'Jump straight into any part of your preparation.',
+      visible: true,
+      audience: 'all',
+      limit: 8,
+      layout: 'grid',
+      ctaLabel: '',
+      ctaHref: '',
+      imageUrl: '',
+      body: '',
+      accent: '',
+      items: deepCloneItems(DEFAULT_FEATURE_ITEMS),
+    },
+    {
+      id: 'home-how-it-works',
+      type: 'how_it_works',
+      title: 'How it works',
+      subtitle: 'Three simple steps from batch to rank.',
+      visible: true,
+      audience: 'all',
+      limit: 6,
+      layout: 'grid',
+      ctaLabel: '',
+      ctaHref: '',
+      imageUrl: '',
+      body: '',
+      accent: '',
+      items: deepCloneItems(DEFAULT_STEP_ITEMS),
+    },
+    {
+      id: 'home-batch-showcase',
+      type: 'batch_showcase',
+      title: '',
+      subtitle: '',
+      visible: true,
+      audience: 'all',
+      limit: 6,
+      layout: 'grid',
+      ctaLabel: '',
+      ctaHref: '',
+      imageUrl: '',
+      body: '',
+      accent: '',
+    },
+  ];
+}
+
+function deepCloneItems(items: HomeSectionItem[]): HomeSectionItem[] {
+  return items.map((item) => ({ ...item }));
+}
+
+const BASE_HOME_SECTIONS: HomeSectionConfig[] = [
   {
     id: 'home-hero',
     type: 'hero',
-    title: 'Build your rank, one focused day at a time.',
-    subtitle:
-      'Open your batch, study by subject, continue a lesson and track your progress toward JEE / NEET.',
+    title: 'Featured',
+    subtitle: '',
     visible: true,
     audience: 'all',
     limit: 5,
     layout: 'carousel',
-    ctaLabel: 'Explore lectures',
-    ctaHref: '/lectures',
+    ctaLabel: '',
+    ctaHref: '',
     imageUrl: '',
     body: '',
     accent: '',
@@ -435,11 +557,26 @@ const DEFAULT_HOME_SECTIONS: HomeSectionConfig[] = [
   },
 ];
 
+// Classic default order: banners, today's work, programmes, tests, then the
+// explanatory blocks and community sections.
+const DEFAULT_HOME_SECTIONS: HomeSectionConfig[] = (() => {
+  const [banners, features, steps, showcase] = legacyBlockSections();
+  const result: HomeSectionConfig[] = [];
+  for (const section of BASE_HOME_SECTIONS) {
+    if (section.id === 'home-goal') result.push(banners);
+    if (section.id === 'home-events') result.push(showcase, features, steps);
+    result.push(section);
+  }
+  return result;
+})();
+
 export const DEFAULT_HOMEPAGE: HomepageConfig = {
+  version: 2,
   showGreeting: true,
   greetingTemplate: 'Welcome back, {name} 👋',
   showSearch: true,
   showQuickStats: true,
+  hero: DEFAULT_HOME_HERO,
   sections: DEFAULT_HOME_SECTIONS,
 };
 
@@ -610,7 +747,8 @@ export function mergeSiteConfig(partial?: PublicSiteConfig | null): SiteConfig {
   if (partial && typeof partial === 'object') {
     for (const key of SITE_SETTING_KEYS) {
       if (partial[key] !== undefined) {
-        base[key] = mergeValue(base[key], partial[key]);
+        const incoming = key === 'homepage' ? upgradeLegacyHomepage(partial[key]) : partial[key];
+        base[key] = mergeValue(base[key], incoming);
       }
     }
   }
@@ -797,11 +935,83 @@ function sanitizeHomeSection(value: unknown, index: number): HomeSectionConfig |
     itemIds: Array.isArray(value.itemIds)
       ? value.itemIds.map((item) => asString(item, '', 80)).filter(Boolean).slice(0, 40)
       : [],
+    items: Array.isArray(value.items)
+      ? value.items
+          .map((item, itemIndex) => sanitizeHomeSectionItem(item, itemIndex))
+          .filter((item): item is HomeSectionItem => Boolean(item))
+          .slice(0, 24)
+      : type === 'feature_grid'
+        ? deepCloneItems(DEFAULT_FEATURE_ITEMS)
+        : type === 'how_it_works'
+          ? deepCloneItems(DEFAULT_STEP_ITEMS)
+          : [],
   };
 }
 
+function sanitizeHomeSectionItem(value: unknown, index: number): HomeSectionItem | null {
+  if (!isPlainObject(value)) return null;
+  return {
+    id: asString(value.id, `item-${index}`, 80) || `item-${index}`,
+    icon: asString(value.icon, '', 8),
+    title: asString(value.title, '', 80),
+    body: asString(value.body, '', 300),
+    href: asString(value.href, '', 500),
+    visible: asBool(value.visible, true),
+  };
+}
+
+function sanitizeHomeHero(value: unknown): HomeHeroConfig {
+  const base = DEFAULT_HOME_HERO;
+  if (!isPlainObject(value)) return { ...base };
+  return {
+    style: asEnum<HomeHeroStyle>(value.style, ['classic', 'plain', 'image'] as const, base.style),
+    eyebrow: asString(value.eyebrow, base.eyebrow, 80),
+    title: asString(value.title, base.title, 160),
+    subtitle: asString(value.subtitle, base.subtitle, 320),
+    primaryCtaLabel: asString(value.primaryCtaLabel, '', 40),
+    primaryCtaHref: asString(value.primaryCtaHref, '', 500),
+    secondaryCtaLabel: asString(value.secondaryCtaLabel, '', 40),
+    secondaryCtaHref: asString(value.secondaryCtaHref, '', 500),
+    showSecondaryCta: asBool(value.showSecondaryCta, base.showSecondaryCta),
+    backgroundColor: isHexColor(value.backgroundColor) ? normalizeHex(value.backgroundColor, '#1e3a8a') : '',
+    imageUrl: asString(value.imageUrl, '', 1000),
+    showProfileChips: asBool(value.showProfileChips, base.showProfileChips),
+  };
+}
+
+/**
+ * Upgrades a homepage document saved before schema v2. Older releases kept the
+ * hero headline on the "hero" section and hard-coded the banners, feature
+ * cards, steps and batch showcase above the configured sections. Those blocks
+ * are inserted as real (editable) sections so nothing disappears for students.
+ * Runs before defaults are merged in, because merging would mask the version.
+ */
+export function upgradeLegacyHomepage(value: unknown): unknown {
+  if (!isPlainObject(value)) return value;
+  if (asNumber(value.version, 1, 1, 99) >= 2 || !Array.isArray(value.sections)) return value;
+  const sections = value.sections.filter(isPlainObject);
+  const present = new Set(sections.map((section) => section.type));
+  const missing = legacyBlockSections().filter((section) => !present.has(section.type));
+  const legacyHero = sections.find((section) => section.type === 'hero');
+  const hero = isPlainObject(value.hero)
+    ? value.hero
+    : {
+        ...DEFAULT_HOME_HERO,
+        title: (typeof legacyHero?.title === 'string' && legacyHero.title.trim()) || DEFAULT_HOME_HERO.title,
+        subtitle: (typeof legacyHero?.subtitle === 'string' && legacyHero.subtitle.trim()) || DEFAULT_HOME_HERO.subtitle,
+      };
+  // The old hero section doubled as the headline; it now only titles the banner carousel.
+  const upgradedSections = value.sections.map((section) =>
+    isPlainObject(section) && section === legacyHero && !isPlainObject(value.hero)
+      ? { ...section, title: 'Featured', subtitle: '', ctaLabel: '', ctaHref: '' }
+      : section
+  );
+  return { ...value, version: 2, hero, sections: [...missing, ...upgradedSections] };
+}
+
 function sanitizeHomepage(value: unknown): HomepageConfig {
-  const raw = isPlainObject(value) ? value : {};
+  const upgraded = upgradeLegacyHomepage(value);
+  const raw = isPlainObject(upgraded) ? upgraded : {};
   const base = DEFAULT_HOMEPAGE;
   const sections = Array.isArray(raw.sections)
     ? raw.sections
@@ -815,11 +1025,13 @@ function sanitizeHomepage(value: unknown): HomepageConfig {
     seen.add(section.id);
   }
   return {
+    version: 2,
     showGreeting: asBool(raw.showGreeting, base.showGreeting),
     greetingTemplate: asString(raw.greetingTemplate, base.greetingTemplate, 120),
     showSearch: asBool(raw.showSearch, base.showSearch),
     showQuickStats: asBool(raw.showQuickStats, base.showQuickStats),
-    sections,
+    hero: sanitizeHomeHero(raw.hero),
+    sections: sections.slice(0, 40),
   };
 }
 
@@ -1263,7 +1475,7 @@ export function selectBannersForPlacement(
 // ---------------------------------------------------------------------------
 
 export function getHomeSectionsForStudent(
-  homepage: HomepageConfig,
+  homepage: Pick<HomepageConfig, 'sections'> & Partial<HomepageConfig>,
   student: StudentAudience | null
 ): HomeSectionConfig[] {
   const configured = homepage.sections.filter(
@@ -1385,7 +1597,7 @@ export function presetLabel(preset: string): string {
 
 export function createHomeSection(type: HomeSectionType, index = 0): HomeSectionConfig {
   const titles: Partial<Record<HomeSectionType, string>> = {
-    hero: 'Build your rank, one focused day at a time.',
+    hero: 'Featured',
     goal: "Today's Goal",
     upcoming_tests: 'Upcoming tests',
     live_tests: 'Live tests',
@@ -1403,6 +1615,10 @@ export function createHomeSection(type: HomeSectionType, index = 0): HomeSection
     promo: 'A message for your students',
     custom: 'Custom section',
     testimonials: 'Student stories',
+    dashboard_banners: 'Dashboard banners',
+    feature_grid: 'Everything you need in one place',
+    how_it_works: 'How it works',
+    batch_showcase: 'Batch showcase',
   };
   const subtitles: Partial<Record<HomeSectionType, string>> = {
     goal: 'A single, achievable target picked by your mentor.',
@@ -1417,6 +1633,8 @@ export function createHomeSection(type: HomeSectionType, index = 0): HomeSection
     challenges: 'Short, focused sprints that keep momentum high.',
     announcements: 'The latest notes from your mentors.',
     leaderboard_preview: 'Top scores from your most recent test.',
+    feature_grid: 'Jump straight into any part of your preparation.',
+    how_it_works: 'Three simple steps from batch to rank.',
   };
   const layouts: Partial<Record<HomeSectionType, HomeSectionConfig['layout']>> = {
     hero: 'carousel',
@@ -1442,5 +1660,11 @@ export function createHomeSection(type: HomeSectionType, index = 0): HomeSection
     body: '',
     accent: '',
     itemIds: [],
+    items:
+      type === 'feature_grid'
+        ? deepCloneItems(DEFAULT_FEATURE_ITEMS)
+        : type === 'how_it_works'
+          ? deepCloneItems(DEFAULT_STEP_ITEMS)
+          : [],
   };
 }
