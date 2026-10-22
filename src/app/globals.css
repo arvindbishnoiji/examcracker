@@ -1667,3 +1667,36 @@ body::before {
   .ec-hero-deck .dx-cta, .ec-hero-deck .dx-cta-ghost { width: 100%; }
   .ec-hero-deck form .dx-cta { width: auto; min-height: 38px; padding-inline: 1rem; }
 }
+
+
+/* Auth readability patch: keep all copy, tabs and helper text readable regardless of admin theme. */
+.ec-auth-card, .ec-auth-card p, .ec-auth-card label, .ec-auth-card span, .ec-auth-card a, .ec-auth-card button, .ec-auth-card input { text-shadow: none; }
+.ec-auth-card label { color: #31284a !important; font-weight: 700; }
+.ec-auth-card input { color: #211936 !important; background: #fff !important; caret-color: #5b21b6; }
+.ec-auth-card input::placeholder { color: #77718a !important; opacity: 1; }
+.ec-auth-card input:focus-visible { outline: 3px solid rgba(109,40,217,.22); outline-offset: 1px; }
+.ec-auth-card button { min-height: 40px; }
+.ec-auth-card button:disabled { opacity: .65; cursor: wait; }
+.ec-auth-card [role="alert"] { color: #7f1d1d !important; }
+.ec-auth-card [role="alert"] p { color: inherit !important; }
+.ec-auth-card .text-ink-500, .ec-auth-card .text-ink-400, .ec-auth-card .text-ink-300 { color: #625b75 !important; }
+.ec-auth-card .text-white { color: #fff !important; }
+.ec-auth-card .text-white\/45, .ec-auth-card .text-white\/60, .ec-auth-card .text-white\/70 { color: #625b75 !important; }
+.ec-auth-card .text-brand-700, .ec-auth-card .text-brand-600 { color: #4c1d95 !important; }
+.ec-auth-card a:focus-visible, .ec-auth-card button:focus-visible { outline: 3px solid rgba(109,40,217,.35); outline-offset: 2px; }
+
+/* Student home: calmer spacing, clearer section hierarchy, and responsive cards. */
+.ec-main .ec-sec-head { align-items: center; gap: 1rem; }
+.ec-main .ec-sec-title { font-size: clamp(1.05rem, 2vw, 1.35rem); line-height: 1.2; letter-spacing: -.035em; }
+.ec-main .ec-sec-num { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 11px; background: color-mix(in srgb, var(--sec-tint) 12%, var(--ec-surface)); color: var(--sec-tint); font-size: .68rem; font-weight: 850; }
+.ec-main .ec-tile { min-width: 0; border-radius: calc(var(--ec-radius) * .78); }
+.ec-main .ec-tile-title { overflow-wrap: anywhere; }
+.ec-main .ec-hero-deck { margin-bottom: .25rem; }
+.ec-main .ec-sec-link { min-height: 36px; display: inline-flex; align-items: center; gap: .35rem; padding: .4rem .7rem; border-radius: 999px; background: var(--ec-surface); border: 1px solid var(--ec-border); font-size: .72rem; font-weight: 750; color: var(--ec-text); }
+.ec-main .ec-sec-link:hover { border-color: var(--sec-tint); color: var(--sec-tint); }
+@media (max-width: 640px) {
+  .ec-main { --ec-page-pad: 14px; }
+  .ec-main .ec-sec-head { align-items: flex-start; }
+  .ec-main .ec-sec-num { width: 1.8rem; height: 1.8rem; }
+  .ec-main .ec-tile { border-radius: 16px; }
+}
