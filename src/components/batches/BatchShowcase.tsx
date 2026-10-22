@@ -247,7 +247,7 @@ export function BatchStudioCard({
   );
 }
 
-function WideCard({ batch }: { batch: PreparedBatch }) {
+function WideCard({ batch, config }: { batch: PreparedBatch; config: BatchShowcaseConfig }) {
   const { item, look, accent } = batch;
   const countdown = useCountdown(look.startsAt);
   return (
@@ -263,17 +263,17 @@ function WideCard({ batch }: { batch: PreparedBatch }) {
         <div className="flex flex-col p-4 sm:p-5">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="ec-batch-title">{item.title}</h3>
-            {countdown && <span className="ec-countdown"><Clock3 size={11} /> {countdown.label}</span>}
+            {config.showCountdown && countdown && <span className="ec-countdown"><Clock3 size={11} /> {countdown.label}</span>}
           </div>
           <p className="mt-1 line-clamp-2 text-[0.85rem] leading-relaxed text-ink-500">{look.subtitle || item.description}</p>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            {look.instructor && <span className="ec-batch-meta"><UserRound size={12} /> {look.instructor}</span>}
+            {config.showInstructor && look.instructor && <span className="ec-batch-meta"><UserRound size={12} /> {look.instructor}</span>}
             {look.startsAt && <span className="ec-batch-meta"><CalendarClock size={12} /> {formatISTDateTime(look.startsAt)}</span>}
-            {look.seats > 0 && <span className="ec-seat-pill"><Users size={11} /> {look.seats} seats</span>}
+            {config.showSeats && look.seats > 0 && <span className="ec-seat-pill"><Users size={11} /> {look.seats} seats</span>}
           </div>
-          <div className="mt-2"><FeatureChips look={look} /></div>
+          {config.showFeatures && <div className="mt-2"><FeatureChips look={look} /></div>}
           <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
-            <RewardChip look={look} />
+            {config.showReward && <RewardChip look={look} />}
             <Link href={batchHref(item, look)} className="ec-batch-cta ml-auto">
               {look.ctaLabel || 'Open batch'} <ArrowRight size={14} />
             </Link>
@@ -284,7 +284,7 @@ function WideCard({ batch }: { batch: PreparedBatch }) {
   );
 }
 
-function MinimalCard({ batch }: { batch: PreparedBatch }) {
+function MinimalCard({ batch, config }: { batch: PreparedBatch; config: BatchShowcaseConfig }) {
   const { item, look, accent } = batch;
   return (
     <Reveal motion="slide-left">
@@ -296,7 +296,7 @@ function MinimalCard({ batch }: { batch: PreparedBatch }) {
         <div className="flex items-center gap-2">
           <span className="ec-tint-chip">{look.badge || item.exam}</span>
           <span className="ec-batch-meta">{classesOf(item).length} classes</span>
-          {look.reward.enabled && <span className="ec-batch-meta">🏅 {look.reward.label || 'Reward'}</span>}
+          {config.showReward && look.reward.enabled && <span className="ec-batch-meta">🏅 {look.reward.label || 'Reward'}</span>}
         </div>
         <p className="mt-1.5 ec-batch-title">{item.title}</p>
         <p className="mt-1 line-clamp-2 text-[0.82rem] text-ink-500">{look.subtitle || item.description}</p>
@@ -358,20 +358,20 @@ export function BatchShowcase({
       {layout === 'wide' ? (
         <div className="space-y-3.5">
           {prepared.map((batch) => (
-            <WideCard key={batch.item.id} batch={batch} />
+            <WideCard key={batch.item.id} batch={batch} config={config} />
           ))}
         </div>
       ) : layout === 'minimal' ? (
         <div className="grid gap-3 sm:grid-cols-2">
           {prepared.map((batch) => (
-            <MinimalCard key={batch.item.id} batch={batch} />
+            <MinimalCard key={batch.item.id} batch={batch} config={config} />
           ))}
         </div>
       ) : layout === 'spotlight' ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {prepared.map((batch, index) => (
             <div key={batch.item.id} className={index === 0 ? 'lg:col-span-2' : ''}>
-              {index === 0 ? <SpotlightCard batch={batch} /> : <BatchStudioCard batch={batch} />}
+              {index === 0 ? <SpotlightCard batch={batch} config={config} /> : <BatchStudioCard batch={batch} config={config} />}
             </div>
           ))}
         </div>
@@ -386,7 +386,7 @@ export function BatchShowcase({
   );
 }
 
-function SpotlightCard({ batch }: { batch: PreparedBatch }) {
+function SpotlightCard({ batch, config }: { batch: PreparedBatch; config: BatchShowcaseConfig }) {
   const { item, look, accent } = batch;
   const countdown = useCountdown(look.startsAt);
   return (
@@ -407,14 +407,14 @@ function SpotlightCard({ batch }: { batch: PreparedBatch }) {
         </div>
         <div className="relative flex flex-col p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-2">
-            {countdown && <span className="ec-countdown"><Clock3 size={12} /> Starts in {countdown.label}</span>}
-            {look.seats > 0 && <span className="ec-seat-pill"><Users size={11} /> {look.seats} seats left</span>}
+            {config.showCountdown && countdown && <span className="ec-countdown"><Clock3 size={12} /> Starts in {countdown.label}</span>}
+            {config.showSeats && look.seats > 0 && <span className="ec-seat-pill"><Users size={11} /> {look.seats} seats left</span>}
           </div>
           <h3 className="ec-h2 mt-2.5">{item.title}</h3>
           <p className="mt-2 line-clamp-3 text-[0.92rem] leading-relaxed text-ink-500">{look.subtitle || item.description}</p>
 
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {look.instructor && (
+            {config.showInstructor && look.instructor && (
               <span className="ec-batch-meta"><UserRound size={13} /> Mentor: <strong className="text-ink-700">{look.instructor}</strong></span>
             )}
             {look.startsAt && (
@@ -428,10 +428,10 @@ function SpotlightCard({ batch }: { batch: PreparedBatch }) {
             <span className="ec-batch-meta"><Layers size={13} /> {item.kind === 'series' ? 'Series' : 'Full batch'}</span>
           </div>
 
-          {look.features.length > 0 && <div className="mt-3"><FeatureChips look={look} /></div>}
+          {config.showFeatures && look.features.length > 0 && <div className="mt-3"><FeatureChips look={look} /></div>}
 
           <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
-            <RewardChip look={look} />
+            {config.showReward && <RewardChip look={look} />}
             <Link href={batchHref(item, look)} className="ec-batch-cta ml-auto px-4 py-2.5 text-[0.82rem]">
               {look.ctaLabel || 'Explore this batch'} <ArrowRight size={15} />
             </Link>
