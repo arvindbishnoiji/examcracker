@@ -150,7 +150,7 @@ export function AnimationStudioSection() {
       <AdminPageHeader
         eyebrow="Experience Studio"
         title="Animation Studio"
-        description="Author your own animation “index.html” per page: paste HTML, CSS and JS, choose which page and audience it plays for, set the trigger, timing, frequency and the reward students can claim."
+        description="Author your own animation “index.html” per page: paste HTML, CSS and JS, choose which page and audience it plays for, set the trigger, timing, frequency and an optional reward/action link."
         meta={
           <>
             <StatusPill tone="brand">{draft.layers.length} layers</StatusPill>
