@@ -5,7 +5,22 @@
  * My Drive quota instead of a service account's nonexistent personal quota.
  * The endpoint URL and shared secret must remain server-side secrets.
  */
-import { normalizeDriveFolderId } from "./drive.js";
+function normalizeFolderId(rawValue) {
+  if (typeof rawValue !== "string") return "";
+  let value = rawValue.trim().replace(/^["']+|["']+$/g, "").trim();
+  const match = value.match(/\/folders\/([A-Za-z0-9_-]{3,160})(?:[/?#]|$)/i);
+  if (match) value = match[1];
+  else if (/^https?:\/\//i.test(value)) {
+    try {
+      const parsed = new URL(value);
+      value = parsed.searchParams.get("id") || "";
+    } catch {
+      return "";
+    }
+  }
+  return /^[A-Za-z0-9_-]{3,160}$/.test(value) ? value : "";
+}
+
 
 const MAX_SCRIPT_UPLOAD_BYTES = 20 * 1024 * 1024;
 
@@ -109,7 +124,7 @@ export async function uploadViaAppsScript(
   if (bytes.length > MAX_SCRIPT_UPLOAD_BYTES) {
     throw httpError("This file is too large for the personal Gmail upload route (maximum 20 MB).", 413);
   }
-  const cleanFolderId = normalizeDriveFolderId(folderId);
+  const cleanFolderId = normalizeFolderId(folderId);
   if (!cleanFolderId) throw httpError("Google Drive destination folder ID is invalid.", 503);
   const result = await postToScript(env, {
     action: "upload",
@@ -130,7 +145,7 @@ export async function uploadViaAppsScript(
 }
 
 export async function inspectAppsScriptDriveStatus(env, folderId, fetchImpl = fetch) {
-  const cleanFolderId = normalizeDriveFolderId(folderId);
+  const cleanFolderId = normalizeFolderId(folderId);
   if (!cleanFolderId) {
     return { ok: false, httpStatus: 400, code: "INVALID_FOLDER_ID", detail: "GOOGLE_DRIVE_FOLDER_ID is empty or malformed." };
   }
