@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { inspectAppsScriptDriveStatus, isAppsScriptDriveConfigured, uploadViaAppsScript } from "./apps-script-drive.js";
+import { inspectDriveStatus } from "./drive.js";
 
 const env = {
   GOOGLE_APPS_SCRIPT_URL: "https://script.google.com/macros/s/test-deployment/exec",
@@ -88,6 +89,17 @@ describe("Apps Script personal Gmail Drive bridge", () => {
     const result = await inspectAppsScriptDriveStatus(env, "folder_123", fetchImpl);
     expect(result).toMatchObject({ ok: true, code: "READY", folderName: "Exam Cracker Images", canAddChildren: true });
     expect(JSON.stringify(result)).not.toContain("test-secret-never-log-0123456789abcd");
+  });
+
+  it("does not report the full private file system ready when service-account credentials are missing", async () => {
+    const status = await inspectDriveStatus(env);
+    expect(status).toMatchObject({
+      configured: false,
+      serviceAccountConfigured: false,
+      uploadMode: "personal-gmail-apps-script",
+      appsScriptConfigured: true,
+    });
+    expect(status.credentialError).toContain("GOOGLE_SERVICE_ACCOUNT_JSON");
   });
 
   it("enforces the 20 MB Apps Script bridge limit", async () => {
