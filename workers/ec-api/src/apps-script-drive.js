@@ -37,6 +37,9 @@ function scriptConfig(env) {
       503,
     );
   }
+  if (secret.length < 32) {
+    throw httpError("GOOGLE_APPS_SCRIPT_SHARED_SECRET must be at least 32 characters long.", 503);
+  }
   let parsed;
   try {
     parsed = new URL(url);
