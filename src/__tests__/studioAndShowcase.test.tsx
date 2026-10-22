@@ -216,7 +216,7 @@ describe('Batch Studio + Animation Studio model', () => {
       pages: ['lectures'],
     };
     expect(prepareBatches([batch()], config, { exam: 'JEE', classLevel: '12' }, 'home')).toEqual([]);
-    expect(prepareBatches([batch()], config, { exam: 'JEE', classLevel: '12' }, 'lectures')).toHaveLength(1);
+    expect(prepareBatches([batch({ metadata: { studio: { pages: ['lectures'] } } })], config, { exam: 'JEE', classLevel: '12' }, 'lectures')).toHaveLength(1);
   });
 
   it('renders hero artwork and honours a safe per-batch CTA link', () => {
