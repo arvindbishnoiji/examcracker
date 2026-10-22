@@ -119,7 +119,6 @@ export function Header({ showNav = true }: { showNav?: boolean }) {
                 aria-label="Notifications"
               >
                 <Bell size={17} />
-                <span className="absolute right-2 top-1.5 h-1.5 w-1.5 rounded-full bg-[var(--dx-lime)] ring-2 ring-[var(--ec-surface)]" />
               </Link>
             )}
             {user && (
