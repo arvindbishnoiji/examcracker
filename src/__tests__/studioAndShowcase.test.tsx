@@ -209,6 +209,41 @@ describe('Batch Studio + Animation Studio model', () => {
     expect(visible[0].accent.id).toBe('violet');
   });
 
+  it('honours the global Batch Studio page placement', () => {
+    const config: BatchShowcaseConfig = {
+      ...DEFAULT_BATCH_STUDIO,
+      enabled: true,
+      pages: ['lectures'],
+    };
+    expect(prepareBatches([batch()], config, { exam: 'JEE', classLevel: '12' }, 'home')).toEqual([]);
+    expect(prepareBatches([batch()], config, { exam: 'JEE', classLevel: '12' }, 'lectures')).toHaveLength(1);
+  });
+
+  it('renders hero artwork and honours a safe per-batch CTA link', () => {
+    const source = batch({
+      metadata: {
+        thumbnailUrl: 'https://example.com/cover.jpg',
+        studio: {
+          heroImageUrl: 'https://example.com/hero.jpg',
+          ctaLabel: 'View tests',
+          ctaHref: '/tests',
+          pages: ['home'],
+        },
+      },
+    });
+    const html = renderToString(
+      React.createElement(BatchShowcase, {
+        batches: [source],
+        config: DEFAULT_BATCH_STUDIO,
+        student: { exam: 'JEE', classLevel: '12' },
+        page: 'home',
+      })
+    );
+    expect(html).toContain('src="https://example.com/hero.jpg"');
+    expect(html).toContain('href="/tests"');
+    expect(html).toContain('View tests');
+  });
+
   it('renders the colour-coded showcase card markup', () => {
     const html = renderToString(
       React.createElement(BatchShowcase, {
