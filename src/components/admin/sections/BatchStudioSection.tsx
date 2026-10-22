@@ -275,11 +275,11 @@ export function BatchStudioSection() {
       push('Batch name is required.', 'error');
       return;
     }
-    if (draft.imageUrl && !isSafeHttpUrl(draft.imageUrl)) {
+    if (draft.imageUrl && (!isSafeHttpUrl(draft.imageUrl) || !/^https:\/\//i.test(draft.imageUrl.trim()))) {
       push('Cover image must be an https:// image link.', 'error');
       return;
     }
-    if (draft.heroImageUrl && !isSafeHttpUrl(draft.heroImageUrl)) {
+    if (draft.heroImageUrl && (!isSafeHttpUrl(draft.heroImageUrl) || !/^https:\/\//i.test(draft.heroImageUrl.trim()))) {
       push('Hero image must be an https:// image link.', 'error');
       return;
     }
