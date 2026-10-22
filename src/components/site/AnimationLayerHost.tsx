@@ -69,23 +69,35 @@ function rememberSeen(layer: AnimationLayer, userId?: string | null): void {
   }
 }
 
-function useTriggerFire(layer: AnimationLayer | null, enabled: boolean): boolean {
-  const [fire, setFire] = useState(false);
+function useTriggerFire(
+  layer: AnimationLayer | null,
+  enabled: boolean,
+  pageScope: string
+): boolean {
+  const [state, setState] = useState<{ key: string; fire: boolean }>({ key: '', fire: false });
+  const triggerKey =
+    layer && enabled
+      ? `${pageScope}:${layer.id}:${layer.trigger}:${layer.delayMs}`
+      : '';
 
   useEffect(() => {
     if (!layer || !enabled) {
-      setFire(false);
+      setState({ key: '', fire: false });
       return;
     }
-    setFire(false);
+
+    const key = `${pageScope}:${layer.id}:${layer.trigger}:${layer.delayMs}`;
+    const fire = () => setState({ key, fire: true });
+    setState({ key, fire: false });
+
     if (layer.trigger === 'page_load' || layer.trigger === 'schedule') {
-      setFire(true);
+      fire();
       return;
     }
 
     let timer = 0;
     const scheduleDelay = () => {
-      timer = window.setTimeout(() => setFire(true), Math.max(0, layer.delayMs));
+      timer = window.setTimeout(fire, Math.max(0, layer.delayMs));
     };
 
     if (layer.trigger === 'delay') {
@@ -93,14 +105,14 @@ function useTriggerFire(layer: AnimationLayer | null, enabled: boolean): boolean
     } else if (layer.trigger === 'scroll') {
       const onScroll = () => {
         const max = document.documentElement.scrollHeight - window.innerHeight;
-        if (window.scrollY > Math.max(120, max * 0.18)) setFire(true);
+        if (window.scrollY > Math.max(120, max * 0.18)) fire();
       };
       window.addEventListener('scroll', onScroll, { passive: true });
       onScroll();
       return () => window.removeEventListener('scroll', onScroll);
     } else if (layer.trigger === 'exit_intent') {
       const onLeave = (event: MouseEvent) => {
-        if (event.clientY <= 4) setFire(true);
+        if (event.clientY <= 4) fire();
       };
       document.addEventListener('mouseleave', onLeave);
       return () => document.removeEventListener('mouseleave', onLeave);
@@ -122,9 +134,10 @@ function useTriggerFire(layer: AnimationLayer | null, enabled: boolean): boolean
     }
 
     return () => window.clearTimeout(timer);
-  }, [layer, enabled]);
+  }, [layer, enabled, pageScope]);
 
-  return fire;
+  // Ignore a previous page/layer's fired state until the new trigger runs.
+  return Boolean(triggerKey && state.key === triggerKey && state.fire);
 }
 
 /**
@@ -174,7 +187,7 @@ export function AnimationLayerHost() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.animations, page, student?.exam, student?.classLevel, user?.uid, dismissed, now, seenVersion, reducedMotion]);
 
-  const fire = useTriggerFire(layer, Boolean(layer));
+  const fire = useTriggerFire(layer, Boolean(layer), pathname || '');
 
   const close = useCallback(() => {
     if (!layer) return;
